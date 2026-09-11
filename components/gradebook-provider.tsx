@@ -30,6 +30,7 @@ type GradebookPayload = {
   quizzes: Quiz[]
   upcomingEvents: UpcomingEvent[]
   selectedStudentId: string | null
+  classAverages?: Record<string, number | null>
 }
 
 type GradebookContextValue = {
@@ -50,6 +51,8 @@ type GradebookContextValue = {
   quizzes: Quiz[]
   upcomingEvents: UpcomingEvent[]
   marks: MarksMap
+  /** Server-computed average percentage per assessment; empty for teachers. */
+  classAverages: Record<string, number | null>
   setMark: (studentId: string, assessmentId: string, score: number | null) => void
   addAssessment: (a: NewAssessment) => void
 }
@@ -69,6 +72,7 @@ export function GradebookProvider({ children }: { children: ReactNode }) {
   const [quizzes, setQuizzes] = useState<Quiz[]>([])
   const [upcomingEvents, setUpcomingEvents] = useState<UpcomingEvent[]>([])
   const [marks, setMarks] = useState<MarksMap>({})
+  const [classAverages, setClassAverages] = useState<Record<string, number | null>>({})
 
   const applyPayload = (payload: GradebookPayload) => {
     setStudents(payload.students)
@@ -77,6 +81,7 @@ export function GradebookProvider({ children }: { children: ReactNode }) {
     setQuizzes(payload.quizzes)
     setUpcomingEvents(payload.upcomingEvents)
     setMarks(payload.marks)
+    setClassAverages(payload.classAverages ?? {})
     setSelectedStudentId(payload.selectedStudentId ?? payload.students[0]?.id ?? "")
     setCourseFilter((current) => {
       if (current === "all") return "all"
@@ -165,6 +170,7 @@ export function GradebookProvider({ children }: { children: ReactNode }) {
       quizzes,
       upcomingEvents,
       marks,
+      classAverages,
       setMark,
       addAssessment,
     }),
@@ -181,6 +187,7 @@ export function GradebookProvider({ children }: { children: ReactNode }) {
       quizzes,
       upcomingEvents,
       marks,
+      classAverages,
     ],
   )
 

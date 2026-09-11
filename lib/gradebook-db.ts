@@ -20,6 +20,12 @@ type GradebookPayload = {
   quizzes: Quiz[]
   upcomingEvents: UpcomingEvent[]
   selectedStudentId: string | null
+  /**
+   * Server-computed average percentage per assessment id. It is the only
+   * class-level signal a student payload may carry: aggregates, never the
+   * per-student rows they are derived from.
+   */
+  classAverages: Record<string, number | null>
 }
 
 type DbAssessmentType = "QUIZ" | "ASSIGNMENT"
@@ -61,6 +67,7 @@ function emptyPayload(): GradebookPayload {
     quizzes: [],
     upcomingEvents: [],
     selectedStudentId: null,
+    classAverages: {},
   }
 }
 
@@ -234,6 +241,9 @@ export async function getGradebookPayloadForSessionUser(
       quizzes,
       upcomingEvents,
       selectedStudentId: studentPool[0]?.id ?? null,
+      // Teachers already receive the full cohort marks they are entitled to,
+      // so they compute averages client-side; no server aggregate is needed.
+      classAverages: {},
     }
   }
 
@@ -245,13 +255,6 @@ export async function getGradebookPayloadForSessionUser(
           offering: {
             include: {
               course: true,
-              enrollments: {
-                include: {
-                  student: {
-                    include: { user: true },
-                  },
-                },
-              },
               assessments: {
                 include: {
                   course: true,
@@ -279,17 +282,19 @@ export async function getGradebookPayloadForSessionUser(
     offerings.map((o) => ({ id: o.course.id, code: o.course.code, name: o.course.name })),
   )
 
-  const students: Student[] = uniqById(
-    offerings.flatMap((offering) =>
-      offering.enrollments.map((e) => ({
-        id: e.student.id,
-        name: e.student.fullName,
-        email: e.student.user.email,
-        registerNumber: e.student.registerNumber,
-        profilePicUrl: e.student.profilePicUrl,
-      })),
-    ),
-  )
+  // Object-level authorization: a student's payload carries only their own
+  // identity and marks. Classmates' rows must never leave the server. The
+  // "vs class average" view is served by the aggregate `classAverages` map
+  // computed below, so no per-student row is needed on the client.
+  const students: Student[] = [
+    {
+      id: studentProfile.id,
+      name: studentProfile.fullName,
+      email: sessionUser.email,
+      registerNumber: studentProfile.registerNumber,
+      profilePicUrl: studentProfile.profilePicUrl,
+    },
+  ]
 
   const assessmentPool = offerings.flatMap((offering) => offering.assessments)
 
@@ -306,10 +311,19 @@ export async function getGradebookPayloadForSessionUser(
   }))
 
   const marks: MarksMap = {}
+  const classAverages: Record<string, number | null> = {}
   for (const a of assessmentPool) {
+    const percentages: number[] = []
     for (const g of a.grades) {
-      marks[markKey(g.studentId, a.id)] = Number(g.marksObtained)
+      const percentage = (Number(g.marksObtained) / a.maxMarks) * 100
+      if (Number.isFinite(percentage)) percentages.push(percentage)
+      if (g.studentId === studentProfile.id) {
+        marks[markKey(g.studentId, a.id)] = Number(g.marksObtained)
+      }
     }
+    classAverages[a.id] = percentages.length
+      ? percentages.reduce((sum, value) => sum + value, 0) / percentages.length
+      : null
   }
 
   const quizzes: Quiz[] = assessmentPool
@@ -393,6 +407,7 @@ export async function getGradebookPayloadForSessionUser(
     quizzes,
     upcomingEvents,
     selectedStudentId: studentProfile.id,
+    classAverages,
   }
 }
 

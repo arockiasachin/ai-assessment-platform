@@ -45,6 +45,12 @@ client, and quiz results are graded by `POST /api/quiz/grade`. Nothing below is 
   teacher only for assessments they own.
 - **Repaired the admin seed tool** (`components/admin-tools-panel.tsx`) to send the required
   `{ "confirm": "RESET-SEED" }` body (behind a confirmation prompt) after the endpoint was hardened.
+- **Scoped the student gradebook payload to the signed-in student** (`lib/gradebook-db.ts`,
+  `components/gradebook-provider.tsx`, `components/student-view.tsx`). `GET /api/gradebook` used to
+  serialize every classmate's identity and every classmate's mark to a student; it now returns only
+  the student's own row plus a server-computed `classAverages` aggregate, so the "vs class average"
+  view still works without leaking per-student grades. Teachers keep the full cohort view they are
+  authorized to see.
 
 ### Added
 
@@ -58,10 +64,11 @@ client, and quiz results are graded by `POST /api/quiz/grade`. Nothing below is 
   an `AuditLog` row in the same transaction. Only the human `accept`/`override` actions set
   `Grade.publishedAt`, so no grade publishes without teacher sign-off.
 - **Tests** (`tests/auth.test.ts`, `tests/authorization.test.ts`, `tests/contracts.test.ts`,
-  `tests/grading-state-machine.test.ts`, `tests/quiz-scoring.test.ts`, `tests/quiz-grading.test.ts`).
-  They prove a forged admin cookie and a student self-grading attempt are rejected, that quiz
-  correctness is derived server-side with object-level authorization, and exercise the contract
-  schemas and state machine.
+  `tests/grading-state-machine.test.ts`, `tests/quiz-scoring.test.ts`, `tests/quiz-grading.test.ts`,
+  `tests/gradebook-scoping.test.ts`). They prove a forged admin cookie and a student self-grading
+  attempt are rejected, that quiz correctness is derived server-side with object-level
+  authorization, that a student's gradebook payload contains only their own row, and exercise the
+  contract schemas and state machine.
 - **Assessment spine schema** (`prisma/schema.prisma`). Additive models for rubrics and criteria
   (`Rubric`, `RubricCriterion`); the grading pipeline (`AIGradeSuggestion`, `GradeReview`, `Grade`)
   with an append-only `AuditLog`; quiz questions, attempts, and responses (`Question`,

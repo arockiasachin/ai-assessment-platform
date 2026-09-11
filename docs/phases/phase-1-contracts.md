@@ -43,7 +43,7 @@ unless the interfaces are frozen first.
 | Retrieval module     | `lib/vector/` (`chunk.ts`, `embed.ts`, `search.ts`, `index.ts`)                         |
 | Signed sessions      | `lib/session.ts`, `lib/auth.ts`, `lib/authz.ts`                                         |
 | Route authorization  | `proxy.ts`, `lib/api.ts`, `app/api/**`                                                  |
-| API contract         | `lib/contracts/` (`common.ts`, `auth.ts`, `gradebook.ts`, `grading.ts`)                 |
+| API contract         | `lib/contracts/` (`common.ts`, `auth.ts`, `gradebook.ts`, `grading.ts`, `quiz.ts`)      |
 | Review state machine | `lib/grading/` (`state-machine.ts`, `review-service.ts`, `audit.ts`, `errors.ts`)       |
 | Enum widening        | `lib/admin-db.ts` (`DbAssessmentType` extended for the new `AssessmentType` values)     |
 | Test harness         | `tests/`, `vitest.config.mts`                                                           |
@@ -71,11 +71,17 @@ New enums: `MaterialKind`, `QuestionType`, `QuizAttemptStatus`, `GradeReviewStat
 | Area                              | Path                                                                        | State                    |
 | --------------------------------- | --------------------------------------------------------------------------- | ------------------------ |
 | Server-authoritative quiz answers | `lib/quiz-scoring.ts`, `lib/quiz-grading.ts`, `app/api/quiz/grade/route.ts` | Landed (answer key gone) |
+| Student gradebook payload scoping | `lib/gradebook-db.ts`, `components/gradebook-provider.tsx`                  | Landed (own rows only)   |
 
 - The legacy quiz path is no longer client-trusted: `lib/gradebook-db.ts` no longer returns
   `QuizQuestion.correctIndex`, and `components/quiz-runner.tsx` submits selected answers to
   `POST /api/quiz/grade`, which grades against the server's copy and enforces object-level
   authorization. Grade persistence and short-answer partial credit remain Phase 2 work.
+- `GET /api/gradebook` no longer serializes the class roster to a student. The student branch of
+  `getGradebookPayloadForSessionUser` returns only the signed-in student's row and marks plus a
+  server-computed `classAverages` aggregate, so a student cannot read classmates' grades. This was
+  found and closed during the pre-Phase-2 verification campaign; see
+  [`../verification/phase-1-verification.md`](../verification/phase-1-verification.md).
 - The test harness is landed (`0644bc1`, `f54b2f0`): `tests/` (including `tests/spine.test.ts`,
   `tests/llm-mock.test.ts`, fixtures, and DB helpers) and `vitest.config.mts` are committed, and
   `ci.yml` runs `npm test` in the `verify` job. Its global setup applies the committed migrations
@@ -173,19 +179,23 @@ prisma migrate diff --from-empty --to-schema prisma/schema.prisma --script
 `MaterialChunk_embedding_hnsw_idx ON "MaterialChunk" USING hnsw ("embedding" vector_cosine_ops)`,
 neither of which Prisma emits for the `Unsupported("vector(1536)")` column.
 
-Commands used to verify (re-run on 2026-09-11 against `e87d7bd`):
+Commands re-run during the pre-Phase-2 verification campaign (2026-09-11; tree at `9ab0b64` plus the
+gradebook-scoping fix):
 
 ```bash
 npx prisma generate
 npx prisma validate
 npm run verify         # typecheck + lint + format:check; 0 errors, 13 warnings
 DATABASE_URL="postgresql://postgres:postgres@127.0.0.1:59999/ci" SESSION_SECRET=x LLM_PROVIDER=mock npm run build
-npx vitest run tests/auth.test.ts tests/authorization.test.ts tests/contracts.test.ts tests/grading-state-machine.test.ts tests/llm-mock.test.ts
+TEST_DATABASE_URL="postgresql://…/assessment_test" npm test   # 9 files, 37 tests
 ```
 
 The build succeeds with no reachable database. The unit suite proves the forged-admin-cookie attack
 and the student self-grading attempt are both rejected (see `tests/auth.test.ts` and
-`tests/authorization.test.ts`). The DB-backed `tests/spine.test.ts` still needs Docker and runs in CI.
+`tests/authorization.test.ts`). The DB-backed suite (`tests/spine.test.ts` and
+`tests/gradebook-scoping.test.ts`) is not Docker-specific: it needs any Postgres with the `vector`
+extension and runs locally from `TEST_DATABASE_URL`; CI supplies one via the `pgvector/pgvector`
+service image. See the verification report for the full run log.
 
 ## Risks and open questions
 
@@ -195,8 +205,9 @@ and the student self-grading attempt are both rejected (see `tests/auth.test.ts`
   a forged admin cookie and a student self-grading attempt are both rejected.
 - **The state machine is enforced.** `lib/grading/state-machine.ts` defines the legal transitions and
   `lib/grading/review-service.ts` writes `AuditLog` rows in the same transaction as each transition.
-  Only a human `accept`/`override` publishes a `Grade`. A DB-backed service test is deferred until
-  the ephemeral-Postgres harness runs (the current local run has no Docker).
+  Only a human `accept`/`override` publishes a `Grade`. A DB-backed service test for the state
+  machine is deferred to the Phase 2 grading pod; the harness itself now runs locally against a
+  pgvector Postgres, so that test is no longer blocked on the environment.
 - **Legacy quiz answer keys no longer reach the client.** `lib/gradebook-db.ts` stopped serializing
   `correctIndex`, and `components/quiz-runner.tsx` posts selected answers to `POST /api/quiz/grade`,
   which grades server-side. Persisting auto-graded quiz results and short-answer partial credit stay

@@ -16,7 +16,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { assessmentAverage, filterAssessments, scorePct } from "@/lib/analytics"
+import { filterAssessments, scorePct } from "@/lib/analytics"
 import { formatDate, initials, letterGrade, round } from "@/lib/gradebook"
 
 export function StudentView() {
@@ -25,6 +25,7 @@ export function StudentView() {
     courses,
     assessments,
     marks,
+    classAverages,
     upcomingEvents,
     isLoading,
     selectedStudentId,
@@ -44,9 +45,9 @@ export function StudentView() {
       filtered.map((assessment) => ({
         assessment,
         pct: student ? scorePct(marks, student.id, assessment) : null,
-        average: assessmentAverage(marks, students, assessment),
+        average: classAverages[assessment.id] ?? null,
       })),
-    [filtered, marks, student, students],
+    [filtered, marks, student, classAverages],
   )
 
   const classAvg = useMemo(() => {
