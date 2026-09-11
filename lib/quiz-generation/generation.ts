@@ -13,7 +13,7 @@ import type { AuthUser } from "@/lib/session"
 
 import { loadOwnedAssessment } from "./authz"
 import { QuizGenerationError } from "./errors"
-import { toQuestionMetadata, type GeneratedQuestionMetadata } from "./metadata"
+import { toQuestionMetadata, type GeneratedQuestionProvenance } from "./metadata"
 import { parseGeneratedQuestions } from "./parsing"
 import { QUIZ_GENERATION_PROMPT_VERSION, buildQuizGenerationPrompt } from "./prompt"
 import { retrieveTopicMaterial } from "./retrieval"
@@ -65,9 +65,8 @@ async function persistDrafts(input: PersistDraftInput): Promise<string[]> {
 
     const createdIds: string[] = []
     for (const question of input.parsed) {
-      const metadata: GeneratedQuestionMetadata = {
+      const provenance: GeneratedQuestionProvenance = {
         generator: "quiz-generation",
-        generationStatus: "draft",
         promptVersion: QUIZ_GENERATION_PROMPT_VERSION,
         model: input.model,
         provider: input.provider,
@@ -87,7 +86,8 @@ async function persistDrafts(input: PersistDraftInput): Promise<string[]> {
           subtopic: question.subtopic,
           difficulty: question.difficulty,
           points: 1,
-          metadata: toQuestionMetadata(metadata),
+          status: "draft",
+          metadata: toQuestionMetadata(provenance),
         },
         select: { id: true, order: true },
       })

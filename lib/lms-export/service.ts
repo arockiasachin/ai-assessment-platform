@@ -35,6 +35,7 @@ import {
   validateLtiAgsConfig,
 } from "./lti"
 import { createDryRunLtiAgsClient, type DryRunLtiAgsClient } from "./lti-client"
+import { getActiveLtiRegistration, resolveLtiUserIds } from "./registrations"
 import {
   buildOneRosterGradebook,
   lineItemSourcedId,
@@ -504,6 +505,15 @@ export async function dryRunAgsPublishForTeacher(
   const context = await loadExportContext(offering, { config: options.config })
   const client: DryRunLtiAgsClient = options.client ?? createDryRunLtiAgsClient()
 
+  // A persisted registration is the durable source of the non-secret config
+  // (issuer/client/deployment/key id/line-items URL/scopes). The private key is
+  // never stored; it is still read from the environment through `privateKeyRef`
+  // by `requireLtiAgsConfig` above.
+  const registration = await getActiveLtiRegistration()
+  const persistedLtiUserIds = await resolveLtiUserIds(context.students.map((student) => student.id))
+  const scopes =
+    registration && registration.scopes.length > 0 ? registration.scopes : ltiConfig.scopes
+
   const lineItemPayloads: AgsLineItemPayload[] = []
   const scorePayloads: AgsScorePayload[] = []
   const skippedUnpublished: { assessmentId: string; studentId: string }[] = []
@@ -532,7 +542,9 @@ export async function dryRunAgsPublishForTeacher(
         skippedUnpublished.push({ assessmentId: assessment.id, studentId: student.id })
         continue
       }
-      const ltiUserId = options.ltiUserIds?.[student.id] ?? student.id
+      // Explicit request override > persisted LtiUserMapping > internal id.
+      const ltiUserId =
+        options.ltiUserIds?.[student.id] ?? persistedLtiUserIds.get(student.id) ?? student.id
       const payload = buildAgsScorePayload({
         grade: {
           assessmentId: assessment.id,
@@ -561,12 +573,16 @@ export async function dryRunAgsPublishForTeacher(
       lineItem: AGS_LINE_ITEM_CONTENT_TYPE,
       result: AGS_RESULT_CONTENT_TYPE,
     },
-    scopes: ltiConfig.scopes,
+    scopes,
     lineItems: lineItemPayloads,
     scores: scorePayloads,
     skippedUnpublished,
     log: [...log],
-    userIdMapping: options.ltiUserIds ? "provided" : "internal-id-fallback",
+    userIdMapping: options.ltiUserIds
+      ? "provided"
+      : persistedLtiUserIds.size > 0
+        ? "persisted"
+        : "internal-id-fallback",
     generatedAt: context.generatedAt,
   }
 }

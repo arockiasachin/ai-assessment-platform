@@ -25,7 +25,7 @@ import type { MilestoneProgress } from "./milestones"
 
 /**
  * Serializers for the groups pod. They keep raw Prisma rows from leaking the
- * wrong fields (e.g. `legacyPassword`, evaluator identities) and are the single
+ * wrong fields (e.g. password hashes, evaluator identities) and are the single
  * place the contribution "evidence, not a grade" disclaimer is attached.
  */
 

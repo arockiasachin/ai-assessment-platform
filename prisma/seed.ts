@@ -19,11 +19,7 @@ function shiftDays(iso: string, days: number) {
 }
 
 async function main() {
-  await prisma.externalReference.deleteMany()
   await prisma.calendarEvent.deleteMany()
-  await prisma.courseGradeHistory.deleteMany()
-  await prisma.attendanceRecord.deleteMany()
-  await prisma.attendanceSession.deleteMany()
   await prisma.submission.deleteMany()
   await prisma.quizQuestion.deleteMany()
   await prisma.quiz.deleteMany()
@@ -31,8 +27,6 @@ async function main() {
   await prisma.assessment.deleteMany()
   await prisma.enrollment.deleteMany()
   await prisma.courseOffering.deleteMany()
-  await prisma.studentStream.deleteMany()
-  await prisma.stream.deleteMany()
   await prisma.classRoom.deleteMany()
   await prisma.course.deleteMany()
   await prisma.studentProfile.deleteMany()
@@ -140,13 +134,6 @@ async function main() {
     include: { studentProfile: true },
   })
 
-  const streamScience = await prisma.stream.create({
-    data: { code: "SCI", name: "Science Stream" },
-  })
-  const streamHumanities = await prisma.stream.create({
-    data: { code: "HUM", name: "Humanities Stream" },
-  })
-
   const courseMath = await prisma.course.create({
     data: {
       code: "COURSE-MATH",
@@ -204,7 +191,6 @@ async function main() {
       registrationCloseAt: new Date("2026-01-15T23:59:59.000Z"),
       startsOn: new Date("2026-01-18T08:00:00.000Z"),
       endsOn: new Date("2026-06-10T08:00:00.000Z"),
-      noSqlRefId: "mongo:offerings/math-a",
     },
   })
   const offeringScienceA = await prisma.courseOffering.create({
@@ -219,7 +205,6 @@ async function main() {
       registrationCloseAt: new Date("2026-01-16T23:59:59.000Z"),
       startsOn: new Date("2026-01-19T08:00:00.000Z"),
       endsOn: new Date("2026-06-12T08:00:00.000Z"),
-      noSqlRefId: "mongo:offerings/science-a",
     },
   })
   const offeringEnglishA = await prisma.courseOffering.create({
@@ -234,7 +219,6 @@ async function main() {
       registrationCloseAt: new Date("2026-01-17T23:59:59.000Z"),
       startsOn: new Date("2026-01-20T08:00:00.000Z"),
       endsOn: new Date("2026-06-14T08:00:00.000Z"),
-      noSqlRefId: "mongo:offerings/english-a",
     },
   })
   const offeringHistoryB = await prisma.courseOffering.create({
@@ -249,7 +233,6 @@ async function main() {
       registrationCloseAt: new Date("2026-01-18T23:59:59.000Z"),
       startsOn: new Date("2026-01-21T08:00:00.000Z"),
       endsOn: new Date("2026-06-16T08:00:00.000Z"),
-      noSqlRefId: "mongo:offerings/history-b",
     },
   })
   const offeringMathDev = await prisma.courseOffering.create({
@@ -264,7 +247,6 @@ async function main() {
       registrationCloseAt: new Date("2026-03-01T23:59:59.000Z"),
       startsOn: new Date("2026-03-05T08:00:00.000Z"),
       endsOn: new Date("2026-07-02T08:00:00.000Z"),
-      noSqlRefId: "mongo:offerings/math-dev",
     },
   })
   const offeringScienceDev = await prisma.courseOffering.create({
@@ -279,47 +261,46 @@ async function main() {
       registrationCloseAt: new Date("2026-03-03T23:59:59.000Z"),
       startsOn: new Date("2026-03-06T08:00:00.000Z"),
       endsOn: new Date("2026-07-04T08:00:00.000Z"),
-      noSqlRefId: "mongo:offerings/science-dev",
     },
   })
 
   const studentSeeds = [
-    { name: "Ava Thompson", email: "ava.t@school.edu", reg: "REG-1001", stream: streamScience.id },
-    { name: "Liam Chen", email: "liam.c@school.edu", reg: "REG-1002", stream: streamScience.id },
+    { name: "Ava Thompson", email: "ava.t@school.edu", reg: "REG-1001", humanities: false },
+    { name: "Liam Chen", email: "liam.c@school.edu", reg: "REG-1002", humanities: false },
     {
       name: "Sofia Martinez",
       email: "sofia.m@school.edu",
       reg: "REG-1003",
-      stream: streamHumanities.id,
+      humanities: true,
     },
-    { name: "Noah Patel", email: "noah.p@school.edu", reg: "REG-1004", stream: streamScience.id },
+    { name: "Noah Patel", email: "noah.p@school.edu", reg: "REG-1004", humanities: false },
     {
       name: "Mia Johnson",
       email: "mia.j@school.edu",
       reg: "REG-1005",
-      stream: streamHumanities.id,
+      humanities: true,
     },
     {
       name: "Ethan Williams",
       email: "ethan.w@school.edu",
       reg: "REG-1006",
-      stream: streamScience.id,
+      humanities: false,
     },
     {
       name: "Isabella Rossi",
       email: "bella.r@school.edu",
       reg: "REG-1007",
-      stream: streamHumanities.id,
+      humanities: true,
     },
     {
       name: "Lucas Nguyen",
       email: "lucas.n@school.edu",
       reg: "REG-1008",
-      stream: streamScience.id,
+      humanities: false,
     },
   ]
 
-  const students: Array<{ id: string; name: string; reg: string; streamId: string }> = []
+  const students: Array<{ id: string; name: string; reg: string; humanities: boolean }> = []
 
   for (const seed of studentSeeds) {
     const user = await prisma.user.create({
@@ -343,14 +324,7 @@ async function main() {
       id: profile.id,
       name: profile.fullName,
       reg: profile.registerNumber,
-      streamId: seed.stream,
-    })
-
-    await prisma.studentStream.create({
-      data: {
-        studentId: profile.id,
-        streamId: seed.stream,
-      },
+      humanities: seed.humanities,
     })
   }
 
@@ -359,14 +333,7 @@ async function main() {
     id: devStudentProfile.id,
     name: devStudentProfile.fullName,
     reg: devStudentProfile.registerNumber,
-    streamId: streamScience.id,
-  })
-
-  await prisma.studentStream.create({
-    data: {
-      studentId: devStudentProfile.id,
-      streamId: streamScience.id,
-    },
+    humanities: false,
   })
 
   for (const student of students) {
@@ -378,7 +345,7 @@ async function main() {
       ],
     })
 
-    if (student.streamId === streamHumanities.id) {
+    if (student.humanities) {
       await prisma.enrollment.create({
         data: { studentId: student.id, offeringId: offeringHistoryB.id },
       })
@@ -558,7 +525,6 @@ async function main() {
         classId: a.offering.classId,
         courseId: a.course.id,
         createdById: a.teacherId,
-        noSqlRefId: `mongo:assessments/${a.title.toLowerCase().replace(/\s+/g, "-")}`,
       },
     })
     createdAssessments.push({
@@ -625,7 +591,6 @@ async function main() {
             submittedAt: shiftDays("2026-01-01T09:00:00.000Z", ai + si),
             status: "GRADED",
             artifactUrl: `https://storage.example.com/submissions/${assessment.id}/${student.id}.pdf`,
-            noSqlRefId: `mongo:submissions/${assessment.id}:${student.id}`,
             gradedAt: shiftDays("2026-01-01T12:00:00.000Z", ai + si),
             gradedById: ai % 2 === 0 ? teacherA.staffProfile!.id : teacherB.staffProfile!.id,
             feedback: "Good attempt. Keep improving structure and accuracy.",
@@ -660,51 +625,6 @@ async function main() {
     }
   }
 
-  const offerings = [
-    offeringMathA,
-    offeringScienceA,
-    offeringEnglishA,
-    offeringHistoryB,
-    offeringMathDev,
-    offeringScienceDev,
-  ]
-  for (const offering of offerings) {
-    const attendanceSession = await prisma.attendanceSession.create({
-      data: {
-        offeringId: offering.id,
-        classDate: new Date("2026-03-01T09:00:00.000Z"),
-        topic: "Weekly Attendance",
-        noSqlRefId: `mongo:attendance/${offering.id}:2026-03-01`,
-      },
-    })
-
-    const enrolled = await prisma.enrollment.findMany({ where: { offeringId: offering.id } })
-    for (const [index, enrollment] of enrolled.entries()) {
-      await prisma.attendanceRecord.create({
-        data: {
-          attendanceSessionId: attendanceSession.id,
-          studentId: enrollment.studentId,
-          status: index % 6 === 0 ? "ABSENT" : "PRESENT",
-        },
-      })
-    }
-  }
-
-  for (const student of students) {
-    await prisma.courseGradeHistory.create({
-      data: {
-        studentId: student.id,
-        courseId: courseMath.id,
-        classId: classA.id,
-        academicYear: 2025,
-        term: "Final",
-        finalMarks: 76,
-        finalGrade: "B",
-        noSqlRefId: `mongo:history/${student.id}:2025-final`,
-      },
-    })
-  }
-
   const allAssessments = await prisma.assessment.findMany({ orderBy: { dueDate: "asc" } })
   for (const assessment of allAssessments) {
     await prisma.calendarEvent.create({
@@ -717,29 +637,9 @@ async function main() {
         eventType: "ASSESSMENT",
         startAt: assessment.dueDate,
         isUpcoming: true,
-        noSqlRefId: `mongo:calendar/${assessment.id}`,
       },
     })
   }
-
-  await prisma.externalReference.createMany({
-    data: [
-      {
-        entityType: "Assessment",
-        entityId: createdAssessments[0].id,
-        provider: "mongodb",
-        documentId: "quiz-questions:a1",
-        purpose: "quiz-questions",
-      },
-      {
-        entityType: "CalendarEvent",
-        entityId: (await prisma.calendarEvent.findFirstOrThrow()).id,
-        provider: "mongodb",
-        documentId: "calendar:upcoming",
-        purpose: "event-metadata",
-      },
-    ],
-  })
 
   console.log("Seed complete")
   console.log(`Admin: ${admin.email} / admin`)

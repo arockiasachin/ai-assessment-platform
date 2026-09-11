@@ -19,16 +19,9 @@ export default async function AdminDataPage() {
     assessments,
     grades,
     submissions,
-    attendanceSessions,
-    attendanceRecords,
-    streams,
-    studentStreams,
     quizzes,
     quizQuestions,
     calendarEvents,
-    courseHistory,
-    courseRatings,
-    externalReferences,
     totals,
   ] = await Promise.all([
     prisma.user.findMany({
@@ -102,20 +95,6 @@ export default async function AdminDataPage() {
         gradedAt: true,
       },
     }),
-    prisma.attendanceSession.findMany({
-      orderBy: { createdAt: "desc" },
-      take: 25,
-      select: { id: true, offeringId: true, classDate: true, topic: true, noSqlRefId: true },
-    }),
-    prisma.attendanceRecord.findMany({
-      take: 25,
-      select: { id: true, attendanceSessionId: true, studentId: true, status: true },
-    }),
-    prisma.stream.findMany({ orderBy: { createdAt: "desc" }, take: 25 }),
-    prisma.studentStream.findMany({
-      take: 25,
-      select: { id: true, studentId: true, streamId: true, fromDate: true, toDate: true },
-    }),
     prisma.quiz.findMany({ take: 25, select: { id: true, assessmentId: true } }),
     prisma.quizQuestion.findMany({
       take: 25,
@@ -134,42 +113,6 @@ export default async function AdminDataPage() {
         assessmentId: true,
       },
     }),
-    prisma.courseGradeHistory.findMany({
-      take: 25,
-      select: {
-        id: true,
-        studentId: true,
-        courseId: true,
-        classId: true,
-        academicYear: true,
-        term: true,
-        finalGrade: true,
-      },
-    }),
-    prisma.courseRating.findMany({
-      orderBy: { updatedAt: "desc" },
-      take: 25,
-      select: {
-        id: true,
-        offeringId: true,
-        studentId: true,
-        rating: true,
-        comment: true,
-        updatedAt: true,
-      },
-    }),
-    prisma.externalReference.findMany({
-      orderBy: { createdAt: "desc" },
-      take: 25,
-      select: {
-        id: true,
-        entityType: true,
-        entityId: true,
-        provider: true,
-        documentId: true,
-        purpose: true,
-      },
-    }),
     prisma.$transaction([
       prisma.user.count(),
       prisma.staffProfile.count(),
@@ -181,16 +124,9 @@ export default async function AdminDataPage() {
       prisma.assessment.count(),
       prisma.assessmentGrade.count(),
       prisma.submission.count(),
-      prisma.attendanceSession.count(),
-      prisma.attendanceRecord.count(),
-      prisma.stream.count(),
-      prisma.studentStream.count(),
       prisma.quiz.count(),
       prisma.quizQuestion.count(),
       prisma.calendarEvent.count(),
-      prisma.courseGradeHistory.count(),
-      prisma.courseRating.count(),
-      prisma.externalReference.count(),
     ]),
   ])
 
@@ -205,16 +141,9 @@ export default async function AdminDataPage() {
     { name: "assessments", count: totals[7], rows: toPlainRows(assessments) },
     { name: "assessment_grades", count: totals[8], rows: toPlainRows(grades) },
     { name: "submissions", count: totals[9], rows: toPlainRows(submissions) },
-    { name: "attendance_sessions", count: totals[10], rows: toPlainRows(attendanceSessions) },
-    { name: "attendance_records", count: totals[11], rows: toPlainRows(attendanceRecords) },
-    { name: "streams", count: totals[12], rows: toPlainRows(streams) },
-    { name: "student_streams", count: totals[13], rows: toPlainRows(studentStreams) },
-    { name: "quizzes", count: totals[14], rows: toPlainRows(quizzes) },
-    { name: "quiz_questions", count: totals[15], rows: toPlainRows(quizQuestions) },
-    { name: "calendar_events", count: totals[16], rows: toPlainRows(calendarEvents) },
-    { name: "course_grade_history", count: totals[17], rows: toPlainRows(courseHistory) },
-    { name: "course_ratings", count: totals[18], rows: toPlainRows(courseRatings) },
-    { name: "external_references", count: totals[19], rows: toPlainRows(externalReferences) },
+    { name: "quizzes", count: totals[10], rows: toPlainRows(quizzes) },
+    { name: "quiz_questions", count: totals[11], rows: toPlainRows(quizQuestions) },
+    { name: "calendar_events", count: totals[12], rows: toPlainRows(calendarEvents) },
   ]
 
   return (

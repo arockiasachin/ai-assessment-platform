@@ -141,7 +141,11 @@ describe("quiz generation pipeline", () => {
     })
     expect(rows).toHaveLength(3)
     for (const row of rows) {
-      expect(readGenerationMetadata(row.metadata)?.generationStatus).toBe("draft")
+      // State now lives on the explicit column; the metadata envelope carries
+      // provenance only (the legacy JSON status is no longer written).
+      expect(row.status).toBe("draft")
+      expect(row.publishedAt).toBeNull()
+      expect(readGenerationMetadata(row.metadata)?.generationStatus).toBeUndefined()
       expect(row.options.filter((option) => option.isCorrect)).toHaveLength(1)
     }
 
@@ -192,9 +196,9 @@ describe("quiz generation pipeline", () => {
       where: { id: questionId },
       include: { options: true },
     })
-    const metadata = readGenerationMetadata(row.metadata)
-    expect(metadata?.generationStatus).toBe("draft")
-    expect(metadata?.publishedAt).toBeUndefined()
+    expect(row.status).toBe("draft")
+    expect(row.publishedAt).toBeNull()
+    expect(row.publishedById).toBeNull()
 
     // The student-facing projection has no answer key and no provenance.
     const studentView = serializeQuestionForStudent(row)
@@ -217,10 +221,9 @@ describe("quiz generation pipeline", () => {
     expect(published.alreadyPublished).toEqual([])
 
     const after = await prisma.question.findUniqueOrThrow({ where: { id: questionId } })
-    const afterMetadata = readGenerationMetadata(after.metadata)
-    expect(afterMetadata?.generationStatus).toBe("published")
-    expect(typeof afterMetadata?.publishedAt).toBe("string")
-    expect(afterMetadata?.publishedByStaffId).toBe(fixture.teacher.staffProfile!.id)
+    expect(after.status).toBe("published")
+    expect(after.publishedAt).not.toBeNull()
+    expect(after.publishedById).toBe(fixture.teacher.staffProfile!.id)
 
     // Publishing again is a no-op that reports the already-published id.
     const again = await publishGeneratedQuestionsForTeacher(teacherUser, {

@@ -58,12 +58,37 @@ export const formationStudentSchema = z.object({
 })
 export type FormationStudentValue = z.infer<typeof formationStudentSchema>
 
+/**
+ * Per-student team-formation attributes and availability, persisted on
+ * `StudentProfile.formationProfile` so a roster can be configured once. An
+ * explicit `students` array on a formation run remains as a one-off override.
+ */
+export const formationProfileSchema = z.object({
+  attributes: z.record(z.string(), z.union([z.string(), z.number(), z.null()])).default({}),
+  availability: z.array(z.string().trim().min(1).max(200)).max(50).optional(),
+})
+export type FormationProfileValue = z.infer<typeof formationProfileSchema>
+
+export const saveFormationProfilesRequestSchema = z.object({
+  offeringId: nonEmptyString,
+  profiles: z
+    .array(
+      formationProfileSchema.extend({
+        studentId: nonEmptyString,
+      }),
+    )
+    .min(1)
+    .max(500),
+})
+export type SaveFormationProfilesRequest = z.infer<typeof saveFormationProfilesRequestSchema>
+
 export const formTeamsRequestSchema = z.object({
   offeringId: nonEmptyString,
   criteria: z.array(formationCriterionSchema).min(1).max(12),
   /**
-   * Optional per-student attributes/availability. When omitted, every actively
-   * enrolled student is included with no attributes.
+   * Optional per-student attributes/availability override. When omitted, every
+   * actively enrolled student is included using their persisted
+   * `StudentProfile.formationProfile` (and no attributes when it is unset).
    */
   students: z.array(formationStudentSchema).min(2).max(500).optional(),
   teamSize: z.number().int().min(2).max(20).optional(),
@@ -215,6 +240,10 @@ export const rosterStudentSchema = z.object({
   studentId: z.string(),
   fullName: z.string(),
   registerNumber: z.string(),
+  /** Persisted formation attributes; `{}` when the roster was never configured. */
+  attributes: z.record(z.string(), z.union([z.string(), z.number(), z.null()])),
+  /** Persisted availability slots; `null` means "not declared / unconstrained". */
+  availability: z.array(z.string()).nullable(),
 })
 export type RosterStudent = z.infer<typeof rosterStudentSchema>
 

@@ -489,7 +489,6 @@ export async function POST(request: Request) {
           registrationCloseAt: new Date(def.registrationCloseAt),
           startsOn: new Date(def.startsOn),
           endsOn: new Date(def.endsOn),
-          noSqlRefId: `mongo:offerings/${def.courseCode.toLowerCase()}-${def.classCode.toLowerCase()}`,
         },
       }))
 
@@ -605,7 +604,6 @@ export async function POST(request: Request) {
             classId: bucket.offering.classId,
             courseId: bucket.offering.courseId,
             createdById: bucket.offering.teacherId,
-            noSqlRefId: `mongo:assessments/${bucket.offering.courseCode.toLowerCase()}/${index + 1}`,
           },
         })
       }
@@ -685,7 +683,6 @@ export async function POST(request: Request) {
             studentId,
             submittedAt: new Date(),
             status: "GRADED",
-            noSqlRefId: `mongo:submissions/dev/${assessment.id}:${studentId}`,
             gradedAt: new Date(),
             gradedById: offeringTeacherById.get(assessment.offeringId),
             feedback: "Seeded feedback: Good structure, improve depth.",
@@ -713,75 +710,6 @@ export async function POST(request: Request) {
       })
     }
   }
-
-  const attendanceDates = ["2026-05-05", "2026-05-12", "2026-05-19"]
-  for (const bucket of rosterByOffering) {
-    for (const date of attendanceDates) {
-      const session = await prisma.attendanceSession.upsert({
-        where: {
-          offeringId_classDate: {
-            offeringId: bucket.offering.id,
-            classDate: new Date(`${date}T09:00:00.000Z`),
-          },
-        },
-        update: { topic: "Weekly Session" },
-        create: {
-          offeringId: bucket.offering.id,
-          classDate: new Date(`${date}T09:00:00.000Z`),
-          topic: "Weekly Session",
-          noSqlRefId: `mongo:attendance/${bucket.offering.id}/${date}`,
-        },
-      })
-
-      for (const [index, studentId] of bucket.students.entries()) {
-        await prisma.attendanceRecord.upsert({
-          where: {
-            attendanceSessionId_studentId: {
-              attendanceSessionId: session.id,
-              studentId,
-            },
-          },
-          update: {
-            status: index % 5 === 0 ? "LATE" : "PRESENT",
-          },
-          create: {
-            attendanceSessionId: session.id,
-            studentId,
-            status: index % 5 === 0 ? "LATE" : "PRESENT",
-          },
-        })
-      }
-    }
-  }
-
-  const firstOffering = offerings[0]
-
-  await prisma.courseGradeHistory.upsert({
-    where: {
-      studentId_courseId_classId_academicYear_term: {
-        studentId: devStudent.id,
-        courseId: firstOffering.courseId,
-        classId: firstOffering.classId,
-        academicYear: 2025,
-        term: "Final",
-      },
-    },
-    update: {
-      finalGrade: "A",
-      finalMarks: 88,
-      noSqlRefId: `mongo:history/${devStudent.id}:2025-final`,
-    },
-    create: {
-      studentId: devStudent.id,
-      courseId: firstOffering.courseId,
-      classId: firstOffering.classId,
-      academicYear: 2025,
-      term: "Final",
-      finalGrade: "A",
-      finalMarks: 88,
-      noSqlRefId: `mongo:history/${devStudent.id}:2025-final`,
-    },
-  })
 
   const seededEmails = [
     "admin",

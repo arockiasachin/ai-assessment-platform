@@ -39,14 +39,6 @@ export const updateOfferingRequestSchema = z.object({
 })
 export type UpdateOfferingRequest = z.infer<typeof updateOfferingRequestSchema>
 
-/** `POST /api/student/courses/rating` request body. */
-export const courseRatingRequestSchema = z.object({
-  offeringId: nonEmptyString,
-  rating: z.coerce.number().int().min(1).max(5),
-  comment: z.string().trim().max(500).optional(),
-})
-export type CourseRatingRequest = z.infer<typeof courseRatingRequestSchema>
-
 /** `POST /api/student/courses/enroll` request body. */
 export const courseEnrollRequestSchema = z.object({
   offeringId: nonEmptyString,

@@ -10,7 +10,7 @@ import type { AuthUser } from "@/lib/session"
 
 import { loadOwnedAssessment, resolveTeacherStaffId, teacherOwnsAssessment } from "./authz"
 import { QuizGenerationError } from "./errors"
-import { readGenerationMetadata, toQuestionMetadata } from "./metadata"
+import { isGeneratedQuestion, resolveGenerationStatus } from "./metadata"
 import { serializeQuestionForTeacher } from "./serialize"
 
 /**
@@ -18,8 +18,9 @@ import { serializeQuestionForTeacher } from "./serialize"
  *
  * Object-level authorization is enforced on every entry point: the teacher must
  * own the assessment (creator or offering teacher) before a generated question
- * is read, edited, or published. `Question.metadata` carries the draft/published
- * state because the schema is frozen and `Question` has no publish column.
+ * is read, edited, or published. Draft/published state lives on the explicit
+ * `Question.status` / `publishedAt` / `publishedById` columns; the resolver
+ * still falls back to the legacy `metadata` envelope for older rows.
  */
 
 const questionInclude = { options: { orderBy: { order: "asc" as const } } } as const
@@ -43,7 +44,7 @@ export async function listGenerationAssessmentsForTeacher(
           classRoom: { select: { name: true, section: true } },
         },
       },
-      questions: { select: { metadata: true } },
+      questions: { select: { status: true, publishedAt: true, metadata: true } },
     },
     orderBy: { dueDate: "desc" },
     take: 200,
@@ -53,9 +54,9 @@ export async function listGenerationAssessmentsForTeacher(
     let draftCount = 0
     let publishedCount = 0
     for (const question of assessment.questions) {
-      const metadata = readGenerationMetadata(question.metadata)
-      if (!metadata) continue
-      if (metadata.generationStatus === "published") publishedCount += 1
+      const status = resolveGenerationStatus(question)
+      if (!status) continue
+      if (status === "published") publishedCount += 1
       else draftCount += 1
     }
     const section = assessment.offering.classRoom.section
@@ -90,7 +91,7 @@ async function loadGeneratedQuestion(user: AuthUser, questionId: string) {
   if (!teacherOwnsAssessment(question.assessment, staffId)) {
     throw new QuizGenerationError(403, "Forbidden")
   }
-  if (!readGenerationMetadata(question.metadata)) {
+  if (!isGeneratedQuestion(question)) {
     throw new QuizGenerationError(404, "Question not found.")
   }
   return question
@@ -108,7 +109,7 @@ export async function listGeneratedQuestionsForTeacher(
     orderBy: { order: "asc" },
   })
   return questions
-    .filter((question) => readGenerationMetadata(question.metadata) !== null)
+    .filter((question) => isGeneratedQuestion(question))
     .map(serializeQuestionForTeacher)
 }
 
@@ -129,9 +130,7 @@ export async function editGeneratedQuestionForTeacher(
 ): Promise<GeneratedQuestionResponse> {
   const request = generatedQuestionEditRequestSchema.parse(input)
   const question = await loadGeneratedQuestion(user, questionId)
-  const metadata = readGenerationMetadata(question.metadata)
-  if (!metadata) throw new QuizGenerationError(404, "Question not found.")
-  if (metadata.generationStatus === "published") {
+  if (resolveGenerationStatus(question) === "published") {
     throw new QuizGenerationError(409, "Published questions cannot be edited.")
   }
 
@@ -216,19 +215,15 @@ export async function publishGeneratedQuestionsForTeacher(
     if (missing) throw new QuizGenerationError(404, `Question ${missing} not found.`)
   }
 
-  const generated = questions.filter((question) => readGenerationMetadata(question.metadata))
+  const generated = questions.filter((question) => isGeneratedQuestion(question))
   if (generated.length === 0) {
     throw new QuizGenerationError(409, "No generated questions to publish.")
   }
 
   const alreadyPublished = generated
-    .filter(
-      (question) => readGenerationMetadata(question.metadata)?.generationStatus === "published",
-    )
+    .filter((question) => resolveGenerationStatus(question) === "published")
     .map((question) => question.id)
-  const drafts = generated.filter(
-    (question) => readGenerationMetadata(question.metadata)?.generationStatus === "draft",
-  )
+  const drafts = generated.filter((question) => resolveGenerationStatus(question) !== "published")
 
   for (const draft of drafts) {
     const correctCount = draft.options.filter((option) => option.isCorrect).length
@@ -240,22 +235,17 @@ export async function publishGeneratedQuestionsForTeacher(
     }
   }
 
-  const publishedAt = new Date().toISOString()
+  const publishedAt = new Date()
   const publishedIds: string[] = []
 
   await prisma.$transaction(async (tx) => {
     for (const draft of drafts) {
-      const metadata = readGenerationMetadata(draft.metadata)
-      if (!metadata) continue
       await tx.question.update({
         where: { id: draft.id },
         data: {
-          metadata: toQuestionMetadata({
-            ...metadata,
-            generationStatus: "published",
-            publishedAt,
-            publishedByStaffId: owned.staffId,
-          }),
+          status: "published",
+          publishedAt,
+          publishedById: owned.staffId,
         },
       })
       await writeAuditLog(tx, {
@@ -266,7 +256,7 @@ export async function publishGeneratedQuestionsForTeacher(
         after: {
           assessmentId: request.assessmentId,
           publishedByStaffId: owned.staffId,
-          publishedAt,
+          publishedAt: publishedAt.toISOString(),
         },
       })
       publishedIds.push(draft.id)

@@ -50,6 +50,27 @@ type Props = {
   initialCohort: CohortProgress[]
 }
 
+/** Map a roster to the persisted-profile JSON the edit textareas show. */
+function rosterAttributesJson(roster: RosterStudent[]): string {
+  return JSON.stringify(
+    Object.fromEntries(roster.map((student) => [student.studentId, student.attributes])),
+    null,
+    2,
+  )
+}
+
+function rosterAvailabilityJson(roster: RosterStudent[]): string {
+  return JSON.stringify(
+    Object.fromEntries(
+      roster
+        .filter((student) => student.availability !== null)
+        .map((student) => [student.studentId, student.availability]),
+    ),
+    null,
+    2,
+  )
+}
+
 const DEFAULT_CRITERIA = JSON.stringify(
   [
     { id: "gpa", label: "GPA balance", kind: "numeric-balance", weight: 2, attribute: "gpa" },
@@ -84,8 +105,10 @@ export function TeacherGroupsManager({
   const [newGroupName, setNewGroupName] = useState("")
   const [teamSize, setTeamSize] = useState("3")
   const [criteriaJson, setCriteriaJson] = useState(DEFAULT_CRITERIA)
-  const [attributesJson, setAttributesJson] = useState("{}")
-  const [availabilityJson, setAvailabilityJson] = useState("{}")
+  const [attributesJson, setAttributesJson] = useState(() => rosterAttributesJson(initialRoster))
+  const [availabilityJson, setAvailabilityJson] = useState(() =>
+    rosterAvailabilityJson(initialRoster),
+  )
   const [persistFormation, setPersistFormation] = useState(true)
   const [formation, setFormation] = useState<FormationResultValue | null>(null)
   const [gradeInput, setGradeInput] = useState("")
@@ -138,8 +161,11 @@ export function TeacherGroupsManager({
         cohortProgress: CohortProgress[]
       }>(milestonesRes)
       if (!groupsData.ok) throw new Error(groupsData.data.message ?? "Unable to load groups.")
+      const nextRoster = rosterData.data.students ?? []
       setGroups(groupsData.data.groups ?? [])
-      setRoster(rosterData.data.students ?? [])
+      setRoster(nextRoster)
+      setAttributesJson(rosterAttributesJson(nextRoster))
+      setAvailabilityJson(rosterAvailabilityJson(nextRoster))
       setAnalysis(analysisData.data.analysis ?? [])
       setCohort(analysisData.data.cohortProgress ?? milestonesData.data.cohortProgress ?? [])
       setMilestones(milestonesData.data.milestones ?? [])
@@ -192,6 +218,49 @@ export function TeacherGroupsManager({
     }
   }
 
+  /** The edited textareas, projected onto the current roster. */
+  function buildRosterProfiles() {
+    const attributes = JSON.parse(attributesJson) as Record<string, Record<string, string | number>>
+    const availability = JSON.parse(availabilityJson) as Record<string, string[]>
+    return roster.map((student) => ({
+      studentId: student.studentId,
+      attributes: attributes[student.studentId] ?? {},
+      ...(availability[student.studentId] ? { availability: availability[student.studentId] } : {}),
+    }))
+  }
+
+  /** Persist the roster attributes so the next formation run reads the column. */
+  async function saveRosterProfiles(): Promise<void> {
+    const response = await fetch("/api/teacher/groups/roster", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ offeringId, profiles: buildRosterProfiles() }),
+    })
+    const { ok, data } = await readJson<{ students: RosterStudent[] }>(response)
+    if (!ok) throw new Error(data.message ?? "Unable to save roster attributes.")
+    const nextRoster = data.students ?? []
+    setRoster(nextRoster)
+    setAttributesJson(rosterAttributesJson(nextRoster))
+    setAvailabilityJson(rosterAvailabilityJson(nextRoster))
+  }
+
+  async function handleSaveRoster() {
+    if (!offeringId) {
+      setError("Select an offering first.")
+      return
+    }
+    setBusy(true)
+    setError(null)
+    try {
+      await saveRosterProfiles()
+      setNotice("Roster attributes saved. Formation now reads the stored values.")
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Unable to save roster attributes.")
+    } finally {
+      setBusy(false)
+    }
+  }
+
   async function submitFormation() {
     if (!offeringId) {
       setError("Select an offering first.")
@@ -202,25 +271,15 @@ export function TeacherGroupsManager({
     setFormation(null)
     try {
       const criteria = JSON.parse(criteriaJson) as unknown
-      const attributes = JSON.parse(attributesJson) as Record<
-        string,
-        Record<string, string | number>
-      >
-      const availability = JSON.parse(availabilityJson) as Record<string, string[]>
-      const students = roster.map((student) => ({
-        studentId: student.studentId,
-        attributes: attributes[student.studentId] ?? {},
-        ...(availability[student.studentId]
-          ? { availability: availability[student.studentId] }
-          : {}),
-      }))
+      // Persist the edited attributes/availability first, then form from the
+      // stored column. The request no longer carries per-student attributes.
+      await saveRosterProfiles()
       const response = await fetch("/api/teacher/groups/form", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           offeringId,
           criteria,
-          students,
           teamSize: Number(teamSize) || 3,
           persist: persistFormation,
           groupNamePrefix: "Team",
@@ -466,9 +525,19 @@ export function TeacherGroupsManager({
                 />
               </div>
             </details>
-            <Button onClick={() => void submitFormation()} disabled={busy} size="sm">
-              <Wand2 className="size-4" /> Form teams
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                variant="outline"
+                onClick={() => void handleSaveRoster()}
+                disabled={busy}
+                size="sm"
+              >
+                Save roster attributes
+              </Button>
+              <Button onClick={() => void submitFormation()} disabled={busy} size="sm">
+                <Wand2 className="size-4" /> Form teams
+              </Button>
+            </div>
             {formation && (
               <div className="rounded-md border border-border p-2 text-sm">
                 <p className="font-medium">

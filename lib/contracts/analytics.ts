@@ -48,6 +48,55 @@ export const interventionThresholdOverridesSchema = z.object({
 export type InterventionThresholdOverrides = z.infer<typeof interventionThresholdOverridesSchema>
 
 // ---------------------------------------------------------------------------
+// Persisted per-offering settings
+// ---------------------------------------------------------------------------
+
+/**
+ * Partial thresholds stored on `CourseOffering.analyticsSettings`. Unlike the
+ * query-param schema above these are already typed JSON numbers, so no coercion;
+ * any omitted key keeps the code default in `lib/analytics/alerts.ts`.
+ */
+export const interventionThresholdSettingsSchema = z.object({
+  classAverageBelow: z.number().finite().min(0).max(100).optional(),
+  minClassSampleSize: z.number().int().min(0).max(10000).optional(),
+  contributionShareAtLeast: z.number().finite().min(0).max(1).optional(),
+  minContributionEvents: z.number().int().min(0).max(100000).optional(),
+  pendingReviewsAtLeast: z.number().int().min(0).max(100000).optional(),
+})
+export type InterventionThresholdSettings = z.infer<typeof interventionThresholdSettingsSchema>
+
+export const itemAnalysisThresholdSettingsSchema = z.object({
+  minAttemptsForDifficulty: z.number().int().positive().max(100000).optional(),
+  minAttemptsForDiscrimination: z.number().int().positive().max(100000).optional(),
+  extremeGroupFraction: z.number().positive().max(1).optional(),
+})
+export type ItemAnalysisThresholdSettings = z.infer<typeof itemAnalysisThresholdSettingsSchema>
+
+export const analyticsSettingsSchema = z.object({
+  intervention: interventionThresholdSettingsSchema.optional(),
+  itemAnalysis: itemAnalysisThresholdSettingsSchema.optional(),
+})
+export type AnalyticsSettingsValue = z.infer<typeof analyticsSettingsSchema>
+
+export const updateAnalyticsSettingsRequestSchema = z.object({
+  offeringId: nonEmptyString,
+  settings: analyticsSettingsSchema,
+})
+export type UpdateAnalyticsSettingsRequest = z.infer<typeof updateAnalyticsSettingsRequestSchema>
+
+export const analyticsSettingsResponseSchema = z.object({
+  success: z.literal(true),
+  offeringId: z.string(),
+  settings: analyticsSettingsSchema,
+  /** The effective thresholds after code defaults are applied. */
+  thresholds: z.object({
+    intervention: interventionThresholdsSchema,
+    itemAnalysis: itemAnalysisThresholdsSchema,
+  }),
+})
+export type AnalyticsSettingsResponse = z.infer<typeof analyticsSettingsResponseSchema>
+
+// ---------------------------------------------------------------------------
 // Item analysis
 // ---------------------------------------------------------------------------
 

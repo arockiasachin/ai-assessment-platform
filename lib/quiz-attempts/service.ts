@@ -72,12 +72,16 @@ function assertDeliverable(questions: readonly QuestionWithOptions[]): void {
   }
 }
 
-async function attemptSettings(studentId: string, assessmentId: string) {
+async function attemptSettings(
+  studentId: string,
+  assessmentId: string,
+  assessmentMaxAttempts: number | null,
+) {
   const attempts = await prisma.quizAttempt.findMany({
     where: { assessmentId, studentId },
     select: { status: true },
   })
-  const maxAttempts = resolveMaxAttempts()
+  const maxAttempts = resolveMaxAttempts(assessmentMaxAttempts)
   const used = attempts.filter((attempt) =>
     (COUNTED_STATUSES as readonly string[]).includes(attempt.status),
   ).length
@@ -153,7 +157,6 @@ function buildResults(
 export async function listStudentQuizzes(user: AuthUser): Promise<StudentQuizSummary[]> {
   const studentId = await resolveStudentProfileId(user)
   const now = new Date()
-  const maxAttempts = resolveMaxAttempts()
 
   const assessments = await prisma.assessment.findMany({
     where: {
@@ -167,9 +170,15 @@ export async function listStudentQuizzes(user: AuthUser): Promise<StudentQuizSum
       title: true,
       dueDate: true,
       maxMarks: true,
+      maxAttempts: true,
       questions: {
         orderBy: { order: "asc" },
-        select: { id: true, metadata: true, options: { select: { isCorrect: true } } },
+        select: {
+          id: true,
+          status: true,
+          metadata: true,
+          options: { select: { isCorrect: true } },
+        },
       },
       quizAttempts: {
         where: { studentId },
@@ -189,6 +198,7 @@ export async function listStudentQuizzes(user: AuthUser): Promise<StudentQuizSum
   })
 
   return assessments.map((assessment) => {
+    const maxAttempts = resolveMaxAttempts(assessment.maxAttempts)
     const used = assessment.quizAttempts.filter((attempt) =>
       (COUNTED_STATUSES as readonly string[]).includes(attempt.status),
     ).length
@@ -245,7 +255,9 @@ async function loadOwnedAttempt(user: AuthUser, attemptId: string) {
       maxScore: true,
       startedAt: true,
       submittedAt: true,
-      assessment: { select: { id: true, title: true, maxMarks: true, dueDate: true } },
+      assessment: {
+        select: { id: true, title: true, maxMarks: true, dueDate: true, maxAttempts: true },
+      },
     },
   })
   // Another student's attempt is reported as not found so the endpoint never
@@ -272,7 +284,7 @@ export async function getStudentAttempt(
       where: { attemptId },
       select: { questionId: true, selectedOptionIds: true },
     }),
-    attemptSettings(studentId, attempt.assessmentId),
+    attemptSettings(studentId, attempt.assessmentId, attempt.assessment.maxAttempts),
   ])
 
   const submitted = attempt.status !== "IN_PROGRESS"
@@ -378,6 +390,7 @@ export async function startQuizAttempt(user: AuthUser, input: unknown): Promise<
       id: true,
       type: true,
       dueDate: true,
+      maxAttempts: true,
       questions: {
         orderBy: { order: "asc" },
         include: { options: { orderBy: { order: "asc" } } },
@@ -431,7 +444,7 @@ export async function startQuizAttempt(user: AuthUser, input: unknown): Promise<
     ).length
     const eligibility = evaluateAttemptEligibility({
       existingAttemptCount: used,
-      maxAttempts: resolveMaxAttempts(),
+      maxAttempts: resolveMaxAttempts(assessment.maxAttempts),
       now: new Date(),
       dueDate: assessment.dueDate,
     })

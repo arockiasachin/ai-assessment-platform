@@ -4,7 +4,7 @@ import type {
   GeneratedQuestionResponse,
 } from "@/lib/contracts/quiz-generation"
 
-import { readGenerationMetadata } from "./metadata"
+import { readGenerationMetadata, resolveGenerationStatus, resolvePublishedAt } from "./metadata"
 
 /**
  * Question serializers.
@@ -43,8 +43,8 @@ export function serializeQuestionForTeacher(
     subtopic: question.subtopic ?? null,
     difficulty: question.difficulty ?? null,
     points: Number(question.points),
-    status: metadata?.generationStatus ?? "draft",
-    publishedAt: metadata?.publishedAt ?? null,
+    status: resolveGenerationStatus(question) ?? "draft",
+    publishedAt: resolvePublishedAt(question),
     promptVersion: metadata?.promptVersion || null,
     model: metadata?.model || null,
     topic: metadata?.topic || null,

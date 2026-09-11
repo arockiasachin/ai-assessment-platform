@@ -231,12 +231,83 @@ export const agsDryRunRequestSchema = z.object({
   config: finalGradeConfigSchema.optional(),
   /**
    * Optional map from internal `StudentProfile.id` to the LMS platform user id
-   * the AGS `userId` field requires. There is no LTI user model in the frozen
-   * schema, so without this the internal id is used and the caveat is reported.
+   * the AGS `userId` field requires. This is an explicit per-request override;
+   * persisted `LtiUserMapping` rows (the default) are used when it is omitted,
+   * and the internal id is the last-resort fallback.
    */
   ltiUserIds: z.record(z.string(), nonEmptyString).optional(),
 })
 export type AgsDryRunRequest = z.infer<typeof agsDryRunRequestSchema>
+
+// ---------------------------------------------------------------------------
+// LTI registration and student↔LTI-user mapping (persisted)
+// ---------------------------------------------------------------------------
+
+/**
+ * A stored LTI registration. Note there is no private-key field: `privateKeyRef`
+ * is an opaque pointer (env-var name, secret-manager ARN, key-vault id). The PEM
+ * stays in the environment/secret store and is never returned by the API.
+ */
+export const ltiRegistrationInputSchema = z.object({
+  platformIssuer: nonEmptyString.max(500),
+  clientId: nonEmptyString.max(200),
+  deploymentId: nonEmptyString.max(200),
+  keyId: nonEmptyString.max(200),
+  privateKeyRef: z.string().trim().max(500).optional(),
+  lineItemsUrl: z.string().trim().url().max(2000).optional(),
+  scopes: z.array(z.string().trim().min(1).max(500)).max(20).default([]),
+  name: z.string().trim().max(200).optional(),
+  isActive: z.boolean().default(true),
+})
+export type LtiRegistrationInput = z.infer<typeof ltiRegistrationInputSchema>
+
+export const ltiRegistrationResponseSchema = z.object({
+  id: z.string(),
+  platformIssuer: z.string(),
+  clientId: z.string(),
+  deploymentId: z.string(),
+  keyId: z.string(),
+  privateKeyRef: z.string().nullable(),
+  lineItemsUrl: z.string().nullable(),
+  scopes: z.array(z.string()),
+  name: z.string().nullable(),
+  isActive: z.boolean(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+})
+export type LtiRegistrationResponse = z.infer<typeof ltiRegistrationResponseSchema>
+
+export const ltiUserMappingInputSchema = z.object({
+  studentId: nonEmptyString,
+  ltiUserId: nonEmptyString.max(500),
+})
+export type LtiUserMappingInput = z.infer<typeof ltiUserMappingInputSchema>
+
+export const saveLtiMappingsRequestSchema = z.object({
+  offeringId: nonEmptyString,
+  /** Defaults to the active registration when omitted. */
+  registrationId: nonEmptyString.optional(),
+  mappings: z.array(ltiUserMappingInputSchema).min(1).max(500),
+})
+export type SaveLtiMappingsRequest = z.infer<typeof saveLtiMappingsRequestSchema>
+
+export const ltiRegistrationEnvelopeSchema = z.object({
+  success: z.literal(true),
+  registration: ltiRegistrationResponseSchema.nullable(),
+})
+export type LtiRegistrationEnvelope = z.infer<typeof ltiRegistrationEnvelopeSchema>
+
+export const ltiUserMappingsEnvelopeSchema = z.object({
+  success: z.literal(true),
+  registrationId: z.string(),
+  mappings: z.array(
+    ltiUserMappingInputSchema.extend({
+      id: z.string(),
+      updatedAt: z.string(),
+    }),
+  ),
+})
+export type LtiUserMappingsEnvelope = z.infer<typeof ltiUserMappingsEnvelopeSchema>
 
 export const agsCallLogEntrySchema = z.object({
   service: z.enum(["lineItems", "scores", "results"]),
@@ -260,7 +331,8 @@ export const agsDryRunResponseSchema = z.object({
   /** Published grades that were skipped only because they had no LTI user id. */
   skippedUnpublished: z.array(z.object({ assessmentId: z.string(), studentId: z.string() })),
   log: z.array(agsCallLogEntrySchema),
-  userIdMapping: z.enum(["provided", "internal-id-fallback"]),
+  /** How each student's AGS `userId` was resolved (first non-fallback wins). */
+  userIdMapping: z.enum(["provided", "persisted", "internal-id-fallback"]),
   generatedAt: z.string(),
 })
 export type AgsDryRunResponse = z.infer<typeof agsDryRunResponseSchema>

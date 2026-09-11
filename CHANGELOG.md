@@ -19,12 +19,14 @@ delivered three hardening pods (security review, accessibility/performance, obse
 through 3 are merged; Phase 4 (cutover) has not started. Nothing below is released — `package.json`
 is still `0.1.0`.
 
-Known issues deliberately left open at this boundary: the Prisma schema remains frozen, and six
-features work around it via JSON columns or request-supplied values (team-formation
-attributes/availability, analytics alert thresholds, quiz draft/published state in
-`Question.metadata`, the grading suggestion dedupe key ordering, LTI registration and user-mapping
-persistence, and the per-assessment quiz attempt cap); a migration is the clean fix and is not done.
-The legacy `AssessmentGrade` model still coexists with the modern `Grade`. Three security items remain
+Known issues deliberately left open at this boundary: the Prisma schema was frozen through Phases
+1–3, but is now unfrozen. One migration added the six capabilities that six features previously
+worked around via JSON columns or request-supplied values (team-formation
+attributes/availability, analytics alert thresholds, quiz draft/published state, the grading
+suggestion dedupe key ordering, LTI registration and user-mapping persistence, and the
+per-assessment quiz attempt cap), and dropped seven dead models. See
+[`docs/schema/unfreeze.md`](docs/schema/unfreeze.md). The legacy `AssessmentGrade` model still
+coexists with the modern `Grade`. Three security items remain
 decisions rather than defects: the legacy/modern grade precedence, container cleanup's
 dependence on a reachable Docker daemon, and the multi-instance follow-up for the now
 per-process login throttle. Phase 4 closed the other three decisions (login rate
@@ -33,6 +35,7 @@ limiting, session role re-validation, and out-of-process `unit` execution); see
 implementation of quiz generation exists on a preserved branch and was intentionally
 not merged. See [`docs/README.md`](docs/README.md) for the full gap list.
 
+- **Schema unfreeze: six missing capabilities as real columns, seven dead models dropped** — the first schema change after the squashed baseline. One additive migration (`20260912000000_schema_unfreeze`) adds `StudentProfile.formationProfile`, `CourseOffering.analyticsSettings`, `Question.status`/`publishedAt`/`publishedById`, `AIGradeSuggestion.seq`, `LtiRegistration` + `LtiUserMapping`, and `Assessment.maxAttempts`, and drops the seven dead models (`AttendanceSession`, `AttendanceRecord`, `Stream`, `StudentStream`, `CourseRating`, `CourseGradeHistory`, `ExternalReference`) with their back-relations, the `AttendanceStatus` enum, every `noSqlRefId` column, and `User.legacyPassword`. The consumer code was migrated onto the new columns and legacy JSON/metadata reads are kept for backward compatibility. `AssessmentGrade` is deliberately kept (LMS-export legacy fallback; a separate product decision). See [`docs/schema/unfreeze.md`](docs/schema/unfreeze.md).
 - **LLM quiz generation (Phase 2)** — a teacher describes a topic; the system retrieves their own course material, generates multiple-choice drafts with misconception-targeting distractors tagged by subtopic and difficulty, and keeps them unpublished until an explicit publish action (`lib/quiz-generation/**`, `app/api/teacher/quiz-generation/**`, `components/teacher-quiz-generator.tsx`). See [`docs/features/quiz-generation.md`](docs/features/quiz-generation.md).
 - **Team formation, peer evaluation, contribution tracking and milestones (Phase 2)** — instructor-weighted CATME-style formation that maximises the worst-fitting team and respects schedule availability, confidential five-dimension peer evaluation with adjustment factors computed with and without self-ratings, free-rider detection, contribution events as evidence only, and milestones with timestamped completion (`lib/groups/**`, `app/api/teacher/groups/**`, `app/api/student/peer-evaluation/**`, `components/teacher-groups-manager.tsx`, `components/student-peer-evaluation.tsx`). See [`docs/features/groups-peereval.md`](docs/features/groups-peereval.md).
 - **Analytics, item analysis, intervention alerts and adaptive retake (Phase 2)** — per-question difficulty and discrimination indices computed from real `QuizAttempt`/`QuizResponse` data with an honest small-sample guard, cohort distribution and pass rate reusing the existing chart components, threshold-configurable class-average/contribution-imbalance/pending-review alerts scoped to the owning teacher, and a targeted retake containing only the questions a student failed (`lib/analytics/**`, `app/api/teacher/analytics/**`, `app/api/student/analytics/retake/**`, `components/teacher-analytics-dashboard.tsx`, `components/student-adaptive-retake.tsx`). See [`docs/features/analytics.md`](docs/features/analytics.md).

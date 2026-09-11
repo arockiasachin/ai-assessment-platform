@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
-import { BookOpenCheck, Calendar, ChevronDown, Search, Sparkles, Star, Users } from "lucide-react"
+import { BookOpenCheck, Calendar, ChevronDown, Search, Sparkles, Users } from "lucide-react"
 import type { CourseCatalogItem, StudentCoursesPayload } from "@/lib/student-courses"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -49,8 +49,6 @@ export function StudentCoursesView() {
   const [expanded, setExpanded] = useState<Record<string, boolean>>({})
   const [message, setMessage] = useState<string | null>(null)
   const [pendingOffer, setPendingOffer] = useState<string | null>(null)
-  const [ratingDrafts, setRatingDrafts] = useState<Record<string, number>>({})
-  const [commentDrafts, setCommentDrafts] = useState<Record<string, string>>({})
 
   const loadCourses = async () => {
     try {
@@ -126,31 +124,6 @@ export function StudentCoursesView() {
     }
   }
 
-  const submitRating = async (offeringId: string) => {
-    const rating = ratingDrafts[offeringId]
-    const comment = (commentDrafts[offeringId] ?? "").trim()
-    if (!rating || rating < 1 || rating > 5) return
-
-    setPendingOffer(offeringId)
-    setMessage(null)
-    try {
-      const response = await fetch("/api/student/courses/rating", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ offeringId, rating, comment }),
-      })
-      const data = (await response.json()) as { success?: boolean; message?: string }
-      setMessage(data.message ?? (response.ok ? "Rating saved." : "Unable to save rating."))
-      if (response.ok) {
-        await refreshCourses()
-      }
-    } catch {
-      setMessage("Unable to save rating right now.")
-    } finally {
-      setPendingOffer(null)
-    }
-  }
-
   if (isLoading) {
     return <p className="py-10 text-center text-sm text-muted-foreground">Loading courses…</p>
   }
@@ -172,9 +145,7 @@ export function StudentCoursesView() {
               <Sparkles className="size-3.5" />
               Course workspace
             </div>
-            <p className="text-sm font-semibold">
-              Manage enrollments, monitor class capacity, and rate completed courses
-            </p>
+            <p className="text-sm font-semibold">Manage enrollments and monitor class capacity</p>
             <p className="text-xs text-muted-foreground">
               Everything here updates directly from your student record.
             </p>
@@ -212,9 +183,6 @@ export function StudentCoursesView() {
         <CardContent className="space-y-3">
           {enrolled.map((course) => {
             const isExpanded = Boolean(expanded[course.offeringId])
-            const ratingValue = ratingDrafts[course.offeringId] ?? course.studentRating ?? 5
-            const commentValue =
-              commentDrafts[course.offeringId] ?? course.studentRatingComment ?? ""
 
             return (
               <div
@@ -287,72 +255,7 @@ export function StudentCoursesView() {
                         <span className="font-medium">Registration closes:</span>{" "}
                         {formatDate(course.registrationCloseAt)}
                       </p>
-                      <p>
-                        <span className="font-medium">Average rating:</span>{" "}
-                        {course.averageRating !== null
-                          ? `${course.averageRating.toFixed(1)} / 5`
-                          : "No ratings"}
-                      </p>
-                      <p>
-                        <span className="font-medium">Your rating:</span>{" "}
-                        {course.studentRating !== null
-                          ? `${course.studentRating} / 5`
-                          : "Not rated"}
-                      </p>
                     </div>
-
-                    {course.isCompleted && (
-                      <div className="mt-4 space-y-2 rounded-lg border border-border/70 bg-muted/20 p-3">
-                        <label
-                          className="text-xs font-medium text-muted-foreground"
-                          htmlFor={`rating-${course.offeringId}`}
-                        >
-                          Rate this course
-                        </label>
-                        <div className="flex flex-wrap items-center gap-2">
-                          <select
-                            id={`rating-${course.offeringId}`}
-                            className="rounded-md border border-border bg-background px-2 py-1 text-sm"
-                            value={ratingValue}
-                            onChange={(e) =>
-                              setRatingDrafts((prev) => ({
-                                ...prev,
-                                [course.offeringId]: Number(e.target.value),
-                              }))
-                            }
-                          >
-                            {[1, 2, 3, 4, 5].map((value) => (
-                              <option key={value} value={value}>
-                                {value}
-                              </option>
-                            ))}
-                          </select>
-                          <textarea
-                            value={commentValue}
-                            onChange={(e) =>
-                              setCommentDrafts((prev) => ({
-                                ...prev,
-                                [course.offeringId]: e.target.value,
-                              }))
-                            }
-                            aria-label={`Comment about ${course.courseName}`}
-                            placeholder="Optional comment about the course"
-                            className="min-h-16 w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm sm:flex-1"
-                            maxLength={500}
-                          />
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            onClick={() => submitRating(course.offeringId)}
-                            disabled={pendingOffer === course.offeringId}
-                          >
-                            <Star className="size-4" />
-                            Save rating
-                          </Button>
-                        </div>
-                      </div>
-                    )}
                   </div>
                 )}
               </div>

@@ -183,9 +183,13 @@ async function latestSuggestionTotals(
       quizResponseId: true,
       submissionId: true,
       criterionLabel: true,
-      createdAt: true,
+      seq: true,
     },
-    orderBy: { createdAt: "desc" },
+    // `seq` is a database-assigned monotonic sequence, so "latest suggestion
+    // per bucket" is deterministic even when two rows share a `createdAt`
+    // millisecond. `createdAt` remains a tie-break only for legacy rows that
+    // somehow carry a smaller sequence than an older timestamp.
+    orderBy: [{ seq: "desc" }, { createdAt: "desc" }],
   })
 
   const latestByGroup = new Map<string, { kind: SuggestionBucketKind; points: number }>()

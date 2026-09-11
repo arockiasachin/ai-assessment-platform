@@ -1,4 +1,4 @@
-import { readGenerationMetadata } from "@/lib/quiz-generation/metadata"
+import { resolveGenerationStatus } from "@/lib/quiz-generation/metadata"
 
 /**
  * Quiz deliverability.
@@ -7,10 +7,11 @@ import { readGenerationMetadata } from "@/lib/quiz-generation/metadata"
  * quiz" is derived from the questions the assessment actually has:
  *
  * - A quiz with no `Question` rows is not deliverable.
- * - A question that carries the quiz-generation envelope
- *   (`Question.metadata.generator === "quiz-generation"`) is deliverable only
- *   when `generationStatus === "published"`. This reuses the generation pod's
- *   draft/published marker rather than inventing a second one.
+ * - A generated question (explicit `Question.status`, or the legacy
+ *   `Question.metadata` envelope for rows written before the column existed) is
+ *   deliverable only when its state resolves to `"published"`. This reuses the
+ *   generation pod's single draft/published marker rather than inventing a
+ *   second one.
  * - A question without that envelope is a hand-authored question and is treated
  *   as published (the generation pod's own rule: "a question without this
  *   metadata marker is never treated as a generated draft").
@@ -23,6 +24,7 @@ import { readGenerationMetadata } from "@/lib/quiz-generation/metadata"
  */
 
 export type QuizQuestionAvailability = {
+  status: string | null
   metadata: unknown
   options: readonly { isCorrect: boolean }[]
 }
@@ -40,8 +42,8 @@ export function quizDeliveryStatus(
   }
 
   const draftCount = questions.filter((question) => {
-    const metadata = readGenerationMetadata(question.metadata)
-    return metadata !== null && metadata.generationStatus !== "published"
+    const status = resolveGenerationStatus(question)
+    return status !== null && status !== "published"
   }).length
   if (draftCount > 0) {
     return {

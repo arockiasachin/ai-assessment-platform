@@ -1,6 +1,7 @@
 import {
   createGroupRequestSchema,
   formTeamsRequestSchema,
+  saveFormationProfilesRequestSchema,
   updateGroupRequestSchema,
   type ContributionEvidenceValue,
   type FormationCriterionValue,
@@ -28,6 +29,11 @@ import {
   type FormationResult,
   type FormationStudent,
 } from "./formation"
+import {
+  readFormationProfile,
+  toFormationProfileJson,
+  toFormationStudent,
+} from "./formation-profile"
 import { analyzeCohortProgress, summarizeMilestones, type GroupProgress } from "./milestones"
 import { buildContributionEvidence, serializeGroupSummary, serializeMilestone } from "./serialize"
 import { readStoredRatings } from "./storage"
@@ -121,15 +127,65 @@ export async function listOfferingRosterForTeacher(
   const enrollments = await prisma.enrollment.findMany({
     where: { offeringId, status: "active" },
     select: {
-      student: { select: { id: true, fullName: true, registerNumber: true } },
+      student: {
+        select: {
+          id: true,
+          fullName: true,
+          registerNumber: true,
+          formationProfile: true,
+        },
+      },
     },
     orderBy: { student: { fullName: "asc" } },
   })
-  return enrollments.map((enrollment) => ({
-    studentId: enrollment.student.id,
-    fullName: enrollment.student.fullName,
-    registerNumber: enrollment.student.registerNumber,
-  }))
+  return enrollments.map((enrollment) => {
+    const profile = readFormationProfile(enrollment.student.formationProfile)
+    return {
+      studentId: enrollment.student.id,
+      fullName: enrollment.student.fullName,
+      registerNumber: enrollment.student.registerNumber,
+      attributes: profile.attributes,
+      availability: profile.availability ?? null,
+    }
+  })
+}
+
+/**
+ * Persist per-student formation attributes/availability for one owned offering,
+ * so the roster is configured once instead of re-sent on every formation run.
+ * Every student must be actively enrolled, so a teacher cannot write profiles
+ * for a student outside their roster.
+ */
+export async function saveFormationProfilesForTeacher(
+  user: AuthUser,
+  input: unknown,
+): Promise<RosterStudent[]> {
+  const request = saveFormationProfilesRequestSchema.parse(input)
+  await loadOwnedOffering(user, request.offeringId)
+
+  const uniqueStudentIds = [...new Set(request.profiles.map((profile) => profile.studentId))]
+  const enrolled = await loadEnrolledStudentIds(request.offeringId, uniqueStudentIds)
+  if (enrolled.length !== uniqueStudentIds.length) {
+    throw new GroupValidationError(
+      "Every formation profile must belong to a student actively enrolled in the offering.",
+    )
+  }
+
+  await prisma.$transaction(
+    request.profiles.map((profile) =>
+      prisma.studentProfile.update({
+        where: { id: profile.studentId },
+        data: {
+          formationProfile: toFormationProfileJson({
+            attributes: profile.attributes,
+            ...(profile.availability !== undefined ? { availability: profile.availability } : {}),
+          }),
+        },
+      }),
+    ),
+  )
+
+  return listOfferingRosterForTeacher(user, request.offeringId)
 }
 
 /** Every group on every offering the signed-in teacher owns. */
@@ -301,9 +357,11 @@ export type FormationOutcome = {
 
 /**
  * Run the CATME maximin formation over the offering's students. Formation
- * criteria, weights, attributes and availability are supplied by the instructor
- * (the schema has no per-student attribute or availability column). Setting
- * `persist: true` stores the result as `Group` + `GroupMember` rows.
+ * criteria and weights are supplied per run; per-student attributes and
+ * availability are read from `StudentProfile.formationProfile` (persisted once
+ * through `saveFormationProfilesForTeacher`). A `students` array in the request
+ * is an explicit one-off override. Setting `persist: true` stores the result as
+ * `Group` + `GroupMember` rows.
  */
 export async function formTeamsForTeacher(
   user: AuthUser,
@@ -329,12 +387,15 @@ export async function formTeamsForTeacher(
     }
     const enrollments = await prisma.enrollment.findMany({
       where: { offeringId: request.offeringId, status: "active" },
-      select: { studentId: true },
+      select: {
+        studentId: true,
+        student: { select: { formationProfile: true } },
+      },
       orderBy: { studentId: "asc" },
     })
     return enrollments.map((enrollment) => ({
       studentId: enrollment.studentId,
-      attributes: {},
+      ...toFormationStudent(readFormationProfile(enrollment.student.formationProfile)),
     }))
   })()
 

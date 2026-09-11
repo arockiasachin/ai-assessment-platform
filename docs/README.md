@@ -111,20 +111,23 @@ from empty. See [`development-workflow.md`](./development-workflow.md#ci-gates).
 
 These are reported, not hidden. Each item links to the source that documents it.
 
-### Schema is frozen; six features worked around it
+### Schema was frozen; six features worked around it (now unfrozen)
 
-`prisma/schema.prisma` and `prisma/migrations/**` were not changed by the Phase 2/3 pods. Six
-features needed a field the schema does not have and stored the state elsewhere. A migration is the
-clean fix and is **not done**.
+`prisma/schema.prisma` and `prisma/migrations/**` were not changed by the Phase 2/3 pods, so six
+features needed a field the schema does not have and stored the state elsewhere. The
+`p4/schema-unfreeze` branch adds a single migration
+(`20260912000000_schema_unfreeze`) that gives each of the six a real column/model and drops seven
+dead models; see [`schema/unfreeze.md`](./schema/unfreeze.md). The table below records the
+workarounds that the migration replaced and how each is now handled.
 
-| Feature                                    | Workaround                                                                                                 | Clean fix (migration)                                                        | Source                                                                 |
-| ------------------------------------------ | ---------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
-| Team-formation attributes and availability | Supplied per run in the request body; only formation provenance is persisted in `Group.metadata.formation` | A per-student attribute/availability column (or `StudentProfile.metadata`)   | [`features/groups-peereval.md`](./features/groups-peereval.md)         |
-| Analytics alert thresholds                 | Query params per request; defaults in `DEFAULT_INTERVENTION_THRESHOLDS`                                    | An offering-level settings column                                            | [`features/analytics.md`](./features/analytics.md)                     |
-| Quiz draft/published state                 | `Question.metadata.generationStatus` envelope                                                              | Real `generationStatus` / `publishedAt` columns on `Question`                | [`features/quiz-generation.md`](./features/quiz-generation.md)         |
-| Grading suggestion dedupe ordering         | `latestSuggestionTotals` orders only by `createdAt`; two same-millisecond suggestions for one bucket tie   | A `supersededAt` column or a unique key on the suggestion bucket             | [`verification/bugfix-run-1.md`](./verification/bugfix-run-1.md) (S-5) |
-| LTI registration and user mapping          | Registration read from env vars; the platform `userId` is supplied per request                             | LTI registration and per-student user-mapping models                         | [`features/lms-export.md`](./features/lms-export.md)                   |
-| Per-assessment quiz attempt cap            | Server constant (`DEFAULT_MAX_ATTEMPTS` = 3) plus `QUIZ_MAX_ATTEMPTS`                                      | An `Assessment.metadata` (or dedicated) column for a per-assessment override | [`features/quiz-grading.md`](./features/quiz-grading.md)               |
+| Feature                                    | Workaround                                                                                                 | Migration outcome                                                           | Source                                                                 |
+| ------------------------------------------ | ---------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| Team-formation attributes and availability | Supplied per run in the request body; only formation provenance is persisted in `Group.metadata.formation` | `StudentProfile.formationProfile` JSON; request `students` is an override   | [`features/groups-peereval.md`](./features/groups-peereval.md)         |
+| Analytics alert thresholds                 | Query params per request; defaults in `DEFAULT_INTERVENTION_THRESHOLDS`                                    | `CourseOffering.analyticsSettings` JSON (code default ← stored ← override)  | [`features/analytics.md`](./features/analytics.md)                     |
+| Quiz draft/published state                 | `Question.metadata.generationStatus` envelope                                                              | `Question.status` / `publishedAt` / `publishedById`; legacy JSON still read | [`features/quiz-generation.md`](./features/quiz-generation.md)         |
+| Grading suggestion dedupe ordering         | `latestSuggestionTotals` orders only by `createdAt`; two same-millisecond suggestions for one bucket tie   | `AIGradeSuggestion.seq` (monotonic serial) is the ordering key              | [`verification/bugfix-run-1.md`](./verification/bugfix-run-1.md) (S-5) |
+| LTI registration and user mapping          | Registration read from env vars; the platform `userId` is supplied per request                             | `LtiRegistration` + `LtiUserMapping`; request map is an override            | [`features/lms-export.md`](./features/lms-export.md)                   |
+| Per-assessment quiz attempt cap            | Server constant (`DEFAULT_MAX_ATTEMPTS` = 3) plus `QUIZ_MAX_ATTEMPTS`                                      | `Assessment.maxAttempts` (column → env → 3)                                 | [`features/quiz-grading.md`](./features/quiz-grading.md)               |
 
 ### Grade duality
 

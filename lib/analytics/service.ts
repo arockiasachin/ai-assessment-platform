@@ -1,18 +1,20 @@
 import type { AuthUser } from "@/lib/session"
 import type {
-  AssessmentItemAnalysisResponse,
   AnalyticsAssessmentSummary,
   AnalyticsOfferingSummary,
+  AnalyticsSettingsResponse,
+  AssessmentItemAnalysisResponse,
   ItemAnalysisResponse,
   RetakableAssessment,
   TeacherAnalyticsOverviewResponse,
 } from "@/lib/contracts/analytics"
+import { updateAnalyticsSettingsRequestSchema } from "@/lib/contracts/analytics"
+import type { Prisma } from "@/lib/generated/prisma/client"
 import { summarizeContributions } from "@/lib/groups/contribution"
 import { prisma } from "@/lib/prisma"
 import { serializeQuestionForStudent } from "@/lib/quiz-generation/serialize"
 
 import {
-  DEFAULT_INTERVENTION_THRESHOLDS,
   evaluateInterventionAlerts,
   type InterventionAlert,
   type InterventionThresholds,
@@ -25,12 +27,14 @@ import {
   resolveTeacherStaffId,
 } from "./authz"
 import { AnalyticsError } from "./errors"
-import {
-  analyzeItem,
-  DEFAULT_ITEM_ANALYSIS_THRESHOLDS,
-  type ItemAnalysisThresholds,
-} from "./item-analysis"
+import { analyzeItem, type ItemAnalysisThresholds } from "./item-analysis"
 import { selectAdaptiveRetakeQuestions } from "./retake"
+import {
+  mergeAnalyticsSettings,
+  readAnalyticsSettings,
+  resolveInterventionThresholds,
+  resolveItemAnalysisThresholds,
+} from "./settings"
 
 /**
  * DB-backed analytics service.
@@ -126,6 +130,7 @@ export async function getTeacherAnalyticsOverview(
   options: { offeringId: string; thresholds?: Partial<InterventionThresholds> },
 ): Promise<TeacherAnalyticsOverview> {
   const offering = await loadOwnedOffering(user, options.offeringId)
+  const stored = readAnalyticsSettings(offering.analyticsSettings)
   const offerings = await listTeacherOfferingsForAnalytics(user)
 
   const assessments = await prisma.assessment.findMany({
@@ -229,7 +234,7 @@ export async function getTeacherAnalyticsOverview(
       contributionGroups,
       pendingReviews: { offeringId: offering.id, pendingCount },
     },
-    options.thresholds,
+    { ...(stored.intervention ?? {}), ...options.thresholds },
   )
 
   return {
@@ -237,8 +242,57 @@ export async function getTeacherAnalyticsOverview(
     offeringId: offering.id,
     assessments: summaries,
     alerts,
-    thresholds: { ...DEFAULT_INTERVENTION_THRESHOLDS, ...options.thresholds },
+    thresholds: resolveInterventionThresholds(stored, options.thresholds),
     generatedAt: new Date().toISOString(),
+  }
+}
+
+/**
+ * Persist per-offering analytics thresholds. Merged into any existing settings
+ * so updating intervention thresholds does not drop item-analysis thresholds;
+ * a missing key keeps the code default (never a null). Returns the effective
+ * thresholds after defaults are applied.
+ */
+export async function updateAnalyticsSettingsForTeacher(
+  user: AuthUser,
+  input: unknown,
+): Promise<AnalyticsSettingsResponse> {
+  const request = updateAnalyticsSettingsRequestSchema.parse(input)
+  const offering = await loadOwnedOffering(user, request.offeringId)
+  const current = readAnalyticsSettings(offering.analyticsSettings)
+  const merged = mergeAnalyticsSettings(current, request.settings)
+
+  await prisma.courseOffering.update({
+    where: { id: offering.id },
+    data: { analyticsSettings: merged as Prisma.InputJsonValue },
+  })
+
+  return {
+    success: true,
+    offeringId: offering.id,
+    settings: merged,
+    thresholds: {
+      intervention: resolveInterventionThresholds(merged),
+      itemAnalysis: resolveItemAnalysisThresholds(merged),
+    },
+  }
+}
+
+/** Read the persisted per-offering analytics settings plus effective thresholds. */
+export async function getAnalyticsSettingsForTeacher(
+  user: AuthUser,
+  offeringId: string,
+): Promise<AnalyticsSettingsResponse> {
+  const offering = await loadOwnedOffering(user, offeringId)
+  const settings = readAnalyticsSettings(offering.analyticsSettings)
+  return {
+    success: true,
+    offeringId: offering.id,
+    settings,
+    thresholds: {
+      intervention: resolveInterventionThresholds(settings),
+      itemAnalysis: resolveItemAnalysisThresholds(settings),
+    },
   }
 }
 
@@ -253,10 +307,17 @@ export async function getAssessmentItemAnalysisForTeacher(
   options: { assessmentId: string; thresholds?: Partial<ItemAnalysisThresholds> },
 ): Promise<AssessmentAnalytics> {
   const assessment = await loadOwnedAssessment(user, options.assessmentId)
-  const thresholds: ItemAnalysisThresholds = {
-    ...DEFAULT_ITEM_ANALYSIS_THRESHOLDS,
-    ...options.thresholds,
-  }
+  const offeringSettings = await prisma.courseOffering.findUnique({
+    where: { id: assessment.offeringId },
+    select: { analyticsSettings: true },
+  })
+  const stored = readAnalyticsSettings(offeringSettings?.analyticsSettings)
+  // Persisted per-offering settings are the middle layer: code default <-
+  // offering setting <- per-request override.
+  const thresholds: ItemAnalysisThresholds = resolveItemAnalysisThresholds(
+    stored,
+    options.thresholds,
+  )
 
   const [questions, attempts] = await Promise.all([
     prisma.question.findMany({

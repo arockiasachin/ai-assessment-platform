@@ -5,14 +5,14 @@
  *
  * Defaults and where they live
  * ----------------------------
- * `prisma/schema.prisma` is frozen and there is no assessment-level JSON column
- * (only `Question.metadata` / `Group.metadata` / `CodeTask.metadata` exist), so a
- * per-assessment attempt cap has nowhere to live without a migration. The cap is
- * therefore a server-side default (`DEFAULT_MAX_ATTEMPTS = 3`) with a single
- * documented environment override (`QUIZ_MAX_ATTEMPTS`). This is reported as a
- * schema gap in `docs/features/quiz-grading.md`; the resolution function is the
- * one place to bind a real `Assessment.metadata` column to once the schema is
- * unfrozen.
+ * The cap is resolved in one place, `resolveMaxAttempts`, with this precedence:
+ *
+ *  1. `Assessment.maxAttempts` when the assessment sets a valid positive cap;
+ *  2. the `QUIZ_MAX_ATTEMPTS` environment override (operator-wide);
+ *  3. `DEFAULT_MAX_ATTEMPTS = 3`.
+ *
+ * A malformed or non-positive value at either level is ignored in favour of the
+ * next, so a bad value can never disable the cap (or make it negative).
  *
  * Deadline handling
  * -----------------
@@ -42,18 +42,24 @@ export type AttemptEligibility = {
   maxAttempts: number
 }
 
+function positiveInt(value: number | string | undefined | null): number | null {
+  if (value === undefined || value === null || value === "") return null
+  const parsed = typeof value === "number" ? Math.floor(value) : Number.parseInt(value, 10)
+  if (!Number.isFinite(parsed) || parsed < 1) return null
+  return parsed
+}
+
 /**
- * Resolve the configured attempt cap. A malformed or non-positive override is
- * ignored in favour of the default, so a bad env value can never disable the cap
- * (or make it negative).
+ * Resolve the configured attempt cap from the per-assessment column, then the
+ * `QUIZ_MAX_ATTEMPTS` environment override, then the default. A malformed or
+ * non-positive value at either level is ignored in favour of the next, so a bad
+ * value can never disable the cap (or make it negative).
  */
 export function resolveMaxAttempts(
+  assessmentMaxAttempts: number | string | undefined | null = null,
   raw: string | undefined | null = process.env[MAX_ATTEMPTS_ENV_KEY],
 ): number {
-  if (raw === undefined || raw === null || raw.trim() === "") return DEFAULT_MAX_ATTEMPTS
-  const parsed = Number.parseInt(raw, 10)
-  if (!Number.isFinite(parsed) || parsed < 1) return DEFAULT_MAX_ATTEMPTS
-  return parsed
+  return positiveInt(assessmentMaxAttempts) ?? positiveInt(raw) ?? DEFAULT_MAX_ATTEMPTS
 }
 
 /**

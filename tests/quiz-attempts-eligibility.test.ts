@@ -15,16 +15,27 @@ import {
 const due = new Date("2026-10-01T08:00:00.000Z")
 
 describe("resolveMaxAttempts", () => {
-  it("defaults to 3 and honours a positive integer override", () => {
-    expect(resolveMaxAttempts(undefined)).toBe(DEFAULT_MAX_ATTEMPTS)
-    expect(resolveMaxAttempts("")).toBe(DEFAULT_MAX_ATTEMPTS)
-    expect(resolveMaxAttempts("5")).toBe(5)
+  it("defaults to 3 when neither the assessment cap nor the env override is set", () => {
+    expect(resolveMaxAttempts(null, undefined)).toBe(DEFAULT_MAX_ATTEMPTS)
+    expect(resolveMaxAttempts(undefined, "")).toBe(DEFAULT_MAX_ATTEMPTS)
   })
 
-  it("ignores malformed or non-positive overrides so the cap can never be disabled", () => {
-    expect(resolveMaxAttempts("0")).toBe(DEFAULT_MAX_ATTEMPTS)
-    expect(resolveMaxAttempts("-2")).toBe(DEFAULT_MAX_ATTEMPTS)
-    expect(resolveMaxAttempts("not-a-number")).toBe(DEFAULT_MAX_ATTEMPTS)
+  it("prefers the per-assessment cap over the env override", () => {
+    expect(resolveMaxAttempts(5, undefined)).toBe(5)
+    expect(resolveMaxAttempts(5, "7")).toBe(5)
+  })
+
+  it("falls back to the env override when the assessment cap is unset", () => {
+    expect(resolveMaxAttempts(null, "5")).toBe(5)
+    expect(resolveMaxAttempts(undefined, "6")).toBe(6)
+  })
+
+  it("ignores malformed or non-positive values at either level, never disabling the cap", () => {
+    expect(resolveMaxAttempts(0, "7")).toBe(7)
+    expect(resolveMaxAttempts(-2, "7")).toBe(7)
+    expect(resolveMaxAttempts(null, "0")).toBe(DEFAULT_MAX_ATTEMPTS)
+    expect(resolveMaxAttempts(null, "-2")).toBe(DEFAULT_MAX_ATTEMPTS)
+    expect(resolveMaxAttempts(null, "not-a-number")).toBe(DEFAULT_MAX_ATTEMPTS)
   })
 })
 

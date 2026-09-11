@@ -29,10 +29,15 @@ function offeringLabel(name: string, section: string | null): string {
   return section ? `${name} ${section}` : name
 }
 
+/** An owned offering plus its persisted analytics settings (raw JSON). */
+export type OwnedAnalyticsOffering = AnalyticsOfferingSummary & {
+  analyticsSettings: unknown
+}
+
 export async function loadOwnedOffering(
   user: AuthUser,
   offeringId: string,
-): Promise<AnalyticsOfferingSummary> {
+): Promise<OwnedAnalyticsOffering> {
   const staffId = await resolveTeacherStaffId(user)
   const offering = await prisma.courseOffering.findUnique({
     where: { id: offeringId },
@@ -41,6 +46,7 @@ export async function loadOwnedOffering(
       teacherId: true,
       term: true,
       academicYear: true,
+      analyticsSettings: true,
       course: { select: { code: true, name: true } },
       classRoom: { select: { name: true, section: true } },
     },
@@ -54,6 +60,7 @@ export async function loadOwnedOffering(
     className: offeringLabel(offering.classRoom.name, offering.classRoom.section),
     term: offering.term,
     academicYear: offering.academicYear,
+    analyticsSettings: offering.analyticsSettings,
   }
 }
 
