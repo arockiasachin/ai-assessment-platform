@@ -39,6 +39,45 @@ export const updateOfferingRequestSchema = z.object({
 })
 export type UpdateOfferingRequest = z.infer<typeof updateOfferingRequestSchema>
 
+/** `POST /api/student/courses/rating` request body. */
+export const courseRatingRequestSchema = z.object({
+  offeringId: nonEmptyString,
+  rating: z.coerce.number().int().min(1).max(5),
+  comment: z.string().trim().max(500).optional(),
+})
+export type CourseRatingRequest = z.infer<typeof courseRatingRequestSchema>
+
+/** One rating row in a teacher's course-ratings report. */
+export const courseRatingItemSchema = z.object({
+  id: z.string(),
+  rating: z.number().int().min(1).max(5),
+  comment: z.string().nullable(),
+  studentName: z.string(),
+  registerNumber: z.string(),
+  updatedAt: z.string(),
+})
+export type CourseRatingItem = z.infer<typeof courseRatingItemSchema>
+
+/** Aggregate rating report for one teacher-owned offering. */
+export const courseOfferingRatingsReportSchema = z.object({
+  offeringId: z.string(),
+  courseCode: z.string(),
+  courseName: z.string(),
+  className: z.string(),
+  term: z.string(),
+  academicYear: z.number().int(),
+  ratingsCount: z.number().int().nonnegative(),
+  averageRating: z.number().nullable(),
+  ratings: z.array(courseRatingItemSchema),
+})
+export type CourseOfferingRatingsReport = z.infer<typeof courseOfferingRatingsReportSchema>
+
+/** `GET /api/teacher/reports/ratings` response. */
+export const courseRatingsReportResponseSchema = z.object({
+  offerings: z.array(courseOfferingRatingsReportSchema),
+})
+export type CourseRatingsReportResponse = z.infer<typeof courseRatingsReportResponseSchema>
+
 /** `POST /api/student/courses/enroll` request body. */
 export const courseEnrollRequestSchema = z.object({
   offeringId: nonEmptyString,

@@ -58,6 +58,7 @@ const teacherRoutes: RouteItem[] = [
   { label: "Export", href: "/teacher/export", icon: Share2 },
   { label: "Classes", href: "/teacher/classes", icon: Layers },
   { label: "Planner", href: "/teacher/planner", icon: CalendarDays },
+  { label: "Reports", href: "/teacher/reports", icon: ClipboardList },
 ]
 
 export function RoleRoutesMenu({ role }: { role: Role }) {

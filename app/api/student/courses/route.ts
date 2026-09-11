@@ -73,6 +73,9 @@ export async function GET() {
         },
       },
       enrollments: { select: { studentId: true, status: true } },
+      ratings: {
+        select: { studentId: true, rating: true, comment: true },
+      },
     },
     orderBy: [{ academicYear: "desc" }, { term: "asc" }],
   })
@@ -101,6 +104,11 @@ export async function GET() {
 
     const isCompleted = Boolean(offering.endsOn && offering.endsOn < now)
 
+    const averageRating = offering.ratings.length
+      ? offering.ratings.reduce((sum, row) => sum + row.rating, 0) / offering.ratings.length
+      : null
+    const ownRating = offering.ratings.find((row) => row.studentId === student.id) ?? null
+
     return {
       offeringId: offering.id,
       courseId: offering.courseId,
@@ -124,6 +132,10 @@ export async function GET() {
       isEnrolled,
       isWaitlisted,
       isCompleted,
+      studentRating: ownRating?.rating ?? null,
+      studentRatingComment: ownRating?.comment ?? null,
+      averageRating,
+      ratingsCount: offering.ratings.length,
     }
   })
 

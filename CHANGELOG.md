@@ -98,6 +98,8 @@ not merged. See [`docs/README.md`](docs/README.md) for the full gap list.
 
 ### Added
 
+- **Course ratings restored** — students can rate a completed course they are enrolled in and update their rating, and teachers get an ownership-scoped ratings report with per-course averages, counts, and comments. `20260912010000_restore_course_rating` re-creates the `CourseRating` model dropped by `20260912000000_schema_unfreeze` (which an audit wrongly reported as unreferenced); the already-modernized consumer code is restored (`app/api/student/courses/rating`, `app/api/teacher/reports/ratings`, `components/student-courses-view.tsx`, `components/teacher-ratings-report.tsx`, `app/(dashboard)/teacher/reports`), with the contract, service layer, nav entry, and fresh tests. See [`docs/features/course-ratings.md`](docs/features/course-ratings.md).
+
 - **`zod` API contract** (`lib/contracts/`). Request/response schemas for auth, gradebook, and the
   grading pipeline, plus `lib/api.ts` body parsing. Route handlers touched in this change validate
   input against these schemas instead of hand-rolling checks.

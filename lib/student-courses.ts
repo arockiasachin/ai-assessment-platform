@@ -24,6 +24,10 @@ export type CourseCatalogItem = {
   isEnrolled: boolean
   isWaitlisted: boolean
   isCompleted: boolean
+  studentRating: number | null
+  studentRatingComment: string | null
+  averageRating: number | null
+  ratingsCount: number
 }
 
 export type StudentCoursesPayload = {
