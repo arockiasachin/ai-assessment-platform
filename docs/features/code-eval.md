@@ -105,8 +105,10 @@ Categories (`TestCase.category` is a free string; values are normalized):
 
 - **`input-output`** — run the program with `input` on stdin, compare stdout to
   `expectedOutput` with trailing-whitespace normalization.
-- **`unit`** — import the source as a module and call `input.function` with
-  `input.args`; compare the JSON return value.
+- **`unit`** — spawn a fresh child interpreter that imports the source as a module
+  and calls `input.function` with `input.args`; compare the JSON return value. Student
+  code never runs in the harness process, so it cannot forge or suppress the result
+  line (see [`docs/security/hardening.md`](../security/hardening.md)).
 - **`structure`** — static rules from an `input` JSON object (`mustContain`,
   `mustNotContain`, `minLines`, `maxLines`, `maxLineLength`).
 - **`code-quality`** — quality signals (`minComments`, `maxLineLength`,
@@ -193,10 +195,13 @@ have no route that returns similarity data.
   `docker` daemon is a trusted component. There is no per-student disk quota
   beyond the read-only root and 64 MB tmpfs; a student can still consume the
   capped 256 KB of captured output and the CPU/memory/PID budgets.
-- **Unit-mode convention.** `unit` tests import the student's file and call a
-  named function; the student must define it. Python modules are imported as
-  `solution`; Node uses CommonJS `module.exports`. ESM student files are not
-  supported for `unit` tests.
+- **Unit-mode convention.** `unit` tests run the student's file in a separate child
+  interpreter and call a named function; the student must define it. Python modules are
+  imported as `solution`; Node uses CommonJS `module.exports`. ESM student files are not
+  supported for `unit` tests. The child's reported return value is still produced by a
+  process running student code; the parent owns the pass/fail evidence and fails closed
+  on any framing violation, but an in-child lie about the returned value is a documented
+  residual (see [`docs/security/hardening.md`](../security/hardening.md)).
 - **No line/statement coverage.** `coverage` is an execution proxy only.
 - **Similarity is heuristic.** Shingling/Jaccard can be defeated by structural
   rewrites; it is a flag for humans, not proof.
