@@ -20,9 +20,22 @@ export function AdminToolsPanel() {
   const [rebalanceState, setRebalanceState] = useActionState()
 
   async function runSeed() {
+    if (
+      !window.confirm(
+        "This resets development credentials and reseeds the dataset. This cannot be undone. Continue?",
+      )
+    ) {
+      return
+    }
     setSeedState({ loading: true, message: null, error: null })
     try {
-      const response = await fetch("/api/auth/seed", { method: "POST" })
+      const response = await fetch("/api/auth/seed", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        // Must match SEED_CONFIRMATION_TOKEN in lib/contracts/auth.ts. The
+        // endpoint refuses to reseed without this explicit opt-in.
+        body: JSON.stringify({ confirm: "RESET-SEED" }),
+      })
       const data = (await response.json()) as { success?: boolean; message?: string }
       if (!response.ok || !data.success) {
         setSeedState({ loading: false, error: data.message ?? "Seed failed." })
