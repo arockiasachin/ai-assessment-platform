@@ -14,8 +14,8 @@ section.
 
 Phase 1 (contracts) is complete. The schema, baseline migration, LLM adapter, retrieval module, test
 harness, auth hardening, the `zod` API contract, and the grade review state machine are landed on
-`dev`. The one residual is the legacy quiz path, which still ships an answer key to the client (Phase
-2). Nothing below is released.
+`dev`. The legacy quiz path is now also server-authoritative: answer keys no longer reach the
+client, and quiz results are graded by `POST /api/quiz/grade`. Nothing below is released.
 
 ### Security
 
@@ -37,6 +37,14 @@ harness, auth hardening, the `zod` API contract, and the grade review state mach
 - **Closed the student self-grading hole** (`app/api/gradebook/marks/route.ts`,
   `lib/gradebook-db.ts`): only teachers and admins may write marks, and a teacher may only write
   marks for assessments in their own offerings.
+- **Removed the client answer key; quiz grading is now server-authoritative** (`lib/gradebook.ts`,
+  `lib/gradebook-db.ts`, `lib/quiz-scoring.ts`, `lib/quiz-grading.ts`, `app/api/quiz/grade/route.ts`,
+  `components/quiz-runner.tsx`). The gradebook payload no longer carries `QuizQuestion.correctIndex`;
+  the browser submits only the options it selected and the server grades them, disclosing the key
+  only in the post-submission response. A student is always graded as their own profile, and a
+  teacher only for assessments they own.
+- **Repaired the admin seed tool** (`components/admin-tools-panel.tsx`) to send the required
+  `{ "confirm": "RESET-SEED" }` body (behind a confirmation prompt) after the endpoint was hardened.
 
 ### Added
 
@@ -50,8 +58,10 @@ harness, auth hardening, the `zod` API contract, and the grade review state mach
   an `AuditLog` row in the same transaction. Only the human `accept`/`override` actions set
   `Grade.publishedAt`, so no grade publishes without teacher sign-off.
 - **Tests** (`tests/auth.test.ts`, `tests/authorization.test.ts`, `tests/contracts.test.ts`,
-  `tests/grading-state-machine.test.ts`). They prove a forged admin cookie and a student
-  self-grading attempt are rejected, and exercise the contract schemas and state machine.
+  `tests/grading-state-machine.test.ts`, `tests/quiz-scoring.test.ts`, `tests/quiz-grading.test.ts`).
+  They prove a forged admin cookie and a student self-grading attempt are rejected, that quiz
+  correctness is derived server-side with object-level authorization, and exercise the contract
+  schemas and state machine.
 - **Assessment spine schema** (`prisma/schema.prisma`). Additive models for rubrics and criteria
   (`Rubric`, `RubricCriterion`); the grading pipeline (`AIGradeSuggestion`, `GradeReview`, `Grade`)
   with an append-only `AuditLog`; quiz questions, attempts, and responses (`Question`,

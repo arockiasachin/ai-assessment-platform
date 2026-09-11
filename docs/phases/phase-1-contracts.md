@@ -66,16 +66,16 @@ New enums: `MaterialKind`, `QuestionType`, `QuizAttemptStatus`, `GradeReviewStat
 | `zod` API contract         | `lib/contracts/**`, `lib/api.ts`, route handlers            | `3470a33` |
 | Grade review state machine | `lib/grading/**`                                            | `ab1dd82` |
 
-### Still open or in flight
+### Closed after the first draft
 
-| Area                              | Intended path                               | State              |
-| --------------------------------- | ------------------------------------------- | ------------------ |
-| Server-authoritative quiz answers | `lib/gradebook-db.ts`, a quiz grading route | Open (Phase 2 pod) |
+| Area                              | Path                                                                        | State                    |
+| --------------------------------- | --------------------------------------------------------------------------- | ------------------------ |
+| Server-authoritative quiz answers | `lib/quiz-scoring.ts`, `lib/quiz-grading.ts`, `app/api/quiz/grade/route.ts` | Landed (answer key gone) |
 
-- The legacy quiz path is the one place grading is still client-trusted:
-  `lib/gradebook-db.ts` returns `QuizQuestion.correctIndex` in the gradebook payload and
-  `components/quiz-runner.tsx` grades in the browser. The new pipeline is the intended path; moving
-  quiz grading server-side is a Phase 2 deliverable.
+- The legacy quiz path is no longer client-trusted: `lib/gradebook-db.ts` no longer returns
+  `QuizQuestion.correctIndex`, and `components/quiz-runner.tsx` submits selected answers to
+  `POST /api/quiz/grade`, which grades against the server's copy and enforces object-level
+  authorization. Grade persistence and short-answer partial credit remain Phase 2 work.
 - The test harness is landed (`0644bc1`, `f54b2f0`): `tests/` (including `tests/spine.test.ts`,
   `tests/llm-mock.test.ts`, fixtures, and DB helpers) and `vitest.config.mts` are committed, and
   `ci.yml` runs `npm test` in the `verify` job. Its global setup applies the committed migrations
@@ -102,9 +102,9 @@ the migration applies cleanly, and the harness runs a spine smoke test against e
 
 **Contracts landed; Phase 2 may proceed.** The schema, baseline migration, LLM adapter, retrieval
 module, and test harness are committed, and as of `e87d7bd` / `3470a33` / `ab1dd82` the auth
-hardening, the `zod` API contract, and the grade review state machine are landed as well. The one
-deliberate residual is the legacy quiz path, which still ships an answer key to the client; that is
-now explicitly a Phase 2 item (see above).
+hardening, the `zod` API contract, and the grade review state machine are landed as well. The legacy
+quiz path was subsequently moved server-side, so no answer key reaches the client; only quiz grade
+persistence and partial credit remain for Phase 2.
 
 ## Key decisions and why
 
@@ -197,8 +197,10 @@ and the student self-grading attempt are both rejected (see `tests/auth.test.ts`
   `lib/grading/review-service.ts` writes `AuditLog` rows in the same transaction as each transition.
   Only a human `accept`/`override` publishes a `Grade`. A DB-backed service test is deferred until
   the ephemeral-Postgres harness runs (the current local run has no Docker).
-- **Legacy quiz answer keys still reach the client.** `lib/gradebook-db.ts` and
-  `components/quiz-runner.tsx` are unchanged; server-authoritative quiz grading is a Phase 2 pod.
+- **Legacy quiz answer keys no longer reach the client.** `lib/gradebook-db.ts` stopped serializing
+  `correctIndex`, and `components/quiz-runner.tsx` posts selected answers to `POST /api/quiz/grade`,
+  which grades server-side. Persisting auto-graded quiz results and short-answer partial credit stay
+  with the Phase 2 grading pod.
 - **Unresolved spec questions that belong to this phase** (from
   [`product-spec.md`](../product-spec.md#open-questions-to-resolve-during-phase-1)): default LLM
   provider and model per task; retention policy for student work, rationales, and evidence quotes;
