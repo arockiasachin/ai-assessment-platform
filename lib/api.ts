@@ -2,14 +2,23 @@ import { NextResponse } from "next/server"
 import type { ZodType } from "zod"
 
 import { firstIssueMessage } from "@/lib/contracts"
+import { logEvent } from "@/lib/observability/event"
 
 /** Small helpers shared by route handlers. */
 
+/**
+ * Build an error response and log it. 4xx responses are routine (validation,
+ * 401/403/404) and log at `debug`; 5xx responses log at `error`. The message is
+ * run through the redactor by the logger, so a domain error that embeds a
+ * connection string can never leak into the log line.
+ */
 export function jsonError(message: string, status: number): NextResponse {
+  logEvent(status >= 500 ? "error" : "debug", "http.error_response", { status, message })
   return NextResponse.json({ success: false, message }, { status })
 }
 
 export function jsonSuccess(body: Record<string, unknown> = {}): NextResponse {
+  logEvent("debug", "http.success_response")
   return NextResponse.json({ success: true, ...body })
 }
 

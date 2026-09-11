@@ -53,6 +53,7 @@ const teacherRoutes: RouteItem[] = [
   { label: "Code tasks", href: "/teacher/code-tasks", icon: Terminal },
   { label: "Groups", href: "/teacher/groups", icon: Users },
   { label: "Analytics", href: "/teacher/analytics", icon: BarChart3 },
+  { label: "Activity log", href: "/teacher/observability", icon: ClipboardList },
   { label: "Export", href: "/teacher/export", icon: Share2 },
   { label: "Classes", href: "/teacher/classes", icon: Layers },
   { label: "Planner", href: "/teacher/planner", icon: CalendarDays },

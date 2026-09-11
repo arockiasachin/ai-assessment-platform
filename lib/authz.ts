@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 
 import { getSessionUser, type AuthRole, type AuthUser } from "@/lib/auth"
+import { updateLogContext } from "@/lib/observability/context"
 
 /**
  * Single server-side authorization entry point.
@@ -30,6 +31,7 @@ function deny(status: 401 | 403, message: string): AuthorizationResult {
 export async function requireUser(): Promise<AuthorizationResult> {
   const user = await getSessionUser()
   if (!user) return deny(401, "Unauthorized")
+  updateLogContext({ userId: user.id, userRole: user.role })
   return { authorized: true, user }
 }
 
@@ -38,5 +40,6 @@ export async function requireRole(...roles: AuthRole[]): Promise<AuthorizationRe
   const user = await getSessionUser()
   if (!user) return deny(401, "Unauthorized")
   if (roles.length > 0 && !roles.includes(user.role)) return deny(403, "Forbidden")
+  updateLogContext({ userId: user.id, userRole: user.role })
   return { authorized: true, user }
 }

@@ -1,6 +1,7 @@
 import { LlmConfigError } from "./errors"
 import { resolveProviderName, resolveTimeoutMs, type LlmEnv } from "./env"
 import type { FetchLike } from "./http"
+import { observeLlmProvider } from "./observability"
 import { createAnthropicProviderFromEnv } from "./providers/anthropic"
 import { createMockProvider } from "./providers/mock"
 import { createOllamaProviderFromEnv } from "./providers/ollama"
@@ -10,6 +11,7 @@ import type { LlmProvider, LlmProviderName } from "./types"
 export * from "./errors"
 export * from "./env"
 export * from "./types"
+export * from "./observability"
 export type { FetchLike } from "./http"
 export { deterministicEmbedding, createMockProvider } from "./providers/mock"
 export { createOpenAiCompatibleProvider } from "./providers/openai-compatible"
@@ -25,28 +27,38 @@ export type CreateLlmProviderOptions = {
   fetchImpl?: FetchLike
 }
 
+function createBaseProvider(
+  provider: LlmProviderName,
+  env: LlmEnv,
+  timeoutMs: number,
+  fetchImpl?: FetchLike,
+): LlmProvider {
+  switch (provider) {
+    case "mock":
+      return createMockProvider({ model: env.MOCK_MODEL?.trim() || undefined })
+    case "openai":
+      return createOpenAiProviderFromEnv(env, timeoutMs, fetchImpl)
+    case "anthropic":
+      return createAnthropicProviderFromEnv(env, timeoutMs, fetchImpl)
+    case "ollama":
+      return createOllamaProviderFromEnv(env, timeoutMs, fetchImpl)
+    default:
+      throw new LlmConfigError(`Unsupported LLM provider "${String(provider)}".`)
+  }
+}
+
 /**
  * Build a provider from env. Provider selection and validation happen here so
  * a misconfigured live provider fails loudly, while the default stays the
- * offline mock.
+ * offline mock. The returned provider is wrapped with `observeLlmProvider`, so
+ * every call emits a structured `llm.generate`/`llm.embed` line carrying the
+ * explainability envelope (provider, model, usage, latency, prompt version).
  */
 export function createLlmProvider(options: CreateLlmProviderOptions = {}): LlmProvider {
   const env = options.env ?? process.env
   const provider = options.provider ?? resolveProviderName(env)
   const timeoutMs = resolveTimeoutMs(env)
-
-  switch (provider) {
-    case "mock":
-      return createMockProvider({ model: env.MOCK_MODEL?.trim() || undefined })
-    case "openai":
-      return createOpenAiProviderFromEnv(env, timeoutMs, options.fetchImpl)
-    case "anthropic":
-      return createAnthropicProviderFromEnv(env, timeoutMs, options.fetchImpl)
-    case "ollama":
-      return createOllamaProviderFromEnv(env, timeoutMs, options.fetchImpl)
-    default:
-      throw new LlmConfigError(`Unsupported LLM provider "${String(provider)}".`)
-  }
+  return observeLlmProvider(createBaseProvider(provider, env, timeoutMs, options.fetchImpl))
 }
 
 let cachedProvider: LlmProvider | undefined
