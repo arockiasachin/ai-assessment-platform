@@ -194,9 +194,11 @@ function QuestionEditor({
         />
       </div>
 
-      <div className="space-y-2">
+      <div className="space-y-2" role="radiogroup" aria-labelledby={`options-label-${question.id}`}>
         <div className="flex items-center justify-between">
-          <Label>Options — select the single correct answer</Label>
+          <Label id={`options-label-${question.id}`}>
+            Options — select the single correct answer
+          </Label>
           <Button
             type="button"
             variant="outline"
@@ -226,6 +228,7 @@ function QuestionEditor({
               <Input
                 value={option.text}
                 disabled={!isDraft}
+                aria-label={`Option ${index + 1} text`}
                 placeholder={`Option ${index + 1}`}
                 onChange={(event) => updateOption(index, { text: event.target.value })}
               />
@@ -248,6 +251,7 @@ function QuestionEditor({
             <Input
               value={option.rationale}
               disabled={!isDraft}
+              aria-label={`Option ${index + 1} distractor rationale`}
               placeholder="Why would a student choose this? (misconception captured)"
               onChange={(event) => updateOption(index, { rationale: event.target.value })}
             />
@@ -289,8 +293,19 @@ function QuestionEditor({
         </div>
       </div>
 
-      {status && <p className="text-sm text-emerald-600">{status}</p>}
-      {error && <p className="text-sm text-destructive">{error}</p>}
+      {status && (
+        <p
+          role="status"
+          className="text-sm text-emerald-700 [@media(prefers-color-scheme:dark)]:text-emerald-400"
+        >
+          {status}
+        </p>
+      )}
+      {error && (
+        <p role="alert" className="text-sm text-destructive">
+          {error}
+        </p>
+      )}
 
       {isDraft && (
         <div className="flex flex-wrap gap-2">
@@ -432,12 +447,18 @@ export function TeacherQuizGenerator({
       </Card>
 
       {message && (
-        <div className="rounded-md border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-700">
+        <div
+          role="status"
+          className="rounded-md border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-700 [@media(prefers-color-scheme:dark)]:text-emerald-400"
+        >
           {message}
         </div>
       )}
       {error && (
-        <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+        <div
+          role="alert"
+          className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive"
+        >
           {error}
         </div>
       )}

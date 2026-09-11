@@ -125,7 +125,7 @@ export function StudentView() {
               value={student.id}
               onValueChange={(value) => value && setSelectedStudentId(value)}
             >
-              <SelectTrigger className="sm:w-52">
+              <SelectTrigger className="sm:w-52" aria-label="Selected student">
                 <SelectValue placeholder="Select student" />
               </SelectTrigger>
               <SelectContent>
@@ -137,7 +137,7 @@ export function StudentView() {
               </SelectContent>
             </Select>
             <Select value={courseFilter} onValueChange={(value) => setCourseFilter(value ?? "all")}>
-              <SelectTrigger className="sm:w-44">
+              <SelectTrigger className="sm:w-44" aria-label="Filter by course">
                 <SelectValue placeholder="All courses" />
               </SelectTrigger>
               <SelectContent>

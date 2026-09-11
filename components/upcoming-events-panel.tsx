@@ -162,6 +162,13 @@ export function UpcomingEventsPanel({ role, events, onFocusCourse }: Props) {
                 <button
                   key={dayKey}
                   type="button"
+                  aria-pressed={isSelected}
+                  aria-label={`${day.toLocaleDateString("en-US", {
+                    weekday: "long",
+                    month: "long",
+                    day: "numeric",
+                    year: "numeric",
+                  })}${count > 0 ? `, ${count} event${count === 1 ? "" : "s"}` : ", no events"}`}
                   onClick={() => setSelectedDate(dayKey)}
                   className={cn(
                     "relative rounded-md px-1 py-1.5 text-center text-xs transition",
@@ -185,7 +192,7 @@ export function UpcomingEventsPanel({ role, events, onFocusCourse }: Props) {
         </div>
 
         <div>
-          <h4 className="text-sm font-semibold">Upcoming on {selectedDateLabel}</h4>
+          <h3 className="text-sm font-semibold">Upcoming on {selectedDateLabel}</h3>
           {selectedEvents.length === 0 ? (
             <p className="mt-2 text-sm text-muted-foreground">No events on this date.</p>
           ) : (

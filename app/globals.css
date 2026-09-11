@@ -67,7 +67,11 @@
   --muted-foreground: oklch(0.52 0.02 275);
   --accent: oklch(0.94 0.03 276);
   --accent-foreground: oklch(0.4 0.12 276);
-  --destructive: oklch(0.58 0.22 25);
+  /* Darkened from oklch(0.58 0.22 25): `text-destructive` is used on
+     `bg-destructive/10`–`/15` chips and banners, where 0.58 only reached
+     3.8–4.1:1. 0.52 clears 4.5:1 on those tints and still gives white text
+     6.0:1 on the solid destructive fill. */
+  --destructive: oklch(0.52 0.22 25);
   --success: oklch(0.62 0.15 155);
   --success-foreground: oklch(0.985 0 0);
   --warning: oklch(0.72 0.15 75);

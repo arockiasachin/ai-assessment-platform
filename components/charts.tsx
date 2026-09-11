@@ -12,10 +12,29 @@ const percentConfig = {
   value: { label: "Average %", color: "var(--chart-1)" },
 } satisfies ChartConfig
 
+/** Build a screen-reader text alternative for a chart's data points. */
+function describeData<T>(
+  data: readonly T[],
+  describe: (entry: T) => string,
+  emptyText: string,
+): string {
+  if (data.length === 0) return emptyText
+  return data.map(describe).join("; ")
+}
+
 export function ClassAverageChart({ data }: { data: { label: string; value: number }[] }) {
   return (
     <ChartContainer config={percentConfig} className="h-[260px] w-full">
-      <BarChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+      <BarChart
+        data={data}
+        title="Average score by assessment"
+        desc={describeData(
+          data,
+          (entry) => `${entry.label}: ${entry.value}%`,
+          "No finalized attempts yet.",
+        )}
+        margin={{ top: 8, right: 8, left: 0, bottom: 0 }}
+      >
         <CartesianGrid vertical={false} strokeDasharray="3 3" />
         <XAxis
           dataKey="label"
@@ -57,7 +76,16 @@ const distColors = [
 export function GradeDistributionChart({ data }: { data: { grade: string; count: number }[] }) {
   return (
     <ChartContainer config={distConfig} className="h-[260px] w-full">
-      <BarChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+      <BarChart
+        data={data}
+        title="Grade distribution"
+        desc={describeData(
+          data,
+          (entry) => `${entry.grade}: ${entry.count}`,
+          "No finalized attempts to distribute.",
+        )}
+        margin={{ top: 8, right: 8, left: 0, bottom: 0 }}
+      >
         <CartesianGrid vertical={false} strokeDasharray="3 3" />
         <XAxis dataKey="grade" tickLine={false} axisLine={false} tickMargin={8} fontSize={12} />
         <YAxis
@@ -93,7 +121,21 @@ export function TrendChart({
 }) {
   return (
     <ChartContainer config={trendConfig} className="h-[260px] w-full">
-      <LineChart data={data} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
+      <LineChart
+        data={data}
+        title="Score trend over time"
+        desc={describeData(
+          data,
+          (entry) => {
+            const score = entry.value === null ? "no score" : `${entry.value}%`
+            const average =
+              showAverage && entry.average != null ? `, class average ${entry.average}%` : ""
+            return `${entry.label}: ${score}${average}`
+          },
+          "No assessments to show.",
+        )}
+        margin={{ top: 8, right: 12, left: 0, bottom: 0 }}
+      >
         <CartesianGrid vertical={false} strokeDasharray="3 3" />
         <XAxis
           dataKey="label"

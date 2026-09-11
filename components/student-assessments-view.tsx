@@ -64,12 +64,18 @@ function submissionLabel(state: StudentAssessmentItem["submissionState"]) {
   return "Not submitted"
 }
 
+// The app themes via `prefers-color-scheme`, so the `.dark`-scoped Tailwind
+// `dark:` variant never activates; the explicit media variant keeps the chip
+// text readable on a dark page.
 function submissionTone(state: StudentAssessmentItem["submissionState"]) {
-  if (state === "graded") return "border-emerald-500/30 bg-emerald-500/10 text-emerald-700"
+  if (state === "graded")
+    return "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 [@media(prefers-color-scheme:dark)]:text-emerald-400"
   if (state === "submitted" || state === "resubmitted")
-    return "border-blue-500/30 bg-blue-500/10 text-blue-700"
-  if (state === "late") return "border-amber-500/30 bg-amber-500/10 text-amber-700"
-  if (state === "draft") return "border-slate-400/30 bg-slate-500/10 text-slate-700"
+    return "border-blue-500/30 bg-blue-500/10 text-blue-700 [@media(prefers-color-scheme:dark)]:text-blue-400"
+  if (state === "late")
+    return "border-amber-500/30 bg-amber-500/10 text-amber-700 [@media(prefers-color-scheme:dark)]:text-amber-400"
+  if (state === "draft")
+    return "border-slate-400/30 bg-slate-500/10 text-slate-700 [@media(prefers-color-scheme:dark)]:text-slate-300"
   return "border-border bg-muted/20 text-foreground"
 }
 
@@ -213,7 +219,10 @@ export function StudentAssessmentsView() {
   return (
     <div className="space-y-6">
       {message && (
-        <div className="rounded-md border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-700">
+        <div
+          role="status"
+          className="rounded-md border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-700 [@media(prefers-color-scheme:dark)]:text-emerald-400"
+        >
           {message}
         </div>
       )}
@@ -277,6 +286,7 @@ export function StudentAssessmentsView() {
               value={search}
               onChange={(event) => setSearch(event.target.value)}
               placeholder="Search by title, course, class, or teacher"
+              aria-label="Search assessments"
               className="pl-8"
             />
           </div>
@@ -287,7 +297,7 @@ export function StudentAssessmentsView() {
               setTypeFilter((value as "all" | "Quiz" | "Assignment") ?? "all")
             }
           >
-            <SelectTrigger>
+            <SelectTrigger aria-label="Filter by assessment type">
               <SelectValue placeholder="Type" />
             </SelectTrigger>
             <SelectContent>
@@ -298,7 +308,7 @@ export function StudentAssessmentsView() {
           </Select>
 
           <Select value={courseFilter} onValueChange={(value) => setCourseFilter(value ?? "all")}>
-            <SelectTrigger>
+            <SelectTrigger aria-label="Filter by course">
               <SelectValue placeholder="Course" />
             </SelectTrigger>
             <SelectContent>
@@ -317,7 +327,7 @@ export function StudentAssessmentsView() {
               setStatusFilter((value as "all" | "graded" | "pending" | "overdue") ?? "all")
             }
           >
-            <SelectTrigger>
+            <SelectTrigger aria-label="Filter by submission status">
               <SelectValue placeholder="Status" />
             </SelectTrigger>
             <SelectContent>
@@ -340,6 +350,7 @@ export function StudentAssessmentsView() {
               <CardContent className="p-0">
                 <button
                   type="button"
+                  aria-expanded={isExpanded}
                   className="flex w-full flex-col gap-3 px-4 py-4 text-left sm:flex-row sm:items-start sm:justify-between"
                   onClick={() =>
                     setExpanded((prev) => ({ ...prev, [assessment.id]: !prev[assessment.id] }))
@@ -424,6 +435,7 @@ export function StudentAssessmentsView() {
                                 [assessment.id]: event.target.value,
                               }))
                             }
+                            aria-label={`Submission for ${assessment.title}`}
                             placeholder="Write your assignment submission details..."
                             className="min-h-24 w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
                             maxLength={4000}

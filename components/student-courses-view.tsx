@@ -25,12 +25,19 @@ function statusLabel(course: CourseCatalogItem) {
   return "Registration closed"
 }
 
+// The app themes via `prefers-color-scheme`, so the `.dark`-scoped Tailwind
+// `dark:` variant never activates; the explicit media variant keeps the status
+// chip readable on a dark page.
 function statusClass(status: CourseCatalogItem["registrationStatus"]) {
-  if (status === "open") return "border-emerald-500/30 bg-emerald-500/10 text-emerald-700"
+  if (status === "open")
+    return "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 [@media(prefers-color-scheme:dark)]:text-emerald-400"
   if (status === "enrolled") return "border-primary/40 bg-primary/10 text-primary"
-  if (status === "waitlisted") return "border-orange-500/30 bg-orange-500/10 text-orange-700"
-  if (status === "upcoming") return "border-sky-500/30 bg-sky-500/10 text-sky-700"
-  if (status === "full") return "border-amber-500/30 bg-amber-500/10 text-amber-700"
+  if (status === "waitlisted")
+    return "border-orange-500/30 bg-orange-500/10 text-orange-700 [@media(prefers-color-scheme:dark)]:text-orange-400"
+  if (status === "upcoming")
+    return "border-sky-500/30 bg-sky-500/10 text-sky-700 [@media(prefers-color-scheme:dark)]:text-sky-400"
+  if (status === "full")
+    return "border-amber-500/30 bg-amber-500/10 text-amber-700 [@media(prefers-color-scheme:dark)]:text-amber-400"
   return "border-border bg-muted text-muted-foreground"
 }
 
@@ -328,6 +335,7 @@ export function StudentCoursesView() {
                                 [course.offeringId]: e.target.value,
                               }))
                             }
+                            aria-label={`Comment about ${course.courseName}`}
                             placeholder="Optional comment about the course"
                             className="min-h-16 w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm sm:flex-1"
                             maxLength={500}
@@ -368,6 +376,7 @@ export function StudentCoursesView() {
               value={search}
               onChange={(event) => setSearch(event.target.value)}
               className="pl-8"
+              aria-label="Search courses"
               placeholder="Search by course name, code, or teacher"
             />
           </div>

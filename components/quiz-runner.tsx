@@ -227,7 +227,10 @@ export function QuizRunner() {
                   Question {current + 1} of {quiz.questions.length}
                 </p>
               </div>
-              <Progress value={((current + 1) / quiz.questions.length) * 100} />
+              <Progress
+                value={((current + 1) / quiz.questions.length) * 100}
+                aria-label="Quiz progress"
+              />
             </div>
 
             {(() => {
@@ -247,6 +250,7 @@ export function QuizRunner() {
                         <button
                           key={i}
                           type="button"
+                          aria-pressed={active}
                           onClick={() => setAnswers((prev) => ({ ...prev, [question.id]: i }))}
                           className={cn(
                             "flex items-center gap-3 rounded-xl border px-4 py-3 text-left text-sm transition-colors",

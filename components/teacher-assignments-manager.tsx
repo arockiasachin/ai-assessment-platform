@@ -190,12 +190,18 @@ export function TeacherAssignmentsManager() {
       </Card>
 
       {message && (
-        <p className="rounded-md border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-700">
+        <p
+          role="status"
+          className="rounded-md border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-700 [@media(prefers-color-scheme:dark)]:text-emerald-400"
+        >
           {message}
         </p>
       )}
       {error && (
-        <p className="rounded-md border border-destructive/60 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+        <p
+          role="alert"
+          className="rounded-md border border-destructive/60 bg-destructive/10 px-3 py-2 text-sm text-destructive"
+        >
           {error}
         </p>
       )}
@@ -223,9 +229,9 @@ export function TeacherAssignmentsManager() {
             </div>
 
             <div className="grid gap-2">
-              <Label>Course</Label>
+              <Label htmlFor="assignment-course">Course</Label>
               <Select value={selectedCourseId} onValueChange={(value) => setCourseId(value ?? "")}>
-                <SelectTrigger>
+                <SelectTrigger id="assignment-course">
                   <SelectValue placeholder="Select course" />
                 </SelectTrigger>
                 <SelectContent>

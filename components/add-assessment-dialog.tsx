@@ -84,9 +84,9 @@ export function AddAssessmentDialog() {
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="grid gap-2">
-              <Label>Course</Label>
+              <Label htmlFor="assessment-course">Course</Label>
               <Select value={selectedCourseId} onValueChange={(value) => setCourseId(value ?? "")}>
-                <SelectTrigger>
+                <SelectTrigger id="assessment-course">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -99,9 +99,9 @@ export function AddAssessmentDialog() {
               </Select>
             </div>
             <div className="grid gap-2">
-              <Label>Type</Label>
+              <Label htmlFor="assessment-type">Type</Label>
               <Select value={type} onValueChange={(v) => setType(v as AssessmentType)}>
-                <SelectTrigger>
+                <SelectTrigger id="assessment-type">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>

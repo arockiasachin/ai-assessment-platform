@@ -194,8 +194,19 @@ export function TeacherCodeTasks({ initialTasks }: Props) {
         </CardContent>
       </Card>
 
-      {message && <p className="text-sm text-emerald-600">{message}</p>}
-      {error && <p className="text-sm text-destructive">{error}</p>}
+      {message && (
+        <p
+          role="status"
+          className="text-sm text-emerald-700 [@media(prefers-color-scheme:dark)]:text-emerald-400"
+        >
+          {message}
+        </p>
+      )}
+      {error && (
+        <p role="alert" className="text-sm text-destructive">
+          {error}
+        </p>
+      )}
 
       {selected && (
         <>
@@ -479,7 +490,13 @@ export function TeacherCodeTasks({ initialTasks }: Props) {
                           key={result.testCaseId}
                           className="rounded border border-border/70 bg-muted/30 p-2 text-xs"
                         >
-                          <span className={result.passed ? "text-emerald-600" : "text-destructive"}>
+                          <span
+                            className={
+                              result.passed
+                                ? "text-emerald-700 [@media(prefers-color-scheme:dark)]:text-emerald-400"
+                                : "text-destructive"
+                            }
+                          >
                             {result.passed ? "PASS" : "FAIL"}
                           </span>
                           <span className="ml-2 font-medium">{result.name}</span>
