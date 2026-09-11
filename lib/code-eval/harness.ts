@@ -45,11 +45,21 @@ export type HarnessPayload = {
 }
 
 const PYTHON_HARNESS = String.raw`
-import contextlib, importlib.util, io, json, subprocess, sys, time
+import contextlib, importlib.util, io, json, os as _os, subprocess, sys, time
 
 SENTINEL = "__CODE_EVAL_RESULT__"
 MAX_OUT = 16384
 SOURCE_PATH = "/tmp/solution.py"
+
+# Captured before any student code runs. Student code cannot rebind this
+# reference, so it cannot suppress the harness's result line (which would let it
+# emit a single forged one); any extra writes it makes are detected by the host
+# parser and fail the run closed.
+_EMIT = _os.write
+# Captured before untrusted code runs: a student module may monkeypatch
+# json.dumps (or __main__ globals) while it is imported, so the harness
+# serializes with the reference it captured up front.
+_DUMPS = json.dumps
 
 
 def cap(text):
@@ -127,17 +137,22 @@ def load_module(path):
 
 
 def run_unit(path, rules):
-    module = load_module(path)
-    fn_name = rules.get("function")
-    args = rules.get("args", [])
-    if not isinstance(args, list):
-        args = []
-    fn = getattr(module, fn_name)
-    out_buffer = io.StringIO()
-    err_buffer = io.StringIO()
-    with contextlib.redirect_stdout(out_buffer), contextlib.redirect_stderr(err_buffer):
-        value = fn(*args)
-    return value, out_buffer.getvalue(), err_buffer.getvalue()
+    try:
+        module = load_module(path)
+        fn_name = rules.get("function")
+        args = rules.get("args", [])
+        if not isinstance(args, list):
+            args = []
+        fn = getattr(module, fn_name)
+        out_buffer = io.StringIO()
+        err_buffer = io.StringIO()
+        with contextlib.redirect_stdout(out_buffer), contextlib.redirect_stderr(err_buffer):
+            value = fn(*args)
+        return value, out_buffer.getvalue(), err_buffer.getvalue()
+    finally:
+        # Undo any json.dumps monkeypatching the student module performed, so
+        # the harness serializes its own evidence with the captured reference.
+        json.dumps = _DUMPS
 
 
 def main():
@@ -211,7 +226,7 @@ def main():
             }
         )
 
-    sys.stdout.write(SENTINEL + json.dumps({"tests": results}) + "\n")
+    _EMIT(1, (SENTINEL + _DUMPS({"tests": results}) + "\n").encode("utf-8"))
 
 
 main()
@@ -224,6 +239,74 @@ const { spawnSync } = require("child_process")
 const SENTINEL = "__CODE_EVAL_RESULT__"
 const MAX_OUT = 16384
 const SOURCE_PATH = "/tmp/solution.js"
+
+// Captured before any student code runs. Student code cannot rebind this
+// reference, so it cannot suppress the harness's result line (which would let it
+// emit a single forged one); any extra writes it makes are detected by the host
+// parser and fail the run closed.
+const EMIT = fs.writeSync.bind(fs, 1)
+
+// Intrinsics captured before untrusted code runs. A student module can patch
+// globals/prototypes (JSON.stringify, Array.prototype.push, Object.prototype
+// .toJSON, ...) while it is loaded; restoring these after each test and building
+// the result payload on null-prototype objects keeps its tampering out of the
+// evidence the harness emits.
+const STRINGIFY = JSON.stringify
+const ARRAY_PUSH = Array.prototype.push
+const OBJECT_TO_JSON = Object.prototype.toJSON
+const ARRAY_TO_JSON = Array.prototype.toJSON
+const OBJECT_CREATE = Object.create
+const SET_PROTOTYPE_OF = Object.setPrototypeOf
+const STRING_REPLACE = String.prototype.replace
+const STRING_SPLIT = String.prototype.split
+const STRING_TRIM = String.prototype.trim
+const STRING_SLICE = String.prototype.slice
+const STRING_STARTS_WITH = String.prototype.startsWith
+const ARRAY_MAP = Array.prototype.map
+const ARRAY_JOIN = Array.prototype.join
+const NUMBER_IS_INTEGER = Number.isInteger
+const NUMBER_IS_FINITE = Number.isFinite
+const NUMBER_IS_NAN = Number.isNaN
+const REGEXP_REPLACE = RegExp.prototype[Symbol.replace]
+
+function restoreIntrinsics() {
+  JSON.stringify = STRINGIFY
+  Array.prototype.push = ARRAY_PUSH
+  String.prototype.replace = STRING_REPLACE
+  String.prototype.split = STRING_SPLIT
+  String.prototype.trim = STRING_TRIM
+  String.prototype.slice = STRING_SLICE
+  String.prototype.startsWith = STRING_STARTS_WITH
+  Array.prototype.map = ARRAY_MAP
+  Array.prototype.join = ARRAY_JOIN
+  Number.isInteger = NUMBER_IS_INTEGER
+  Number.isFinite = NUMBER_IS_FINITE
+  Number.isNaN = NUMBER_IS_NAN
+  RegExp.prototype[Symbol.replace] = REGEXP_REPLACE
+  if (OBJECT_TO_JSON === undefined) delete Object.prototype.toJSON
+  else Object.prototype.toJSON = OBJECT_TO_JSON
+  if (ARRAY_TO_JSON === undefined) delete Array.prototype.toJSON
+  else Array.prototype.toJSON = ARRAY_TO_JSON
+}
+
+function serializeResults(results) {
+  const safe = SET_PROTOTYPE_OF([], null)
+  for (let index = 0; index < results.length; index += 1) {
+    const result = results[index]
+    const entry = OBJECT_CREATE(null)
+    entry.id = result.id
+    entry.passed = result.passed === true
+    entry.stdout = result.stdout
+    entry.stderr = result.stderr
+    entry.message = result.message
+    entry.signal = result.signal
+    entry.durationMs = result.durationMs
+    safe[safe.length] = entry
+  }
+  const payload = OBJECT_CREATE(null)
+  payload.tests = safe
+  return STRINGIFY(payload)
+}
 
 const cap = (text) => (typeof text === "string" ? text.slice(0, MAX_OUT) : "")
 
@@ -321,17 +404,23 @@ function captureStdout(fn) {
 }
 
 function runUnit(path, rules) {
-  const loaded = require(path)
-  const fnName = rules.function
-  const args = Array.isArray(rules.args) ? rules.args : []
-  const target =
-    loaded && typeof loaded[fnName] === "function"
-      ? loaded[fnName]
-      : loaded && loaded.exports && typeof loaded.exports[fnName] === "function"
-        ? loaded.exports[fnName]
-        : null
-  if (!target) throw new Error("function not found: " + String(fnName))
-  return captureStdout(() => target(...args))
+  try {
+    const loaded = require(path)
+    const fnName = rules.function
+    const args = Array.isArray(rules.args) ? rules.args : []
+    const target =
+      loaded && typeof loaded[fnName] === "function"
+        ? loaded[fnName]
+        : loaded && loaded.exports && typeof loaded.exports[fnName] === "function"
+          ? loaded.exports[fnName]
+          : null
+    if (!target) throw new Error("function not found: " + String(fnName))
+    return captureStdout(() => target(...args))
+  } finally {
+    // The student module was just loaded and executed; undo any intrinsic
+    // patching it performed so the evidence the harness emits is its own.
+    restoreIntrinsics()
+  }
 }
 
 function main() {
@@ -369,7 +458,7 @@ function main() {
           passed = true
           message = "ran without error"
         } else {
-          passed = normalize(JSON.stringify(captured.value)) === normalize(expected)
+          passed = normalize(STRINGIFY(captured.value)) === normalize(expected)
           message = passed ? "returned the expected value" : "returned an unexpected value"
         }
       } else {
@@ -394,7 +483,7 @@ function main() {
       err = err + (error && error.stack ? error.stack : String(error))
       message = "execution error: " + (error && error.message ? error.message : String(error))
     }
-    results.push({
+    results[results.length] = {
       id: spec.id,
       passed,
       stdout: cap(out),
@@ -402,10 +491,11 @@ function main() {
       message: cap(message),
       signal: typeof signal === "string" ? signal : null,
       durationMs: Date.now() - started,
-    })
+    }
   }
 
-  process.stdout.write(SENTINEL + JSON.stringify({ tests: results }) + "\n")
+  restoreIntrinsics()
+  EMIT(SENTINEL + serializeResults(results) + "\n")
 }
 
 main()
