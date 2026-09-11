@@ -3,6 +3,8 @@ import nextVitals from "eslint-config-next/core-web-vitals"
 import nextTs from "eslint-config-next/typescript"
 import prettierConfig from "eslint-config-prettier"
 
+import noUnguardedPartialWrite from "./eslint-rules/no-unguarded-partial-write.mjs"
+
 export default defineConfig([
   ...nextVitals,
   ...nextTs,
@@ -13,6 +15,24 @@ export default defineConfig([
       // Server Components and server actions, so it returns to "error" once the
       // fetch-on-mount pattern is gone. New code must not add new violations.
       "react-hooks/set-state-in-effect": "warn",
+    },
+  },
+  {
+    // Structural guard for the partial-update data-loss bug class (bugfix-run-2
+    // and bugfix-run-3): a Prisma write payload must not collapse an omitted
+    // field (undefined) into an explicit null, and must not write the raw
+    // request object. Use partialUpdate() from lib/partial-update.ts.
+    // See docs/engineering/partial-update-guide.md.
+    files: ["app/**/*.ts", "lib/**/*.ts"],
+    plugins: {
+      local: {
+        rules: {
+          "no-unguarded-partial-write": noUnguardedPartialWrite,
+        },
+      },
+    },
+    rules: {
+      "local/no-unguarded-partial-write": "error",
     },
   },
   // Must stay last so formatting-related rules never conflict with Prettier.

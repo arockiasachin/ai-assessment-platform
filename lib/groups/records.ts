@@ -6,6 +6,7 @@ import {
   type MilestoneResponse,
 } from "@/lib/contracts/groups"
 import { writeAuditLog } from "@/lib/grading/audit"
+import { partialUpdate } from "@/lib/partial-update"
 import { prisma } from "@/lib/prisma"
 import type { AuthUser } from "@/lib/session"
 
@@ -162,13 +163,13 @@ export async function updateMilestoneForTeacher(
     await tx.milestone.update({
       where: { id: milestoneId },
       data: {
-        ...(request.title !== undefined ? { title: request.title } : {}),
-        ...(request.description !== undefined ? { description: request.description } : {}),
-        ...(request.weight !== undefined ? { weight: request.weight } : {}),
-        ...(request.dueDate !== undefined
-          ? { dueDate: request.dueDate ? new Date(request.dueDate) : null }
-          : {}),
-        ...(request.status !== undefined ? { status: request.status } : {}),
+        ...partialUpdate(request, {
+          title: true,
+          description: true,
+          weight: true,
+          dueDate: (value) => (value === null ? null : new Date(value)),
+          status: true,
+        }),
         ...(completedAt !== undefined ? { completedAt } : {}),
       },
     })
