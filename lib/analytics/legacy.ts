@@ -1,5 +1,12 @@
 import { letterGrade, markKey, type Assessment, type MarksMap, type Student } from "@/lib/gradebook"
 
+/**
+ * Mark-map analytics (the original `lib/analytics.ts` helpers, moved verbatim
+ * into the `lib/analytics` module). These operate on the gradebook's
+ * `MarksMap` shape. The new quiz-attempt analytics in this module build on the
+ * same grade bands (`letterGrade`) but read real `QuizAttempt` rows instead.
+ */
+
 export function scorePct(marks: MarksMap, studentId: string, a: Assessment): number | null {
   const raw = marks[markKey(studentId, a.id)]
   if (raw === undefined) return null

@@ -4,6 +4,7 @@ import { useMemo, useState } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import {
+  BarChart3,
   BookOpen,
   CalendarDays,
   ChevronLeft,
@@ -14,6 +15,7 @@ import {
   Home,
   Layers,
   ListChecks,
+  RefreshCw,
   Route,
   Sparkles,
   Users,
@@ -35,6 +37,7 @@ const studentRoutes: RouteItem[] = [
   { label: "Courses", href: "/student/courses", icon: BookOpen },
   { label: "Events", href: "/student/events", icon: CalendarDays },
   { label: "Peer eval", href: "/student/peer-evaluation", icon: Users },
+  { label: "Retake", href: "/student/retake", icon: RefreshCw },
   { label: "Resources", href: "/student/resources", icon: Sparkles },
 ]
 
@@ -45,6 +48,7 @@ const teacherRoutes: RouteItem[] = [
   { label: "Rubrics", href: "/teacher/rubrics", icon: ListChecks },
   { label: "Reviews", href: "/teacher/reviews", icon: ClipboardCheck },
   { label: "Groups", href: "/teacher/groups", icon: Users },
+  { label: "Analytics", href: "/teacher/analytics", icon: BarChart3 },
   { label: "Classes", href: "/teacher/classes", icon: Layers },
   { label: "Planner", href: "/teacher/planner", icon: CalendarDays },
   { label: "Reports", href: "/teacher/reports", icon: ClipboardList },

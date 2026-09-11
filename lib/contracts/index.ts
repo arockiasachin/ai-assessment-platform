@@ -9,6 +9,7 @@ export * from "./grading"
 export * from "./quiz"
 export * from "./quiz-generation"
 export * from "./groups"
+export * from "./analytics"
 
 /** `GET /api/auth/me` response. */
 export const meResponseSchema = z.union([
