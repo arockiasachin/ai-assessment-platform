@@ -125,6 +125,45 @@ client, and quiz results are graded by `POST /api/quiz/grade`. Nothing below is 
 - `lib/vector/search.ts`: an empty query now reports the caller's configured provider instead of
   hardcoding the mock provider name.
 
+### bugfix-run-1
+
+Real-time bug-fixing pass 1 of 3 (see [`docs/verification/bugfix-run-1.md`](docs/verification/bugfix-run-1.md)).
+
+#### Security
+
+- **Raw database errors are no longer echoed to API clients** (`lib/api.ts`,
+  `app/api/gradebook/assessments/route.ts`, `app/api/gradebook/marks/route.ts`,
+  `app/api/teacher/quiz/route.ts`). An invalid `date` or unbounded `maxMarks` used to reach Prisma,
+  and the route returned the resulting `PrismaClientValidationError` message — including schema
+  fragments and internal file paths — with a 400. Inputs are now validated at the contract boundary
+  and unexpected errors return a generic 500.
+
+#### Fixed
+
+- **AI grade suggestions no longer double-count when the model is re-run**
+  (`lib/grading/review-service.ts`). Both `recordAiSuggestion` and `submitReviewDecision` summed
+  _every_ `AIGradeSuggestion` row for the assessment/student, so re-running a criterion added the new
+  score on top of the old one and inflated the draft — and then the published — grade. Scoring now
+  sums the latest suggestion per logical bucket (`rubricCriterionId` / `quizResponseId` /
+  `submissionId` / `criterionLabel` / overall), preserving history while superseding old scores.
+- **A graded submission can no longer be overwritten or reverted by the student**
+  (`app/api/student/assessments/[assessmentId]/submission/route.ts`). `action: "submit"` used to
+  overwrite a `GRADED` status (leaving the grade and feedback attached), and `action: "saveDraft"`
+  then reset it to `DRAFT` with a null `submittedAt`. A graded submission is now immutable to the
+  student, and a submitted assignment cannot be saved back to a draft.
+- **Out-of-range marks are rejected instead of silently clamped** (`lib/gradebook-db.ts`). A score
+  above `maxMarks` or below zero returned `200 success` while a different value was stored; it now
+  returns `400 Score must be between 0 and <maxMarks>.`
+- **Invalid dates and unbounded `maxMarks` are rejected at the contract boundary**
+  (`lib/contracts/common.ts`, `lib/contracts/gradebook.ts`). `PUT /api/teacher/offerings/[id]` used to
+  silently store `null` when a date string could not be parsed, wiping the existing schedule.
+- **AI draft grade writes are audited** (`lib/grading/review-service.ts`). `recordAiSuggestion`
+  mutated the draft `Grade` without an `AuditLog` row, contradicting the service's own "every
+  mutation is audited" contract; it now writes `grade.ai_draft_created` / `grade.ai_draft_updated`.
+- **Fixture-list identity fixes in two legacy client views** (`components/student-assessments-view.tsx`,
+  `components/student-courses-view.tsx`): `payload?.x ?? []` allocated a fresh array every render,
+  forcing downstream `useMemo`s to recompute on every render.
+
 ## [0.1.0] - 2026-09-11
 
 Phase 0 (foundations): make the repository buildable, reviewable, and secret-free before product
