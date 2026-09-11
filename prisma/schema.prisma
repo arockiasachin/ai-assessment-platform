@@ -16,6 +16,9 @@ enum UserRole {
 enum AssessmentType {
   QUIZ
   ASSIGNMENT
+  DESCRIPTIVE
+  CODE
+  GROUP_PROJECT
 }
 
 enum AttendanceStatus {
@@ -68,6 +71,19 @@ model StudentProfile {
   attendance        AttendanceRecord[]
   courseHistory     CourseGradeHistory[]
   courseRatings     CourseRating[]
+
+  // Phase 1 assessment spine
+  finalGrades           Grade[]
+  gradeReviews          GradeReview[]
+  aiGradeSuggestions    AIGradeSuggestion[]
+  quizAttempts          QuizAttempt[]
+  testRuns              TestRun[]
+  groupMemberships      GroupMember[]
+  peerEvaluationsGiven  PeerEvaluation[]  @relation("PeerEvaluationEvaluator")
+  peerEvaluationsReceived PeerEvaluation[] @relation("PeerEvaluationEvaluatee")
+  contributionEvents    ContributionEvent[]
+  similarityChecks      SimilarityCheck[] @relation("SimilarityCheckStudent")
+  comparedInSimilarity  SimilarityCheck[] @relation("SimilarityCheckComparedStudent")
 }
 
 model StaffProfile {
@@ -82,6 +98,13 @@ model StaffProfile {
   offerings          CourseOffering[] @relation("TeacherOfferings")
   createdAssessments Assessment[]     @relation("AssessmentCreator")
   gradedSubmissions  Submission[]     @relation("SubmissionGrader")
+
+  // Phase 1 assessment spine
+  createdMaterials   Material[]      @relation("MaterialCreatedBy")
+  createdRubrics     Rubric[]        @relation("RubricCreatedBy")
+  reviewedReviews    GradeReview[]   @relation("GradeReviewReviewer")
+  assignedReviews    GradeReview[]   @relation("GradeReviewAssignee")
+  approvedGrades     Grade[]
 }
 
 model Stream {
@@ -116,6 +139,7 @@ model Course {
   offerings   CourseOffering[]
   assessments Assessment[]
   history     CourseGradeHistory[]
+  materials   Material[]
 }
 
 model ClassRoom {
@@ -153,6 +177,8 @@ model CourseOffering {
   attendanceSessions AttendanceSession[]
   calendarEvents     CalendarEvent[]
   ratings            CourseRating[]
+  materials          Material[]
+  groups             Group[]
 
   @@unique([courseId, classId, teacherId, term, academicYear])
   @@index([classId, courseId])
@@ -209,6 +235,16 @@ model Assessment {
   calendarLinks CalendarEvent[]
   quiz          Quiz?
 
+  // Phase 1 assessment spine
+  rubric             Rubric?
+  questions          Question[]
+  quizAttempts       QuizAttempt[]
+  codeTask           CodeTask?
+  aiGradeSuggestions AIGradeSuggestion[]
+  gradeReviews       GradeReview[]
+  finalGrades        Grade[]
+  similarityChecks   SimilarityCheck[]
+
   @@index([offeringId, dueDate])
   @@index([courseId, classId])
 }
@@ -249,6 +285,11 @@ model Submission {
   assessment   Assessment       @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
   student      StudentProfile   @relation(fields: [studentId], references: [id], onDelete: Cascade)
   gradedBy     StaffProfile?    @relation("SubmissionGrader", fields: [gradedById], references: [id], onDelete: SetNull)
+
+  // Phase 1 assessment spine
+  versions           SubmissionVersion[]
+  aiGradeSuggestions AIGradeSuggestion[]
+  testRuns           TestRun[]
 
   @@unique([assessmentId, studentId])
   @@index([studentId, status])
@@ -347,4 +388,549 @@ model ExternalReference {
 
   @@unique([entityType, entityId, provider, documentId])
   @@index([entityType, entityId])
+}
+
+// ---------------------------------------------------------------------------
+// Phase 1 — assessment spine (additive).
+//
+// Legacy models above stay in place until Phase 4 cutover. The new grading
+// pipeline (AIGradeSuggestion -> GradeReview -> Grade, all audited through
+// AuditLog) is the replacement for the duplicate-grade design but does not
+// delete AssessmentGrade yet.
+// ---------------------------------------------------------------------------
+
+enum MaterialKind {
+  DOCUMENT
+  SLIDE_DECK
+  VIDEO
+  TRANSCRIPT
+  LINK
+  OTHER
+}
+
+enum QuestionType {
+  MULTIPLE_CHOICE
+  MULTIPLE_SELECT
+  TRUE_FALSE
+  SHORT_ANSWER
+  ESSAY
+  CODE
+}
+
+enum QuizAttemptStatus {
+  IN_PROGRESS
+  SUBMITTED
+  GRADED
+  EXPIRED
+  ABANDONED
+}
+
+enum GradeReviewStatus {
+  PENDING
+  AUTO_ACCEPTED
+  NEEDS_REVIEW
+  OVERRIDDEN
+  REJECTED
+}
+
+enum GradeSource {
+  AI_SUGGESTED
+  TEACHER_OVERRIDE
+  AUTO
+  IMPORTED
+}
+
+enum TestRunStatus {
+  QUEUED
+  RUNNING
+  PASSED
+  FAILED
+  ERROR
+  TIMEOUT
+}
+
+enum GroupStatus {
+  FORMING
+  ACTIVE
+  COMPLETED
+  ARCHIVED
+}
+
+enum PeerEvaluationStatus {
+  DRAFT
+  SUBMITTED
+}
+
+enum MilestoneStatus {
+  PLANNED
+  IN_PROGRESS
+  COMPLETED
+  MISSED
+}
+
+enum ContributionEventType {
+  COMMIT
+  PULL_REQUEST
+  ISSUE
+  REVIEW
+  MANUAL
+  OTHER
+}
+
+enum SimilarityVerdict {
+  PENDING
+  FLAGGED
+  CLEARED
+}
+
+// Course material and its pgvector-backed retrieval chunks. The embedding
+// column stays `Unsupported` so the datamodel validates without a live
+// Postgres; embeddings are read and written through raw SQL in lib/vector.
+model Material {
+  id          String         @id @default(cuid())
+  courseId    String
+  offeringId  String?
+  createdById String?
+  title       String
+  kind        MaterialKind   @default(DOCUMENT)
+  sourceUrl   String?
+  mimeType    String?
+  contentText String?
+  metadata    Json?
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+  course      Course         @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  offering    CourseOffering? @relation(fields: [offeringId], references: [id], onDelete: SetNull)
+  createdBy   StaffProfile?  @relation("MaterialCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  chunks      MaterialChunk[]
+
+  @@index([courseId, createdAt])
+  @@index([offeringId])
+}
+
+model MaterialChunk {
+  id             String    @id @default(cuid())
+  materialId     String
+  chunkIndex     Int
+  content        String
+  tokenCount     Int?
+  embeddingModel String?
+  embedding      Unsupported("vector(1536)")?
+  metadata       Json?
+  createdAt      DateTime  @default(now())
+  material       Material  @relation(fields: [materialId], references: [id], onDelete: Cascade)
+
+  @@unique([materialId, chunkIndex])
+  @@index([materialId])
+}
+
+// The rubric is the binding grading contract. Criteria carry the point ceiling
+// and weight; the model may not score outside them.
+model Rubric {
+  id            String            @id @default(cuid())
+  assessmentId  String?           @unique
+  courseId      String?
+  createdById   String?
+  title         String
+  description   String?
+  maxPoints     Decimal?          @db.Decimal(7, 2)
+  promptVersion String            @default("v1")
+  metadata      Json?
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+  assessment    Assessment?       @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  createdBy     StaffProfile?     @relation("RubricCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  criteria      RubricCriterion[]
+
+  @@index([courseId])
+}
+
+model RubricCriterion {
+  id          String             @id @default(cuid())
+  rubricId    String
+  order       Int
+  label       String
+  description String?
+  levelsJson  Json?
+  weight      Float              @default(1)
+  maxPoints   Decimal            @db.Decimal(6, 2)
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+  rubric      Rubric             @relation(fields: [rubricId], references: [id], onDelete: Cascade)
+  suggestions AIGradeSuggestion[]
+
+  @@unique([rubricId, order])
+  @@index([rubricId])
+}
+
+// One row per rubric criterion (or per quiz response) per suggestion. Carries
+// the full explainability envelope required by the product spec.
+model AIGradeSuggestion {
+  id                String           @id @default(cuid())
+  assessmentId      String
+  studentId         String
+  submissionId      String?
+  quizResponseId    String?
+  rubricCriterionId String?
+  criterionLabel    String?
+  suggestedPoints   Decimal          @db.Decimal(6, 2)
+  maxPoints         Decimal?         @db.Decimal(6, 2)
+  rationale         String
+  evidence          String?
+  confidence        Float
+  model             String
+  promptVersion     String
+  promptTokens      Int?
+  completionTokens  Int?
+  latencyMs         Int
+  rawResponse       Json?
+  createdAt         DateTime         @default(now())
+  assessment        Assessment       @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  student           StudentProfile   @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  submission        Submission?      @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  quizResponse      QuizResponse?    @relation(fields: [quizResponseId], references: [id], onDelete: Cascade)
+  rubricCriterion   RubricCriterion? @relation(fields: [rubricCriterionId], references: [id], onDelete: SetNull)
+
+  @@index([assessmentId, studentId])
+  @@index([submissionId])
+  @@index([quizResponseId])
+  @@index([rubricCriterionId])
+}
+
+model GradeReview {
+  id            String            @id @default(cuid())
+  assessmentId  String
+  studentId     String
+  status        GradeReviewStatus @default(PENDING)
+  assignedToId  String?
+  reviewerId    String?
+  notes         String?
+  decisionsJson Json?
+  decidedAt     DateTime?
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+  assessment    Assessment        @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  student       StudentProfile    @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  assignedTo    StaffProfile?     @relation("GradeReviewAssignee", fields: [assignedToId], references: [id], onDelete: SetNull)
+  reviewer      StaffProfile?     @relation("GradeReviewReviewer", fields: [reviewerId], references: [id], onDelete: SetNull)
+  grade         Grade?
+
+  @@unique([assessmentId, studentId])
+  @@index([status, createdAt])
+  @@index([assignedToId])
+}
+
+// Single source of truth for a published/publishable grade.
+model Grade {
+  id             String         @id @default(cuid())
+  assessmentId   String
+  studentId      String
+  reviewId       String?        @unique
+  points         Decimal        @db.Decimal(7, 2)
+  maxPoints      Decimal        @db.Decimal(7, 2)
+  percentage     Float?
+  source         GradeSource    @default(AI_SUGGESTED)
+  approvedById   String?
+  overrideReason String?
+  publishedAt    DateTime?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  assessment     Assessment     @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  student        StudentProfile @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  review         GradeReview?   @relation(fields: [reviewId], references: [id], onDelete: SetNull)
+  approvedBy     StaffProfile?  @relation(fields: [approvedById], references: [id], onDelete: SetNull)
+
+  @@unique([assessmentId, studentId])
+  @@index([studentId])
+  @@index([publishedAt])
+}
+
+// Generic, append-only audit trail for grade state transitions and other
+// high-trust mutations. Actor is stored as a plain id/role so the log survives
+// user deletion and stays usable for any entity.
+model AuditLog {
+  id         String   @id @default(cuid())
+  entityType String
+  entityId   String
+  action     String
+  actorId    String?
+  actorRole  String?
+  before     Json?
+  after      Json?
+  metadata   Json?
+  createdAt  DateTime @default(now())
+
+  @@index([entityType, entityId, createdAt])
+  @@index([actorId])
+}
+
+model Question {
+  id               String           @id @default(cuid())
+  assessmentId     String
+  type             QuestionType     @default(MULTIPLE_CHOICE)
+  order            Int
+  prompt           String
+  explanation      String?
+  subtopic         String?
+  difficulty       Float?
+  points           Decimal          @default(1) @db.Decimal(6, 2)
+  timeLimitSeconds Int?
+  metadata         Json?
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+  assessment       Assessment       @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  options          QuestionOption[]
+  responses        QuizResponse[]
+
+  @@unique([assessmentId, order])
+  @@index([assessmentId])
+  @@index([subtopic])
+}
+
+model QuestionOption {
+  id         String   @id @default(cuid())
+  questionId String
+  order      Int
+  text       String
+  isCorrect  Boolean  @default(false)
+  rationale  String?
+  createdAt  DateTime @default(now())
+  question   Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@unique([questionId, order])
+  @@index([questionId])
+}
+
+model QuizAttempt {
+  id            String            @id @default(cuid())
+  assessmentId  String
+  studentId     String
+  attemptNumber Int               @default(1)
+  status        QuizAttemptStatus @default(IN_PROGRESS)
+  score         Decimal?          @db.Decimal(7, 2)
+  maxScore      Decimal?          @db.Decimal(7, 2)
+  startedAt     DateTime          @default(now())
+  submittedAt   DateTime?
+  expiresAt     DateTime?
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+  assessment    Assessment        @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  student       StudentProfile    @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  responses     QuizResponse[]
+
+  @@unique([assessmentId, studentId, attemptNumber])
+  @@index([assessmentId, studentId])
+  @@index([status])
+}
+
+model QuizResponse {
+  id                 String             @id @default(cuid())
+  attemptId          String
+  questionId         String
+  selectedOptionIds  Json?
+  answerText         String?
+  isCorrect          Boolean?
+  pointsAwarded      Decimal?           @db.Decimal(6, 2)
+  rationale          String?
+  timeSpentMs        Int?
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+  attempt            QuizAttempt        @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  question           Question           @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  aiGradeSuggestions AIGradeSuggestion[]
+
+  @@unique([attemptId, questionId])
+  @@index([questionId])
+}
+
+model CodeTask {
+  id                String           @id @default(cuid())
+  assessmentId      String?          @unique
+  language          String
+  instructions      String?
+  starterCode       String?
+  timeLimitMs       Int              @default(5000)
+  memoryLimitMb     Int              @default(256)
+  metadata          Json?
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+  assessment        Assessment?      @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  testCases         TestCase[]
+  testRuns          TestRun[]
+  similarityChecks  SimilarityCheck[]
+}
+
+model TestCase {
+  id             String   @id @default(cuid())
+  codeTaskId     String
+  order          Int
+  name           String
+  description    String?
+  category       String   @default("unit")
+  input          String?
+  expectedOutput String?
+  isHidden       Boolean  @default(true)
+  points         Decimal  @default(1) @db.Decimal(6, 2)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  codeTask       CodeTask @relation(fields: [codeTaskId], references: [id], onDelete: Cascade)
+
+  @@unique([codeTaskId, order])
+  @@index([codeTaskId])
+}
+
+model TestRun {
+  id           String         @id @default(cuid())
+  codeTaskId   String
+  studentId    String
+  submissionId String?
+  status       TestRunStatus  @default(QUEUED)
+  language     String
+  sourceCode   String?
+  passedCount  Int            @default(0)
+  failedCount  Int            @default(0)
+  totalCount   Int            @default(0)
+  coverage     Float?
+  resultsJson  Json?
+  stdout       String?
+  stderr       String?
+  runtimeMs    Int?
+  queuedAt     DateTime       @default(now())
+  startedAt    DateTime?
+  finishedAt   DateTime?
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+  codeTask     CodeTask       @relation(fields: [codeTaskId], references: [id], onDelete: Cascade)
+  student      StudentProfile @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  submission   Submission?    @relation(fields: [submissionId], references: [id], onDelete: SetNull)
+
+  @@index([codeTaskId, studentId])
+  @@index([status, queuedAt])
+}
+
+model Group {
+  id                 String              @id @default(cuid())
+  offeringId         String
+  name               String
+  projectTitle       String?
+  status             GroupStatus         @default(FORMING)
+  metadata           Json?
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+  offering           CourseOffering      @relation(fields: [offeringId], references: [id], onDelete: Cascade)
+  members            GroupMember[]
+  peerEvaluations    PeerEvaluation[]
+  contributionEvents ContributionEvent[]
+  milestones         Milestone[]
+
+  @@unique([offeringId, name])
+  @@index([offeringId, status])
+}
+
+model GroupMember {
+  id                   String         @id @default(cuid())
+  groupId              String
+  studentId            String
+  role                 String?
+  adjustmentFactor     Float?
+  selfAdjustmentFactor Float?
+  joinedAt             DateTime       @default(now())
+  leftAt               DateTime?
+  createdAt            DateTime       @default(now())
+  updatedAt            DateTime       @updatedAt
+  group                Group          @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  student              StudentProfile @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@unique([groupId, studentId])
+  @@index([studentId])
+}
+
+model PeerEvaluation {
+  id           String               @id @default(cuid())
+  groupId      String
+  evaluatorId  String
+  evaluateeId  String
+  status       PeerEvaluationStatus @default(DRAFT)
+  dimensions   Json
+  overallScore Float?
+  comments     String?
+  submittedAt  DateTime?
+  createdAt    DateTime             @default(now())
+  updatedAt    DateTime             @updatedAt
+  group        Group                @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  evaluator    StudentProfile       @relation("PeerEvaluationEvaluator", fields: [evaluatorId], references: [id], onDelete: Cascade)
+  evaluatee    StudentProfile       @relation("PeerEvaluationEvaluatee", fields: [evaluateeId], references: [id], onDelete: Cascade)
+
+  @@unique([groupId, evaluatorId, evaluateeId])
+  @@index([groupId, evaluateeId])
+}
+
+model ContributionEvent {
+  id         String                @id @default(cuid())
+  groupId    String
+  studentId  String?
+  type       ContributionEventType
+  source     String?
+  externalId String?
+  summary    String?
+  weight     Float                 @default(1)
+  occurredAt DateTime
+  metadata   Json?
+  createdAt  DateTime              @default(now())
+  group      Group                 @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  student    StudentProfile?       @relation(fields: [studentId], references: [id], onDelete: SetNull)
+
+  @@index([groupId, occurredAt])
+  @@index([studentId])
+}
+
+model Milestone {
+  id          String          @id @default(cuid())
+  groupId     String
+  title       String
+  description String?
+  status      MilestoneStatus @default(PLANNED)
+  weight      Float           @default(1)
+  dueDate     DateTime?
+  completedAt DateTime?
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+  group       Group           @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@index([groupId, dueDate])
+}
+
+model SimilarityCheck {
+  id                String            @id @default(cuid())
+  assessmentId      String?
+  codeTaskId        String?
+  studentId         String
+  comparedStudentId String
+  similarity        Float
+  verdict           SimilarityVerdict @default(PENDING)
+  evidence          Json?
+  checkedAt         DateTime          @default(now())
+  createdAt         DateTime          @default(now())
+  assessment        Assessment?       @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  codeTask          CodeTask?         @relation(fields: [codeTaskId], references: [id], onDelete: Cascade)
+  student           StudentProfile    @relation("SimilarityCheckStudent", fields: [studentId], references: [id], onDelete: Cascade)
+  comparedStudent   StudentProfile    @relation("SimilarityCheckComparedStudent", fields: [comparedStudentId], references: [id], onDelete: Cascade)
+
+  @@unique([assessmentId, codeTaskId, studentId, comparedStudentId])
+  @@index([assessmentId])
+  @@index([codeTaskId])
+}
+
+model SubmissionVersion {
+  id            String     @id @default(cuid())
+  submissionId  String
+  versionNumber Int
+  contentText   String?
+  artifactUrl   String?
+  wordCount     Int?
+  createdAt     DateTime   @default(now())
+  submission    Submission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+
+  @@unique([submissionId, versionNumber])
+  @@index([submissionId])
 }

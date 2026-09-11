@@ -2,6 +2,8 @@ import "server-only"
 
 import { prisma } from "@/lib/prisma"
 
+type DbAssessmentType = "QUIZ" | "ASSIGNMENT" | "DESCRIPTIVE" | "CODE" | "GROUP_PROJECT"
+
 export type AdminOverview = {
   totals: {
     users: number
@@ -20,7 +22,7 @@ export type AdminOverview = {
   recentAssessments: Array<{
     id: string
     title: string
-    type: "QUIZ" | "ASSIGNMENT"
+    type: DbAssessmentType
     dueDate: string
     courseName: string
     teacherName: string
