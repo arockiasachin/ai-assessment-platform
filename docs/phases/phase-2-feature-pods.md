@@ -17,8 +17,9 @@ Seven pods, each a build-and-test pair:
 2. **Quiz grading** — server-authoritative scoring with partial credit for short-answer rationales.
 3. **Rubric grading** — descriptive grading against weighted rubrics with evidence, confidence, a
    teacher review queue, and override calibration.
-4. **Code sandbox** — sandboxed code and debugging evaluation on a Piston worker, with test cases,
-   coverage, and similarity checks.
+4. **Code sandbox** — sandboxed code and debugging evaluation, with test cases,
+   coverage, and similarity checks. The plan named a Piston worker; the shipped executor runs
+   locked-down Docker containers via the `docker` CLI (`lib/code-eval/sandbox.ts`).
 5. **Groups and peer evaluation** — group formation, CATME-style peer evaluation with adjustment
    factors, contribution tracking, and milestones.
 6. **Analytics** — item analysis, intervention alerts, adaptive retake, and teacher dashboards.
@@ -35,8 +36,8 @@ Seven pods, each a build-and-test pair:
 - Working behaviour for all seven pods, each behind the `zod` API contract established in Phase 1.
 - Server Components replacing the legacy fetch-on-mount client components, so the demoted
   `react-hooks/set-state-in-effect` rule returns to `error` in `eslint.config.mjs`.
-- The Piston sandbox worker, isolated, with no network access and resource and time limits, never
-  publicly exposed.
+- The sandbox executor, isolated, with no network access and resource and time limits, never
+  publicly exposed. Shipped as Docker containers, not a Piston worker.
 - Contract tests per pod; a pod merges only after its contract tests pass.
 
 ## Acceptance criteria
@@ -72,8 +73,23 @@ The criteria are the per-feature acceptance criteria in
 
 ## Status
 
-**Not started.** No Phase 2 code, branches, or commits exist. Everything above is planned, not
-built.
+**Complete.** All seven pods are implemented and merged to `dev`, each behind the Phase 1 `zod`
+contract with route/service tests.
+
+| #   | Pod                                  | Landing commit            | Feature doc                                                        |
+| --- | ------------------------------------ | ------------------------- | ------------------------------------------------------------------ |
+| 1   | Quiz generation                      | `25e47ed`                 | [`../features/quiz-generation.md`](../features/quiz-generation.md) |
+| 2   | Quiz attempt persistence and grading | `a21ee3b`                 | [`../features/quiz-grading.md`](../features/quiz-grading.md)       |
+| 3   | Rubric grading                       | `d5f949b`                 | [`../features/rubric-grading.md`](../features/rubric-grading.md)   |
+| 4   | Code sandbox                         | `cfad031` (fix `eb73b68`) | [`../features/code-eval.md`](../features/code-eval.md)             |
+| 5   | Groups and peer evaluation           | `675dfa0`                 | [`../features/groups-peereval.md`](../features/groups-peereval.md) |
+| 6   | Analytics                            | `6ffff60`                 | [`../features/analytics.md`](../features/analytics.md)             |
+| 7   | LMS export                           | `9117b2e`                 | [`../features/lms-export.md`](../features/lms-export.md)           |
+
+The per-pod branches were deleted after merging; their commits remain reachable on `dev`. One
+deliverable is **not** fully met: the legacy fetch-on-mount client views were not all converted to
+Server Components, so `react-hooks/set-state-in-effect` remains a warning (see the deferred P1/P2
+items in [`../quality/a11y-perf-audit.md`](../quality/a11y-perf-audit.md)).
 
 ## Key decisions and why
 
@@ -90,20 +106,27 @@ built.
 
 ## Evidence
 
-None. There are no Phase 2 commits, branches, or tags in the history. The branch list is `dev`,
-`main`, and `origin/main` only.
+`git log --oneline dev` contains the seven pod commits listed under Status, plus the code-sandbox
+branch merge `b9d8242` (`Merge p2/code-sandbox into dev`) and the shared fix-up `eb73b68`
+(`fix(phase-2): partial update, CSV injection, group roster, offline mock`). No Phase 2 tag exists.
+Per-pod detail (files, API surface, tests, deferred items) is in the [`../features/`](../features/)
+documents linked above; each pod's tests are named in its own "Tests" table.
 
 ## Risks and open questions
 
-- **The code sandbox is the highest risk.** Mitigations are a dedicated Piston worker, no network,
-  resource and time limits, and never exposing it publicly. It is also the pod most likely to slip.
-- **Grading quality cannot be proven by unit tests.** The plan calls for a small human-labeled
-  fixture set and a reported agreement score. That is a Phase 3 deliverable but must be designed for
-  now.
+- **The code sandbox was the highest risk.** It shipped with Docker isolation (no network, explicit
+  CPU/memory/PID limits, non-root read-only containers, guaranteed cleanup) rather than the planned
+  Piston worker. The Phase 3 security review confirmed the submission cap is atomic under
+  concurrency but left the in-process `unit` harness as a documented arms race (S-4 in
+  [`../security/security-review.md`](../security/security-review.md)), and container cleanup still
+  depends on the Docker daemon (S-5).
+- **Grading quality cannot be proven by unit tests.** The plan called for a small human-labeled
+  fixture set and a reported agreement score. That Phase 3 deliverable is **not shipped**; see
+  [Known gaps and open decisions](../README.md#known-gaps-and-open-decisions).
 - **Scope creep.** Twenty pages of schema ideas will tempt additions. The cut list in the spec is the
   contract; anything not on it needs an explicit decision.
-- **Phase 1 gaps are a blocking dependency**, not a parallel risk. The contract and harness must land
-  first.
+- **Phase 1 gaps were a blocking dependency**, not a parallel risk. The contract and harness landed,
+  so the gate was met.
 
 ## Dependencies on other phases
 

@@ -5,7 +5,8 @@ results into a final grade per student per offering using **published grades
 only**, exports the gradebook as OneRoster 1.2-shaped CSV, and prepares the pure
 pieces a real LTI 1.3 Assignment & Grade Services integration will need.
 
-Branch: `p2/lms-export`.
+Merged to `dev` in `9117b2e` (`feat(lms-export): weighted final grades, OneRoster CSV and LTI AGS
+groundwork`); the `p2/lms-export` branch was deleted after merging.
 
 ## Goal and product rules
 

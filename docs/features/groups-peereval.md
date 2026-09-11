@@ -6,7 +6,8 @@ evaluation on the five established dimensions, adjustment factors that convert a
 group grade into individual grades, free-rider detection, contribution signals as
 secondary evidence, and milestones.
 
-Branch: `p2/groups-peereval`.
+Merged to `dev` in `675dfa0` (`feat(groups): CATME team formation, confidential peer evaluation,
+contribution evidence and milestones`); the `p2/groups-peereval` branch was deleted after merging.
 
 ## Goal and product rules
 

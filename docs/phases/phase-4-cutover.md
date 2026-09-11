@@ -52,6 +52,9 @@ From the cutover definition and the product spec:
 additive: commit `643f96d` states that legacy models "are untouched for Phase 4 cutover." The
 existing seed is `prisma/seed.ts`.
 
+Phases 0–2 are complete and all three Phase 3 hardening pods are merged. The Phase 3
+grading-agreement report is not shipped, so one of this phase's stated dependencies is unmet.
+
 ## Key decisions and why
 
 - **Additive first, delete last.** Phases 1 to 3 add the spine beside the legacy tree, so the app
@@ -93,6 +96,8 @@ None for the cutover itself. The groundwork is visible in the current tree:
 
 ## Dependencies on other phases
 
-- **Depends on Phase 3** for the security review, the accessibility and performance audit, and the
-  grading-agreement report. Cutting over before those is a risk, not a shortcut.
-- **Depends on Phase 2** for a spine that actually works end to end.
+- **Depended on Phase 3** for the security review, the accessibility and performance audit, and the
+  grading-agreement report. The review and the audit are in hand; the agreement report is not, so
+  cutting over still skips a stated gate.
+- **Depended on Phase 2** for a spine that actually works end to end. All seven Phase 2 pods are
+  merged, so this is satisfied.

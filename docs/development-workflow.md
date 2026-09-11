@@ -25,21 +25,27 @@ flowchart LR
 A phase boundary merge is a deliberate gate, not a routine push: `dev` is verified green, the
 phase's acceptance criteria are met, and only then is `dev` merged into `main`.
 
-### Current branch state
+### Current branch state (at `8f00a5f`)
 
-- Local `dev` and local `main` both point at `22f608b` (`fix(vector): report configured provider for
-empty queries`).
-- `origin/main` is at `62953d8` (`fix(build): force dynamic rendering for admin dashboards`), four
-  commits behind local `dev`.
-- The reflog shows the four Phase 1 commits were authored on `main` before `dev` was checked out at
-  the same commit. The Phase 1-to-`main` boundary merge has not happened on the remote yet.
+- Local `dev` and `origin/dev` both point at `8f00a5f` (`fix(instrumentation): stop bundling
+Node-only code into the Edge runtime`). All of Phases 0–3 are on `dev`.
+- Local `main` is at `22f608b` (`fix(vector): report configured provider for empty queries`), the
+  Phase 1 boundary. It has not received the Phase 2 or Phase 3 boundary merges.
+- `origin/main` is at `62953d8` (`fix(build): force dynamic rendering for admin dashboards`), the
+  Phase 0 boundary — four commits behind local `main` (the four Phase 1 commits) and 40 behind
+  `dev`. `dev` is 36 commits ahead of local `main` (`git rev-list --count main..dev`) and 40 ahead
+  of `origin/main` (`git rev-list --count origin/main..dev`).
 - Nothing has been tagged except `legacy-archive-v1` (the pre-rebuild archive commit).
 
 ### Branch protection
 
-Branch protection on `main` is **deferred until after Phase 1**. It also requires the repository to
-be public: GitHub Free does not offer branch protection on private repositories. Until protection is
-enabled, the no-direct-pushes-to-`main` rule is a convention enforced by review, not by GitHub.
+Branch protection is **enabled** on both long-lived branches (verified 2026-09-12 with `gh api
+repos/arockiasachin/ai-assessment-platform/branches/<branch>/protection`); the repository is public.
+`main` and `dev` both require the `Verify` status check, neither requires an approving review
+(`required_approving_review_count: 0` on `main`; no review requirement on `dev`), and
+`enforce_admins` is `false` on both. The no-direct-pushes-to-`main` rule therefore remains a
+convention for administrators rather than an absolute GitHub block. See
+[`README.md`](./README.md#branch-protection-and-ci).
 
 ## Definition of Done
 
@@ -52,13 +58,16 @@ A change is done only when all of the following hold:
 5. Reviewed.
 6. CI green.
 
-The test, contract, and type-suppression clauses become fully enforceable once the Phase 1 test
-harness and `zod` contract land; at the time of writing they are partly aspirational.
+The test, contract, and type-suppression clauses are enforceable now: the Phase 1 test harness and
+the `zod` contract are landed, and CI runs the suite on every pull request and on pushes to `main`
+and `dev`. The one caveat is that `react-hooks/set-state-in-effect` is still a warning rather than
+an error (see [Running the gates locally](#running-the-gates-locally)).
 
 ## CI gates
 
 [`../.github/workflows/ci.yml`](../.github/workflows/ci.yml) runs on every pull request and on
-pushes to `main`. The `verify` job runs on Node 24 with `npm ci`, a cached npm store, a
+pushes to **both `main` and `dev`** (`on.push.branches: [main, dev]`). The `verify` job runs on Node
+24 with `npm ci`, a cached npm store, a
 `pgvector/pgvector:pg16` service, and non-secret environment values so that Prisma, the tests, and
 the build work without secrets:
 
@@ -86,6 +95,30 @@ no network calls.
 `npm test`'s Vitest global setup resets the dedicated `assessment_test` database and applies the
 committed migrations with `prisma migrate deploy`, so step 7 also proves that the migration history
 builds the schema from an empty database. The Playwright spine test remains planned.
+
+### Test suite
+
+`tests/` is a single Vitest suite (`npm test` = `vitest run`). At `8f00a5f` it is **65 test files**
+(`ls tests/*.test.ts`) spanning Phases 1–3. It mixes:
+
+- **Pure unit tests** — the majority, no database required (e.g. `tests/llm-mock.test.ts`,
+  `tests/quiz-scoring.test.ts`, `tests/analytics-item-analysis.test.ts`,
+  `tests/code-eval-sandbox.test.ts`).
+- **Database-backed tests** — about 18 files, identified by importing `tests/helpers/db.ts` (e.g.
+  `tests/spine.test.ts`, `tests/quiz-generation-pipeline.test.ts`,
+  `tests/quiz-attempts-pipeline.test.ts`, `tests/rubric-grading-pipeline.test.ts`,
+  `tests/groups-peer-evaluation.test.ts`, `tests/lms-export-service.test.ts`,
+  `tests/analytics-scoping.test.ts`). They need a pgvector Postgres.
+- `tests/code-eval-docker.test.ts` additionally needs the Docker daemon and the pinned
+  `python:3.12-slim` / `node:22-slim` images; it skips itself (never fails) when either is missing.
+
+Provisioning lives in `tests/helpers/provision.ts`: it drops and recreates `public` on the guarded
+test database and then applies the committed migration history with `prisma migrate deploy` — never
+`migrate reset` or `migrate dev`. `tests/global-setup.ts` skips provisioning when
+`TEST_DATABASE_URL` is unset, so the pure unit tests still run offline.
+
+Note: `tests/README.md` still describes a one-or-two-file suite; it predates the Phase 2/3 test
+growth and is outside this documentation pass's `docs/**` scope.
 
 ## Commit conventions
 
@@ -131,13 +164,20 @@ npm run format        # prettier --write .  (writes; use carefully in a shared t
 npm run build
 ```
 
-Verified on 2026-09-11 against commit `22f608b`:
+Verified on 2026-09-11 against commit `22f608b`, and re-run during the Phase 3 security review
+against `b9d8242` (both exit 0):
 
 - `npm run typecheck` — 0 errors.
-- `npm run lint` — 0 errors, 13 warnings (all `react-hooks/set-state-in-effect` in legacy
-  client components; the rule is demoted to `warn` in `eslint.config.mjs` and returns to `error`
-  once Phase 2 replaces the fetch-on-mount pattern with Server Components).
+- `npm run lint` — 0 errors; 9 warnings at `b9d8242` (the Phase 1 verification recorded 13 at
+  `22f608b`). The residual warnings are the demoted `react-hooks/set-state-in-effect` fetch-on-mount
+  effects plus two deliberate `window.location` assignments. The rule stays a warning until the
+  remaining fetch-on-mount views are server-seeded (see the deferred P1/P2 items in
+  [`quality/a11y-perf-audit.md`](./quality/a11y-perf-audit.md)).
 - `npx prettier --check .` — clean.
+
+The exact lint warning count at the current tip `8f00a5f` is **unverified**: this documentation pass
+did not re-run the gates. The most recent recorded run is the Phase 3 security review
+([`security/security-review.md`](./security/security-review.md): 9 warnings at `b9d8242`).
 
 `npm run build` is not reproduced here: the build writes `.next/` and this repository had
 concurrent writers in the tree. The build gate is enforced by CI, and commit `62953d8` records it
