@@ -8,7 +8,10 @@ export async function GET() {
     return NextResponse.json({ message: "Unauthorized" }, { status: 401 })
   }
 
-  const staff = await prisma.staffProfile.findUnique({ where: { userId: user.id }, select: { id: true } })
+  const staff = await prisma.staffProfile.findUnique({
+    where: { userId: user.id },
+    select: { id: true },
+  })
   if (!staff) {
     return NextResponse.json({ message: "Teacher profile not found" }, { status: 404 })
   }

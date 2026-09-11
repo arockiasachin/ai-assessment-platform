@@ -2,7 +2,15 @@ import "server-only"
 
 import { prisma } from "@/lib/prisma"
 import { getSessionUser } from "@/lib/auth"
-import { markKey, type Assessment, type Course, type MarksMap, type Quiz, type Student, type UpcomingEvent } from "@/lib/gradebook"
+import {
+  markKey,
+  type Assessment,
+  type Course,
+  type MarksMap,
+  type Quiz,
+  type Student,
+  type UpcomingEvent,
+} from "@/lib/gradebook"
 
 type GradebookPayload = {
   students: Student[]
@@ -20,17 +28,15 @@ function toUiAssessmentType(type: DbAssessmentType) {
   return type === "QUIZ" ? "Quiz" : "Assignment"
 }
 
-function toAssessmentUpcomingEvent(
-  assessment: {
-    id: string
-    title: string
-    dueDate: Date
-    courseId: string
-    classId: string
-    type: DbAssessmentType
-    course: { name: string }
-  },
-): UpcomingEvent {
+function toAssessmentUpcomingEvent(assessment: {
+  id: string
+  title: string
+  dueDate: Date
+  courseId: string
+  classId: string
+  type: DbAssessmentType
+  course: { name: string }
+}): UpcomingEvent {
   return {
     id: `assessment-${assessment.id}`,
     title: assessment.title,
@@ -165,10 +171,7 @@ export async function getGradebookPayloadForSessionUser(): Promise<GradebookPayl
           where: {
             offeringId: { in: offeringIds },
             isUpcoming: true,
-            OR: [
-              { assessmentId: null },
-              { assessment: { is: { createdById: staff.id } } },
-            ],
+            OR: [{ assessmentId: null }, { assessment: { is: { createdById: staff.id } } }],
           },
           include: {
             assessment: {
@@ -198,7 +201,9 @@ export async function getGradebookPayloadForSessionUser(): Promise<GradebookPayl
       courseName: event.assessment?.course.name ?? event.offering?.course.name ?? null,
       classId: event.classId,
       assessmentId: event.assessmentId,
-      assessmentType: event.assessment ? toUiAssessmentType(event.assessment.type as DbAssessmentType) : null,
+      assessmentType: event.assessment
+        ? toUiAssessmentType(event.assessment.type as DbAssessmentType)
+        : null,
     }))
 
     const calendarAssessmentIds = new Set(
@@ -209,15 +214,17 @@ export async function getGradebookPayloadForSessionUser(): Promise<GradebookPayl
 
     const fallbackAssessmentEvents: UpcomingEvent[] = assessmentPool
       .filter((assessment) => !calendarAssessmentIds.has(assessment.id))
-      .map((assessment) => toAssessmentUpcomingEvent({
-        id: assessment.id,
-        title: assessment.title,
-        dueDate: assessment.dueDate,
-        courseId: assessment.courseId,
-        classId: assessment.classId,
-        type: assessment.type as DbAssessmentType,
-        course: { name: assessment.course.name },
-      }))
+      .map((assessment) =>
+        toAssessmentUpcomingEvent({
+          id: assessment.id,
+          title: assessment.title,
+          dueDate: assessment.dueDate,
+          courseId: assessment.courseId,
+          classId: assessment.classId,
+          type: assessment.type as DbAssessmentType,
+          course: { name: assessment.course.name },
+        }),
+      )
 
     const upcomingEvents = [...calendarEvents, ...fallbackAssessmentEvents]
 
@@ -354,7 +361,9 @@ export async function getGradebookPayloadForSessionUser(): Promise<GradebookPayl
     courseName: event.assessment?.course.name ?? event.offering?.course.name ?? null,
     classId: event.classId,
     assessmentId: event.assessmentId,
-    assessmentType: event.assessment ? toUiAssessmentType(event.assessment.type as DbAssessmentType) : null,
+    assessmentType: event.assessment
+      ? toUiAssessmentType(event.assessment.type as DbAssessmentType)
+      : null,
   }))
 
   const calendarAssessmentIds = new Set(
@@ -365,15 +374,17 @@ export async function getGradebookPayloadForSessionUser(): Promise<GradebookPayl
 
   const fallbackAssessmentEvents: UpcomingEvent[] = assessmentPool
     .filter((assessment) => !calendarAssessmentIds.has(assessment.id))
-    .map((assessment) => toAssessmentUpcomingEvent({
-      id: assessment.id,
-      title: assessment.title,
-      dueDate: assessment.dueDate,
-      courseId: assessment.courseId,
-      classId: assessment.classId,
-      type: assessment.type as DbAssessmentType,
-      course: { name: assessment.course.name },
-    }))
+    .map((assessment) =>
+      toAssessmentUpcomingEvent({
+        id: assessment.id,
+        title: assessment.title,
+        dueDate: assessment.dueDate,
+        courseId: assessment.courseId,
+        classId: assessment.classId,
+        type: assessment.type as DbAssessmentType,
+        course: { name: assessment.course.name },
+      }),
+    )
 
   const upcomingEvents = [...calendarEvents, ...fallbackAssessmentEvents]
 
@@ -538,30 +549,6 @@ export async function createAssessmentForSessionUser(input: {
   } as Assessment
 }
 
-type ImportedOption = {
-  optionId?: string
-  text: string
-}
-
-type ImportedQuestion = {
-  questionText: string
-  options: ImportedOption[]
-  correctAnswerId?: string
-  correctIndex?: number
-  marks?: number
-}
-
-type ImportedQuizPayload = {
-  quizMetadata?: {
-    title?: string
-    courseId?: string
-    course?: string
-    dueDate?: string
-    totalMarks?: number
-  }
-  questions?: ImportedQuestion[]
-}
-
 type ParsedQuizQuestion = {
   prompt: string
   options: string[]
@@ -600,9 +587,13 @@ function parseImportedQuestions(input: unknown): ParsedQuizQuestion[] {
 
     const options = row.options.map((option, optionIndex) => {
       const value = asRecord(option)
-      if (!value) throw new Error(`Question ${index + 1} has an invalid option at position ${optionIndex + 1}.`)
+      if (!value)
+        throw new Error(
+          `Question ${index + 1} has an invalid option at position ${optionIndex + 1}.`,
+        )
       const text = toStringValue(value.text)
-      if (!text) throw new Error(`Question ${index + 1} has an empty option at position ${optionIndex + 1}.`)
+      if (!text)
+        throw new Error(`Question ${index + 1} has an empty option at position ${optionIndex + 1}.`)
       const optionIdRaw = toStringValue(value.optionId)
       return {
         optionId: optionIdRaw || String.fromCharCode(65 + optionIndex),
@@ -617,7 +608,9 @@ function parseImportedQuestions(input: unknown): ParsedQuizQuestion[] {
       if (!correctAnswerId) {
         throw new Error(`Question ${index + 1} must include correctAnswerId or correctIndex.`)
       }
-      const found = options.findIndex((option) => option.optionId.toLowerCase() === correctAnswerId.toLowerCase())
+      const found = options.findIndex(
+        (option) => option.optionId.toLowerCase() === correctAnswerId.toLowerCase(),
+      )
       if (found < 0) {
         throw new Error(`Question ${index + 1} correctAnswerId does not match any optionId.`)
       }
@@ -655,9 +648,10 @@ export async function createQuizFromImportForSessionUser(payload: unknown) {
   const questions = parseImportedQuestions(body.questions)
   const totalMarksFromQuestions = questions.reduce((sum, question) => sum + question.marks, 0)
   const metadataTotalMarks = toNumber(metadata?.totalMarks)
-  const resolvedMaxMarks = Number.isFinite(metadataTotalMarks) && metadataTotalMarks > 0
-    ? Math.round(metadataTotalMarks)
-    : Math.max(1, Math.round(totalMarksFromQuestions))
+  const resolvedMaxMarks =
+    Number.isFinite(metadataTotalMarks) && metadataTotalMarks > 0
+      ? Math.round(metadataTotalMarks)
+      : Math.max(1, Math.round(totalMarksFromQuestions))
 
   const dueDateValue = toStringValue(metadata?.dueDate) || new Date().toISOString().slice(0, 10)
   const dueDate = new Date(dueDateValue)
@@ -666,7 +660,10 @@ export async function createQuizFromImportForSessionUser(payload: unknown) {
   const courseId = toStringValue(metadata?.courseId)
   const courseNameOrCode = toStringValue(metadata?.course)
 
-  const staff = await prisma.staffProfile.findUnique({ where: { userId: sessionUser.id }, select: { id: true } })
+  const staff = await prisma.staffProfile.findUnique({
+    where: { userId: sessionUser.id },
+    select: { id: true },
+  })
   if (!staff) throw new Error("Teacher profile not found")
 
   const offerings = await prisma.courseOffering.findMany({
@@ -690,7 +687,9 @@ export async function createQuizFromImportForSessionUser(payload: unknown) {
   }
 
   if (!offering) {
-    throw new Error("Unable to match quizMetadata.courseId or quizMetadata.course to one of your courses.")
+    throw new Error(
+      "Unable to match quizMetadata.courseId or quizMetadata.course to one of your courses.",
+    )
   }
 
   const created = await prisma.$transaction(async (tx) => {

@@ -15,7 +15,9 @@ export function AdminPageShell({ title, description, children }: AdminPageShellP
           <div className="mb-5 rounded-xl border border-border bg-card px-4 py-4">
             <div className="flex items-start justify-between gap-4">
               <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.15em] text-muted-foreground">Admin workspace</p>
+                <p className="text-xs font-semibold uppercase tracking-[0.15em] text-muted-foreground">
+                  Admin workspace
+                </p>
                 <h1 className="mt-2 text-2xl font-semibold tracking-tight">{title}</h1>
                 <p className="mt-1 text-sm text-muted-foreground">{description}</p>
               </div>

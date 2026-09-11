@@ -9,7 +9,11 @@ import { Input } from "@/components/ui/input"
 
 function formatDate(value: string | null) {
   if (!value) return "Not set"
-  return new Date(value).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+  return new Date(value).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  })
 }
 
 function statusLabel(course: CourseCatalogItem) {
@@ -42,8 +46,6 @@ export function StudentCoursesView() {
   const [commentDrafts, setCommentDrafts] = useState<Record<string, string>>({})
 
   const loadCourses = async () => {
-    setError(null)
-    setIsLoading(true)
     try {
       const response = await fetch("/api/student/courses", { cache: "no-store" })
       if (!response.ok) {
@@ -57,6 +59,12 @@ export function StudentCoursesView() {
     } finally {
       setIsLoading(false)
     }
+  }
+
+  const refreshCourses = async () => {
+    setError(null)
+    setIsLoading(true)
+    await loadCourses()
   }
 
   useEffect(() => {
@@ -78,7 +86,9 @@ export function StudentCoursesView() {
   const summary = useMemo(
     () => ({
       enrolledCount: enrolled.length,
-      openCount: (payload?.offeredCourses ?? []).filter((course) => course.registrationStatus === "open").length,
+      openCount: (payload?.offeredCourses ?? []).filter(
+        (course) => course.registrationStatus === "open",
+      ).length,
       completedCount: enrolled.filter((course) => course.isCompleted).length,
     }),
     [enrolled, payload],
@@ -100,7 +110,7 @@ export function StudentCoursesView() {
       const data = (await response.json()) as { success?: boolean; message?: string }
       setMessage(data.message ?? (response.ok ? "Enrollment updated." : "Unable to enroll."))
       if (response.ok) {
-        await loadCourses()
+        await refreshCourses()
       }
     } catch {
       setMessage("Unable to enroll right now.")
@@ -125,7 +135,7 @@ export function StudentCoursesView() {
       const data = (await response.json()) as { success?: boolean; message?: string }
       setMessage(data.message ?? (response.ok ? "Rating saved." : "Unable to save rating."))
       if (response.ok) {
-        await loadCourses()
+        await refreshCourses()
       }
     } catch {
       setMessage("Unable to save rating right now.")
@@ -139,7 +149,11 @@ export function StudentCoursesView() {
   }
 
   if (error || !payload) {
-    return <p className="py-10 text-center text-sm text-destructive">{error ?? "Unable to load courses."}</p>
+    return (
+      <p className="py-10 text-center text-sm text-destructive">
+        {error ?? "Unable to load courses."}
+      </p>
+    )
   }
 
   return (
@@ -151,8 +165,12 @@ export function StudentCoursesView() {
               <Sparkles className="size-3.5" />
               Course workspace
             </div>
-            <p className="text-sm font-semibold">Manage enrollments, monitor class capacity, and rate completed courses</p>
-            <p className="text-xs text-muted-foreground">Everything here updates directly from your student record.</p>
+            <p className="text-sm font-semibold">
+              Manage enrollments, monitor class capacity, and rate completed courses
+            </p>
+            <p className="text-xs text-muted-foreground">
+              Everything here updates directly from your student record.
+            </p>
           </div>
           <div className="grid grid-cols-3 gap-2 text-xs sm:gap-3">
             <div className="rounded-md border border-border/70 bg-background/80 px-2 py-1.5 text-center">
@@ -171,7 +189,11 @@ export function StudentCoursesView() {
         </CardContent>
       </Card>
 
-      {message && <div className="rounded-lg border border-border bg-muted/40 px-3 py-2 text-sm">{message}</div>}
+      {message && (
+        <div className="rounded-lg border border-border bg-muted/40 px-3 py-2 text-sm">
+          {message}
+        </div>
+      )}
 
       <Card className="border-border/70 shadow-sm">
         <CardHeader>
@@ -184,10 +206,14 @@ export function StudentCoursesView() {
           {enrolled.map((course) => {
             const isExpanded = Boolean(expanded[course.offeringId])
             const ratingValue = ratingDrafts[course.offeringId] ?? course.studentRating ?? 5
-            const commentValue = commentDrafts[course.offeringId] ?? course.studentRatingComment ?? ""
+            const commentValue =
+              commentDrafts[course.offeringId] ?? course.studentRatingComment ?? ""
 
             return (
-              <div key={course.offeringId} className="rounded-xl border border-border/70 bg-background shadow-sm">
+              <div
+                key={course.offeringId}
+                className="rounded-xl border border-border/70 bg-background shadow-sm"
+              >
                 <button
                   type="button"
                   className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left"
@@ -200,33 +226,80 @@ export function StudentCoursesView() {
                     </p>
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className={["rounded-md border px-2 py-1 text-xs font-medium", statusClass(course.registrationStatus)].join(" ")}>
+                    <span
+                      className={[
+                        "rounded-md border px-2 py-1 text-xs font-medium",
+                        statusClass(course.registrationStatus),
+                      ].join(" ")}
+                    >
                       {statusLabel(course)}
                     </span>
-                    <ChevronDown className={["size-4 transition-transform", isExpanded ? "rotate-180" : ""].join(" ")} />
+                    <ChevronDown
+                      className={[
+                        "size-4 transition-transform",
+                        isExpanded ? "rotate-180" : "",
+                      ].join(" ")}
+                    />
                   </div>
                 </button>
 
                 {isExpanded && (
                   <div className="border-t border-border/70 px-4 py-3 text-sm">
-                    <p className="mb-3 text-muted-foreground">{course.description ?? "No description available."}</p>
+                    <p className="mb-3 text-muted-foreground">
+                      {course.description ?? "No description available."}
+                    </p>
                     <div className="grid gap-2 text-[13px] sm:grid-cols-2 sm:text-sm">
-                      <p><span className="font-medium">Teacher:</span> {course.teacherName}</p>
-                      <p><span className="font-medium">Credits:</span> {course.credits}</p>
-                      <p><span className="font-medium">Students enrolled:</span> {course.enrolledCount}/{course.studentLimit}</p>
-                      <p><span className="font-medium">Waitlist:</span> {course.waitlistedCount}</p>
-                      <p><span className="font-medium">Class:</span> {course.className}</p>
-                      <p><span className="font-medium">Start date:</span> {formatDate(course.startsOn)}</p>
-                      <p><span className="font-medium">End date:</span> {formatDate(course.endsOn)}</p>
-                      <p><span className="font-medium">Registration opens:</span> {formatDate(course.registrationOpenAt)}</p>
-                      <p><span className="font-medium">Registration closes:</span> {formatDate(course.registrationCloseAt)}</p>
-                      <p><span className="font-medium">Average rating:</span> {course.averageRating !== null ? `${course.averageRating.toFixed(1)} / 5` : "No ratings"}</p>
-                      <p><span className="font-medium">Your rating:</span> {course.studentRating !== null ? `${course.studentRating} / 5` : "Not rated"}</p>
+                      <p>
+                        <span className="font-medium">Teacher:</span> {course.teacherName}
+                      </p>
+                      <p>
+                        <span className="font-medium">Credits:</span> {course.credits}
+                      </p>
+                      <p>
+                        <span className="font-medium">Students enrolled:</span>{" "}
+                        {course.enrolledCount}/{course.studentLimit}
+                      </p>
+                      <p>
+                        <span className="font-medium">Waitlist:</span> {course.waitlistedCount}
+                      </p>
+                      <p>
+                        <span className="font-medium">Class:</span> {course.className}
+                      </p>
+                      <p>
+                        <span className="font-medium">Start date:</span>{" "}
+                        {formatDate(course.startsOn)}
+                      </p>
+                      <p>
+                        <span className="font-medium">End date:</span> {formatDate(course.endsOn)}
+                      </p>
+                      <p>
+                        <span className="font-medium">Registration opens:</span>{" "}
+                        {formatDate(course.registrationOpenAt)}
+                      </p>
+                      <p>
+                        <span className="font-medium">Registration closes:</span>{" "}
+                        {formatDate(course.registrationCloseAt)}
+                      </p>
+                      <p>
+                        <span className="font-medium">Average rating:</span>{" "}
+                        {course.averageRating !== null
+                          ? `${course.averageRating.toFixed(1)} / 5`
+                          : "No ratings"}
+                      </p>
+                      <p>
+                        <span className="font-medium">Your rating:</span>{" "}
+                        {course.studentRating !== null
+                          ? `${course.studentRating} / 5`
+                          : "Not rated"}
+                      </p>
                     </div>
 
                     {course.isCompleted && (
                       <div className="mt-4 space-y-2 rounded-lg border border-border/70 bg-muted/20 p-3">
-                        <label className="text-xs font-medium text-muted-foreground" htmlFor={`rating-${course.offeringId}`}>
+                        <label
+                          className="text-xs font-medium text-muted-foreground"
+                          htmlFor={`rating-${course.offeringId}`}
+                        >
                           Rate this course
                         </label>
                         <div className="flex flex-wrap items-center gap-2">
@@ -242,7 +315,9 @@ export function StudentCoursesView() {
                             }
                           >
                             {[1, 2, 3, 4, 5].map((value) => (
-                              <option key={value} value={value}>{value}</option>
+                              <option key={value} value={value}>
+                                {value}
+                              </option>
                             ))}
                           </select>
                           <textarea
@@ -276,7 +351,11 @@ export function StudentCoursesView() {
             )
           })}
 
-          {enrolled.length === 0 && <p className="text-sm text-muted-foreground">You are not enrolled in any courses yet.</p>}
+          {enrolled.length === 0 && (
+            <p className="text-sm text-muted-foreground">
+              You are not enrolled in any courses yet.
+            </p>
+          )}
         </CardContent>
       </Card>
 
@@ -296,7 +375,10 @@ export function StudentCoursesView() {
 
         <CardContent className="space-y-3">
           {offeredFiltered.map((course) => (
-            <div key={course.offeringId} className="rounded-xl border border-border/70 bg-background px-4 py-3 shadow-sm">
+            <div
+              key={course.offeringId}
+              className="rounded-xl border border-border/70 bg-background px-4 py-3 shadow-sm"
+            >
               <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div>
                   <p className="font-medium">{course.courseName}</p>
@@ -304,12 +386,22 @@ export function StudentCoursesView() {
                     {course.courseCode} · {course.term} {course.academicYear} · {course.teacherName}
                   </p>
                   <div className="mt-2 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
-                    <span className="inline-flex items-center gap-1"><Users className="size-3.5" /> {course.enrolledCount}/{course.studentLimit}</span>
-                    <span className="inline-flex items-center gap-1"><Calendar className="size-3.5" /> {formatDate(course.registrationOpenAt)} to {formatDate(course.registrationCloseAt)}</span>
+                    <span className="inline-flex items-center gap-1">
+                      <Users className="size-3.5" /> {course.enrolledCount}/{course.studentLimit}
+                    </span>
+                    <span className="inline-flex items-center gap-1">
+                      <Calendar className="size-3.5" /> {formatDate(course.registrationOpenAt)} to{" "}
+                      {formatDate(course.registrationCloseAt)}
+                    </span>
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className={["rounded-md border px-2 py-1 text-xs font-medium", statusClass(course.registrationStatus)].join(" ")}>
+                  <span
+                    className={[
+                      "rounded-md border px-2 py-1 text-xs font-medium",
+                      statusClass(course.registrationStatus),
+                    ].join(" ")}
+                  >
                     {statusLabel(course)}
                   </span>
                   {!course.isEnrolled && (
@@ -317,16 +409,26 @@ export function StudentCoursesView() {
                       type="button"
                       variant="outline"
                       onClick={() => enroll(course.offeringId)}
-                      disabled={(course.isWaitlisted || (!course.canRegister && course.registrationStatus !== "full")) || pendingOffer === course.offeringId}
+                      disabled={
+                        course.isWaitlisted ||
+                        (!course.canRegister && course.registrationStatus !== "full") ||
+                        pendingOffer === course.offeringId
+                      }
                     >
-                      {course.registrationStatus === "full" ? "Join waitlist" : course.isWaitlisted ? "Waitlisted" : "Register"}
+                      {course.registrationStatus === "full"
+                        ? "Join waitlist"
+                        : course.isWaitlisted
+                          ? "Waitlisted"
+                          : "Register"}
                     </Button>
                   )}
                 </div>
               </div>
             </div>
           ))}
-          {offeredFiltered.length === 0 && <p className="text-sm text-muted-foreground">No courses match your search.</p>}
+          {offeredFiltered.length === 0 && (
+            <p className="text-sm text-muted-foreground">No courses match your search.</p>
+          )}
         </CardContent>
       </Card>
     </div>

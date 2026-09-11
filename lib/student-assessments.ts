@@ -1,6 +1,7 @@
 export type AssessmentKind = "Quiz" | "Assignment"
 
-export type SubmissionState = "not_submitted" | "draft" | "submitted" | "resubmitted" | "graded" | "late"
+export type SubmissionState =
+  "not_submitted" | "draft" | "submitted" | "resubmitted" | "graded" | "late"
 
 export type StudentAssessmentItem = {
   id: string

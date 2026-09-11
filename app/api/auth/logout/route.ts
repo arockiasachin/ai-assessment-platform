@@ -1,5 +1,5 @@
-import { createLogoutResponse } from "@/lib/auth";
+import { createLogoutResponse } from "@/lib/auth"
 
 export async function POST() {
-  return createLogoutResponse();
+  return createLogoutResponse()
 }

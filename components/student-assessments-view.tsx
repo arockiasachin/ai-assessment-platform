@@ -2,13 +2,29 @@
 
 import Link from "next/link"
 import { useEffect, useMemo, useState } from "react"
-import { BookOpenCheck, CalendarClock, ClipboardList, Eye, FileCheck2, Filter, Search, Sparkles, Target } from "lucide-react"
+import {
+  BookOpenCheck,
+  CalendarClock,
+  ClipboardList,
+  Eye,
+  FileCheck2,
+  Filter,
+  Search,
+  Sparkles,
+  Target,
+} from "lucide-react"
 import { GradeBadge } from "@/components/grade-badge"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import type { StudentAssessmentItem, StudentAssessmentsPayload } from "@/lib/student-assessments"
 
 function formatDateTime(iso: string) {
@@ -50,7 +66,8 @@ function submissionLabel(state: StudentAssessmentItem["submissionState"]) {
 
 function submissionTone(state: StudentAssessmentItem["submissionState"]) {
   if (state === "graded") return "border-emerald-500/30 bg-emerald-500/10 text-emerald-700"
-  if (state === "submitted" || state === "resubmitted") return "border-blue-500/30 bg-blue-500/10 text-blue-700"
+  if (state === "submitted" || state === "resubmitted")
+    return "border-blue-500/30 bg-blue-500/10 text-blue-700"
   if (state === "late") return "border-amber-500/30 bg-amber-500/10 text-amber-700"
   if (state === "draft") return "border-slate-400/30 bg-slate-500/10 text-slate-700"
   return "border-border bg-muted/20 text-foreground"
@@ -70,8 +87,6 @@ export function StudentAssessmentsView() {
   const [error, setError] = useState<string | null>(null)
 
   const load = async () => {
-    setError(null)
-    setIsLoading(true)
     try {
       const response = await fetch("/api/student/assessments", { cache: "no-store" })
       if (!response.ok) {
@@ -90,6 +105,12 @@ export function StudentAssessmentsView() {
     }
   }
 
+  const refresh = async () => {
+    setError(null)
+    setIsLoading(true)
+    await load()
+  }
+
   useEffect(() => {
     void load()
   }, [])
@@ -98,7 +119,9 @@ export function StudentAssessmentsView() {
 
   const courseOptions = useMemo(
     () =>
-      Array.from(new Map(allAssessments.map((item) => [item.courseId, item.courseName])).entries()).map(([id, name]) => ({
+      Array.from(
+        new Map(allAssessments.map((item) => [item.courseId, item.courseName])).entries(),
+      ).map(([id, name]) => ({
         id,
         name,
       })),
@@ -117,7 +140,9 @@ export function StudentAssessmentsView() {
       if (statusFilter === "overdue" && !item.isPastDue) return false
 
       if (!q) return true
-      const text = [item.title, item.courseName, item.courseCode, item.className, item.teacherName].join(" ").toLowerCase()
+      const text = [item.title, item.courseName, item.courseCode, item.className, item.teacherName]
+        .join(" ")
+        .toLowerCase()
       return text.includes(q)
     })
   }, [allAssessments, courseFilter, search, statusFilter, typeFilter])
@@ -129,7 +154,9 @@ export function StudentAssessmentsView() {
         ? graded.reduce((sum, item) => sum + (item.percentage ?? 0), 0) / graded.length
         : null
 
-    const upcoming = allAssessments.filter((item) => item.daysUntilDue >= 0 && item.daysUntilDue <= 7).length
+    const upcoming = allAssessments.filter(
+      (item) => item.daysUntilDue >= 0 && item.daysUntilDue <= 7,
+    ).length
 
     return {
       total: allAssessments.length,
@@ -144,10 +171,17 @@ export function StudentAssessmentsView() {
   }
 
   if (error || !payload) {
-    return <p className="py-10 text-center text-sm text-destructive">{error ?? "Unable to load assessments."}</p>
+    return (
+      <p className="py-10 text-center text-sm text-destructive">
+        {error ?? "Unable to load assessments."}
+      </p>
+    )
   }
 
-  const submitAssignment = async (assessmentId: string, action: "saveDraft" | "submit" | "resubmit") => {
+  const submitAssignment = async (
+    assessmentId: string,
+    action: "saveDraft" | "submit" | "resubmit",
+  ) => {
     const content = submissionDrafts[assessmentId] ?? ""
     setMessage(null)
     setError(null)
@@ -168,7 +202,7 @@ export function StudentAssessmentsView() {
       }
 
       setMessage(data.message ?? "Submission updated.")
-      await load()
+      await refresh()
     } catch {
       setError("Unable to submit assignment.")
     } finally {
@@ -178,18 +212,33 @@ export function StudentAssessmentsView() {
 
   return (
     <div className="space-y-6">
-      {message && <div className="rounded-md border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-700">{message}</div>}
-      {error && <div className="rounded-md border border-destructive/60 bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</div>}
+      {message && (
+        <div className="rounded-md border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-700">
+          {message}
+        </div>
+      )}
+      {error && (
+        <div className="rounded-md border border-destructive/60 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+          {error}
+        </div>
+      )}
 
       <Card className="border-primary/20 bg-gradient-to-br from-primary/10 via-background to-background shadow-sm">
         <CardContent className="flex flex-col gap-3 pt-6 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <Badge variant="outline" className="mb-2 w-fit gap-1.5 border-primary/30 bg-background/70 text-primary">
+            <Badge
+              variant="outline"
+              className="mb-2 w-fit gap-1.5 border-primary/30 bg-background/70 text-primary"
+            >
               <Sparkles className="size-3.5" />
               Assessment hub
             </Badge>
-            <h3 className="text-lg font-semibold tracking-tight">Track every assessment with full detail</h3>
-            <p className="text-sm text-muted-foreground">Inspect scores, due windows, feedback, and course context in one place.</p>
+            <h3 className="text-lg font-semibold tracking-tight">
+              Track every assessment with full detail
+            </h3>
+            <p className="text-sm text-muted-foreground">
+              Inspect scores, due windows, feedback, and course context in one place.
+            </p>
           </div>
           <div className="grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">
             <div className="rounded-md border border-border/70 bg-background/80 px-2 py-1.5 text-center">
@@ -202,7 +251,9 @@ export function StudentAssessmentsView() {
             </div>
             <div className="rounded-md border border-border/70 bg-background/80 px-2 py-1.5 text-center">
               <p className="text-muted-foreground">Average</p>
-              <p className="font-semibold text-foreground">{summary.average === null ? "—" : `${round(summary.average)}%`}</p>
+              <p className="font-semibold text-foreground">
+                {summary.average === null ? "—" : `${round(summary.average)}%`}
+              </p>
             </div>
             <div className="rounded-md border border-border/70 bg-background/80 px-2 py-1.5 text-center">
               <p className="text-muted-foreground">Due in 7d</p>
@@ -230,7 +281,12 @@ export function StudentAssessmentsView() {
             />
           </div>
 
-          <Select value={typeFilter} onValueChange={(value) => setTypeFilter((value as "all" | "Quiz" | "Assignment") ?? "all")}>
+          <Select
+            value={typeFilter}
+            onValueChange={(value) =>
+              setTypeFilter((value as "all" | "Quiz" | "Assignment") ?? "all")
+            }
+          >
             <SelectTrigger>
               <SelectValue placeholder="Type" />
             </SelectTrigger>
@@ -255,7 +311,12 @@ export function StudentAssessmentsView() {
             </SelectContent>
           </Select>
 
-          <Select value={statusFilter} onValueChange={(value) => setStatusFilter((value as "all" | "graded" | "pending" | "overdue") ?? "all")}>
+          <Select
+            value={statusFilter}
+            onValueChange={(value) =>
+              setStatusFilter((value as "all" | "graded" | "pending" | "overdue") ?? "all")
+            }
+          >
             <SelectTrigger>
               <SelectValue placeholder="Status" />
             </SelectTrigger>
@@ -280,7 +341,9 @@ export function StudentAssessmentsView() {
                 <button
                   type="button"
                   className="flex w-full flex-col gap-3 px-4 py-4 text-left sm:flex-row sm:items-start sm:justify-between"
-                  onClick={() => setExpanded((prev) => ({ ...prev, [assessment.id]: !prev[assessment.id] }))}
+                  onClick={() =>
+                    setExpanded((prev) => ({ ...prev, [assessment.id]: !prev[assessment.id] }))
+                  }
                 >
                   <div className="space-y-1">
                     <p className="font-semibold tracking-tight">{assessment.title}</p>
@@ -288,14 +351,13 @@ export function StudentAssessmentsView() {
                       {assessment.courseCode} · {assessment.courseName} · {assessment.className}
                     </p>
                     <p className="text-xs text-muted-foreground">
-                      {assessment.term} {assessment.academicYear} · Teacher: {assessment.teacherName}
+                      {assessment.term} {assessment.academicYear} · Teacher:{" "}
+                      {assessment.teacherName}
                     </p>
                   </div>
 
                   <div className="flex flex-wrap items-center gap-2 sm:justify-end">
-                    <Badge variant={tone}>
-                      {dueLabel(assessment)}
-                    </Badge>
+                    <Badge variant={tone}>{dueLabel(assessment)}</Badge>
                     <Badge variant="outline">{assessment.type}</Badge>
                     <Badge variant="outline" className={submissionTone(assessment.submissionState)}>
                       {submissionLabel(assessment.submissionState)}
@@ -314,22 +376,32 @@ export function StudentAssessmentsView() {
                       <div className="rounded-lg border border-border/70 bg-background px-3 py-2">
                         <p className="text-xs text-muted-foreground">Your score</p>
                         <p className="mt-1 font-medium">
-                          {assessment.score === null ? "Not graded" : `${assessment.score}/${assessment.maxMarks} (${round(assessment.percentage ?? 0)}%)`}
+                          {assessment.score === null
+                            ? "Not graded"
+                            : `${assessment.score}/${assessment.maxMarks} (${round(assessment.percentage ?? 0)}%)`}
                         </p>
                       </div>
                       <div className="rounded-lg border border-border/70 bg-background px-3 py-2">
                         <p className="text-xs text-muted-foreground">Class average</p>
-                        <p className="mt-1 font-medium">{assessment.classAveragePercentage === null ? "—" : `${round(assessment.classAveragePercentage)}%`}</p>
+                        <p className="mt-1 font-medium">
+                          {assessment.classAveragePercentage === null
+                            ? "—"
+                            : `${round(assessment.classAveragePercentage)}%`}
+                        </p>
                       </div>
                       <div className="rounded-lg border border-border/70 bg-background px-3 py-2">
                         <p className="text-xs text-muted-foreground">Quiz questions</p>
-                        <p className="mt-1 font-medium">{assessment.type === "Quiz" ? assessment.quizQuestionCount : "N/A"}</p>
+                        <p className="mt-1 font-medium">
+                          {assessment.type === "Quiz" ? assessment.quizQuestionCount : "N/A"}
+                        </p>
                       </div>
                     </div>
 
                     {assessment.feedback && (
                       <div className="mt-3 rounded-lg border border-border/70 bg-background px-3 py-2 text-sm">
-                        <p className="text-xs font-medium text-muted-foreground">Teacher feedback</p>
+                        <p className="text-xs font-medium text-muted-foreground">
+                          Teacher feedback
+                        </p>
                         <p className="mt-1">{assessment.feedback}</p>
                       </div>
                     )}
@@ -347,7 +419,10 @@ export function StudentAssessmentsView() {
                           <textarea
                             value={submissionDrafts[assessment.id] ?? ""}
                             onChange={(event) =>
-                              setSubmissionDrafts((prev) => ({ ...prev, [assessment.id]: event.target.value }))
+                              setSubmissionDrafts((prev) => ({
+                                ...prev,
+                                [assessment.id]: event.target.value,
+                              }))
                             }
                             placeholder="Write your assignment submission details..."
                             className="min-h-24 w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
@@ -373,7 +448,8 @@ export function StudentAssessmentsView() {
                               onClick={() =>
                                 void submitAssignment(
                                   assessment.id,
-                                  assessment.submissionState === "not_submitted" || assessment.submissionState === "draft"
+                                  assessment.submissionState === "not_submitted" ||
+                                    assessment.submissionState === "draft"
                                     ? "submit"
                                     : "resubmit",
                                 )
@@ -382,7 +458,8 @@ export function StudentAssessmentsView() {
                               className="w-full sm:w-auto"
                             >
                               <FileCheck2 className="size-4" />
-                              {assessment.submissionState === "not_submitted" || assessment.submissionState === "draft"
+                              {assessment.submissionState === "not_submitted" ||
+                              assessment.submissionState === "draft"
                                 ? "Submit assignment"
                                 : "Resubmit assignment"}
                             </Button>
@@ -417,14 +494,18 @@ export function StudentAssessmentsView() {
               <ClipboardList className="size-3.5" />
               Grading detail
             </p>
-            <p className="mt-1 text-sm">Every score is normalized against max marks for accurate percentage comparisons.</p>
+            <p className="mt-1 text-sm">
+              Every score is normalized against max marks for accurate percentage comparisons.
+            </p>
           </div>
           <div className="rounded-lg border border-border/70 bg-muted/20 px-3 py-2">
             <p className="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
               <Target className="size-3.5" />
               Status tracking
             </p>
-            <p className="mt-1 text-sm">See whether each item is graded, submitted, overdue, or still pending work.</p>
+            <p className="mt-1 text-sm">
+              See whether each item is graded, submitted, overdue, or still pending work.
+            </p>
           </div>
           <div className="rounded-lg border border-border/70 bg-muted/20 px-3 py-2">
             <p className="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground">

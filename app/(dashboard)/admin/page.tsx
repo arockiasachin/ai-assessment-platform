@@ -1,5 +1,13 @@
 import Link from "next/link"
-import { ArrowRight, CalendarClock, FolderKanban, GraduationCap, ShieldCheck, UserCog, Users } from "lucide-react"
+import {
+  ArrowRight,
+  CalendarClock,
+  FolderKanban,
+  GraduationCap,
+  ShieldCheck,
+  UserCog,
+  Users,
+} from "lucide-react"
 import { RoleGuard } from "@/components/role-guard"
 import { AdminPageShell } from "@/components/admin-page-shell"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -123,10 +131,14 @@ export default async function AdminPage() {
             <CardContent>
               <div className="space-y-2">
                 {overview.recentAssessments.map((assessment) => (
-                  <div key={assessment.id} className="rounded-md border border-border bg-background px-3 py-2 text-sm">
+                  <div
+                    key={assessment.id}
+                    className="rounded-md border border-border bg-background px-3 py-2 text-sm"
+                  >
                     <p className="font-medium">{assessment.title}</p>
                     <p className="text-xs text-muted-foreground">
-                      {assessment.courseName} · {assessment.type} · {new Date(assessment.dueDate).toLocaleDateString()} · {assessment.teacherName}
+                      {assessment.courseName} · {assessment.type} ·{" "}
+                      {new Date(assessment.dueDate).toLocaleDateString()} · {assessment.teacherName}
                     </p>
                   </div>
                 ))}

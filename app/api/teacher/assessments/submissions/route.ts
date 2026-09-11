@@ -104,7 +104,10 @@ export async function PUT(request: Request) {
 
   const staffId = await getTeacherStaffId(user.id)
   if (!staffId) {
-    return NextResponse.json({ success: false, message: "Teacher profile not found" }, { status: 404 })
+    return NextResponse.json(
+      { success: false, message: "Teacher profile not found" },
+      { status: 404 },
+    )
   }
 
   const body = (await request.json()) as {
@@ -118,7 +121,10 @@ export async function PUT(request: Request) {
   const rawScore = body.score
 
   if (!submissionId) {
-    return NextResponse.json({ success: false, message: "Submission is required." }, { status: 400 })
+    return NextResponse.json(
+      { success: false, message: "Submission is required." },
+      { status: 400 },
+    )
   }
 
   const submission = await prisma.submission.findUnique({
@@ -141,9 +147,13 @@ export async function PUT(request: Request) {
     return NextResponse.json({ success: false, message: "Submission not found." }, { status: 404 })
   }
 
-  const score = rawScore === null || rawScore === undefined || rawScore === "" ? null : Number(rawScore)
+  const score =
+    rawScore === null || rawScore === undefined || rawScore === "" ? null : Number(rawScore)
 
-  if (score !== null && (!Number.isFinite(score) || score < 0 || score > submission.assessment.maxMarks)) {
+  if (
+    score !== null &&
+    (!Number.isFinite(score) || score < 0 || score > submission.assessment.maxMarks)
+  ) {
     return NextResponse.json(
       { success: false, message: `Score must be between 0 and ${submission.assessment.maxMarks}.` },
       { status: 400 },
@@ -183,5 +193,8 @@ export async function PUT(request: Request) {
     })
   })
 
-  return NextResponse.json({ success: true, message: `Updated grading for ${submission.assessment.title}.` })
+  return NextResponse.json({
+    success: true,
+    message: `Updated grading for ${submission.assessment.title}.`,
+  })
 }

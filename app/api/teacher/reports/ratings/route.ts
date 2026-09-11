@@ -8,7 +8,10 @@ export async function GET() {
     return NextResponse.json({ message: "Unauthorized" }, { status: 401 })
   }
 
-  const staff = await prisma.staffProfile.findUnique({ where: { userId: user.id }, select: { id: true } })
+  const staff = await prisma.staffProfile.findUnique({
+    where: { userId: user.id },
+    select: { id: true },
+  })
   if (!staff) {
     return NextResponse.json({ message: "Teacher profile not found" }, { status: 404 })
   }
@@ -30,7 +33,9 @@ export async function GET() {
 
   const rows = offerings.map((offering) => {
     const count = offering.ratings.length
-    const average = count ? offering.ratings.reduce((sum, row) => sum + row.rating, 0) / count : null
+    const average = count
+      ? offering.ratings.reduce((sum, row) => sum + row.rating, 0) / count
+      : null
 
     return {
       offeringId: offering.id,

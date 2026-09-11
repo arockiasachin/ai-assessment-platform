@@ -1,7 +1,12 @@
 "use client"
 
 import { Bar, BarChart, CartesianGrid, Cell, Line, LineChart, XAxis, YAxis } from "recharts"
-import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart"
+import {
+  ChartContainer,
+  ChartTooltip,
+  ChartTooltipContent,
+  type ChartConfig,
+} from "@/components/ui/chart"
 
 const percentConfig = {
   value: { label: "Average %", color: "var(--chart-1)" },
@@ -12,8 +17,24 @@ export function ClassAverageChart({ data }: { data: { label: string; value: numb
     <ChartContainer config={percentConfig} className="h-[260px] w-full">
       <BarChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
         <CartesianGrid vertical={false} strokeDasharray="3 3" />
-        <XAxis dataKey="label" tickLine={false} axisLine={false} tickMargin={8} fontSize={11} interval={0} angle={0} />
-        <YAxis domain={[0, 100]} ticks={[0, 25, 50, 75, 100]} tickLine={false} axisLine={false} tickMargin={8} fontSize={11} width={40} />
+        <XAxis
+          dataKey="label"
+          tickLine={false}
+          axisLine={false}
+          tickMargin={8}
+          fontSize={11}
+          interval={0}
+          angle={0}
+        />
+        <YAxis
+          domain={[0, 100]}
+          ticks={[0, 25, 50, 75, 100]}
+          tickLine={false}
+          axisLine={false}
+          tickMargin={8}
+          fontSize={11}
+          width={40}
+        />
         <ChartTooltip cursor={false} content={<ChartTooltipContent />} />
         <Bar dataKey="value" fill="var(--color-value)" radius={[6, 6, 0, 0]} maxBarSize={48} />
       </BarChart>
@@ -25,7 +46,13 @@ const distConfig = {
   count: { label: "Marks", color: "var(--chart-1)" },
 } satisfies ChartConfig
 
-const distColors = ["var(--chart-2)", "var(--chart-1)", "var(--chart-3)", "var(--chart-3)", "var(--chart-4)"]
+const distColors = [
+  "var(--chart-2)",
+  "var(--chart-1)",
+  "var(--chart-3)",
+  "var(--chart-3)",
+  "var(--chart-4)",
+]
 
 export function GradeDistributionChart({ data }: { data: { grade: string; count: number }[] }) {
   return (
@@ -33,7 +60,14 @@ export function GradeDistributionChart({ data }: { data: { grade: string; count:
       <BarChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
         <CartesianGrid vertical={false} strokeDasharray="3 3" />
         <XAxis dataKey="grade" tickLine={false} axisLine={false} tickMargin={8} fontSize={12} />
-        <YAxis allowDecimals={false} tickLine={false} axisLine={false} tickMargin={8} fontSize={11} width={32} />
+        <YAxis
+          allowDecimals={false}
+          tickLine={false}
+          axisLine={false}
+          tickMargin={8}
+          fontSize={11}
+          width={32}
+        />
         <ChartTooltip cursor={false} content={<ChartTooltipContent />} />
         <Bar dataKey="count" radius={[6, 6, 0, 0]} maxBarSize={64}>
           {data.map((entry, i) => (
@@ -61,8 +95,23 @@ export function TrendChart({
     <ChartContainer config={trendConfig} className="h-[260px] w-full">
       <LineChart data={data} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
         <CartesianGrid vertical={false} strokeDasharray="3 3" />
-        <XAxis dataKey="label" tickLine={false} axisLine={false} tickMargin={8} fontSize={11} interval={0} />
-        <YAxis domain={[0, 100]} ticks={[0, 25, 50, 75, 100]} tickLine={false} axisLine={false} tickMargin={8} fontSize={11} width={40} />
+        <XAxis
+          dataKey="label"
+          tickLine={false}
+          axisLine={false}
+          tickMargin={8}
+          fontSize={11}
+          interval={0}
+        />
+        <YAxis
+          domain={[0, 100]}
+          ticks={[0, 25, 50, 75, 100]}
+          tickLine={false}
+          axisLine={false}
+          tickMargin={8}
+          fontSize={11}
+          width={40}
+        />
         <ChartTooltip content={<ChartTooltipContent />} />
         {showAverage && (
           <Line

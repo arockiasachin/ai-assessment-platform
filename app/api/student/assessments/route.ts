@@ -59,7 +59,13 @@ export async function GET() {
       grades: { select: { studentId: true, marksObtained: true } },
       submissions: {
         where: { studentId: student.id },
-        select: { status: true, submittedAt: true, gradedAt: true, feedback: true, contentText: true },
+        select: {
+          status: true,
+          submittedAt: true,
+          gradedAt: true,
+          feedback: true,
+          contentText: true,
+        },
         take: 1,
       },
       quiz: {

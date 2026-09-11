@@ -66,7 +66,8 @@ export function AdminToolsPanel() {
         </CardHeader>
         <CardContent className="space-y-3">
           <p className="text-sm text-muted-foreground">
-            Recreate and normalize the development identities, classes, assessments, and support records.
+            Recreate and normalize the development identities, classes, assessments, and support
+            records.
           </p>
           <Button onClick={runSeed} disabled={seedState.loading}>
             {seedState.loading ? "Seeding..." : "Run seed"}
@@ -87,8 +88,12 @@ export function AdminToolsPanel() {
           <Button variant="outline" onClick={runRebalance} disabled={rebalanceState.loading}>
             {rebalanceState.loading ? "Rebalancing..." : "Run rebalance"}
           </Button>
-          {rebalanceState.message && <p className="text-sm text-emerald-700">{rebalanceState.message}</p>}
-          {rebalanceState.error && <p className="text-sm text-destructive">{rebalanceState.error}</p>}
+          {rebalanceState.message && (
+            <p className="text-sm text-emerald-700">{rebalanceState.message}</p>
+          )}
+          {rebalanceState.error && (
+            <p className="text-sm text-destructive">{rebalanceState.error}</p>
+          )}
         </CardContent>
       </Card>
     </div>

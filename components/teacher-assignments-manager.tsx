@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useMemo, useState } from "react"
 import { BookOpenCheck, FileUp, ListChecks, PlusCircle, Sparkles } from "lucide-react"
 import { useGradebook } from "@/components/gradebook-provider"
 import { Button } from "@/components/ui/button"
@@ -8,7 +8,13 @@ import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { TeacherSubmissionsManager } from "@/components/teacher-submissions-manager"
 
 type QuizImportResponse = {
@@ -47,16 +53,18 @@ export function TeacherAssignmentsManager() {
   const [message, setMessage] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
-  useEffect(() => {
-    if (!courseId && courses.length > 0) {
-      setCourseId(courses[0].id)
-    }
-  }, [courseId, courses])
+  // Derive the effective course rather than syncing it into state via an effect.
+  const selectedCourseId = courseId || courses[0]?.id || ""
 
   const canCreateAssignment = useMemo(() => {
     const max = Number(assignmentMaxMarks)
-    return Boolean(assignmentTitle.trim()) && Boolean(courseId) && Number.isFinite(max) && max > 0
-  }, [assignmentMaxMarks, assignmentTitle, courseId])
+    return (
+      Boolean(assignmentTitle.trim()) &&
+      Boolean(selectedCourseId) &&
+      Number.isFinite(max) &&
+      max > 0
+    )
+  }, [assignmentMaxMarks, assignmentTitle, selectedCourseId])
 
   const importedQuestionCount = useMemo(() => {
     if (!quizPayload?.questions) return 0
@@ -76,7 +84,7 @@ export function TeacherAssignmentsManager() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           title: assignmentTitle.trim(),
-          courseId,
+          courseId: selectedCourseId,
           type: "Assignment",
           date: assignmentDate,
           maxMarks: Number(assignmentMaxMarks),
@@ -161,12 +169,19 @@ export function TeacherAssignmentsManager() {
       <Card className="border-primary/20 bg-gradient-to-br from-primary/10 via-background to-background shadow-sm">
         <CardContent className="flex flex-col gap-3 pt-6 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <Badge variant="outline" className="mb-2 w-fit gap-1.5 border-primary/30 bg-background/70 text-primary">
+            <Badge
+              variant="outline"
+              className="mb-2 w-fit gap-1.5 border-primary/30 bg-background/70 text-primary"
+            >
               <Sparkles className="size-3.5" />
               Assessment studio
             </Badge>
-            <p className="text-sm font-semibold">Create assignments and import quiz packs from JSON</p>
-            <p className="text-xs text-muted-foreground">Everything you publish here is scoped to your teacher-owned offerings.</p>
+            <p className="text-sm font-semibold">
+              Create assignments and import quiz packs from JSON
+            </p>
+            <p className="text-xs text-muted-foreground">
+              Everything you publish here is scoped to your teacher-owned offerings.
+            </p>
           </div>
           <Badge variant="secondary" className="w-fit">
             {courses.length} available courses
@@ -174,8 +189,16 @@ export function TeacherAssignmentsManager() {
         </CardContent>
       </Card>
 
-      {message && <p className="rounded-md border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-700">{message}</p>}
-      {error && <p className="rounded-md border border-destructive/60 bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</p>}
+      {message && (
+        <p className="rounded-md border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-700">
+          {message}
+        </p>
+      )}
+      {error && (
+        <p className="rounded-md border border-destructive/60 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+          {error}
+        </p>
+      )}
 
       <Card className="border-border/70 shadow-sm">
         <CardHeader>
@@ -183,7 +206,9 @@ export function TeacherAssignmentsManager() {
             <BookOpenCheck className="size-4 text-primary" />
             Create assignment
           </CardTitle>
-          <p className="text-sm text-muted-foreground">Create a standard assignment for a selected course.</p>
+          <p className="text-sm text-muted-foreground">
+            Create a standard assignment for a selected course.
+          </p>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid gap-4 sm:grid-cols-2">
@@ -199,7 +224,7 @@ export function TeacherAssignmentsManager() {
 
             <div className="grid gap-2">
               <Label>Course</Label>
-              <Select value={courseId} onValueChange={(value) => setCourseId(value ?? "")}>
+              <Select value={selectedCourseId} onValueChange={(value) => setCourseId(value ?? "")}>
                 <SelectTrigger>
                   <SelectValue placeholder="Select course" />
                 </SelectTrigger>
@@ -235,7 +260,11 @@ export function TeacherAssignmentsManager() {
             </div>
           </div>
 
-          <Button type="button" onClick={createAssignment} disabled={!canCreateAssignment || isSavingAssignment}>
+          <Button
+            type="button"
+            onClick={createAssignment}
+            disabled={!canCreateAssignment || isSavingAssignment}
+          >
             <PlusCircle className="size-4" />
             {isSavingAssignment ? "Creating..." : "Create assignment"}
           </Button>
@@ -264,11 +293,22 @@ export function TeacherAssignmentsManager() {
           </div>
 
           <div className="rounded-md border border-border bg-muted/20 px-3 py-2 text-sm text-muted-foreground">
-            <p>File: <span className="font-medium text-foreground">{quizFileName || "None selected"}</span></p>
-            <p>Detected questions: <span className="font-medium text-foreground">{importedQuestionCount}</span></p>
+            <p>
+              File:{" "}
+              <span className="font-medium text-foreground">{quizFileName || "None selected"}</span>
+            </p>
+            <p>
+              Detected questions:{" "}
+              <span className="font-medium text-foreground">{importedQuestionCount}</span>
+            </p>
           </div>
 
-          <Button type="button" variant="secondary" onClick={importQuizFromJson} disabled={!quizPayload || isImportingQuiz}>
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={importQuizFromJson}
+            disabled={!quizPayload || isImportingQuiz}
+          >
             <FileUp className="size-4" />
             {isImportingQuiz ? "Importing..." : "Create quiz from JSON"}
           </Button>

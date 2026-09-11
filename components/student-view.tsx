@@ -9,7 +9,13 @@ import { UpcomingEventsPanel } from "@/components/upcoming-events-panel"
 import { useGradebook } from "@/components/gradebook-provider"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { assessmentAverage, filterAssessments, scorePct } from "@/lib/analytics"
 import { formatDate, initials, letterGrade, round } from "@/lib/gradebook"
 
@@ -27,7 +33,10 @@ export function StudentView() {
     setCourseFilter,
   } = useGradebook()
 
-  const filtered = useMemo(() => filterAssessments(assessments, courseFilter), [assessments, courseFilter])
+  const filtered = useMemo(
+    () => filterAssessments(assessments, courseFilter),
+    [assessments, courseFilter],
+  )
   const student = students.find((s) => s.id === selectedStudentId) ?? students[0] ?? null
 
   const assessmentStats = useMemo(
@@ -41,11 +50,16 @@ export function StudentView() {
   )
 
   const classAvg = useMemo(() => {
-    const vals = assessmentStats.map((entry) => entry.average).filter((v): v is number => v !== null)
+    const vals = assessmentStats
+      .map((entry) => entry.average)
+      .filter((v): v is number => v !== null)
     return vals.length ? vals.reduce((sum, value) => sum + value, 0) / vals.length : null
   }, [assessmentStats])
 
-  const graded = useMemo(() => assessmentStats.filter((entry) => entry.pct !== null), [assessmentStats])
+  const graded = useMemo(
+    () => assessmentStats.filter((entry) => entry.pct !== null),
+    [assessmentStats],
+  )
 
   const overall = useMemo(() => {
     const vals = graded.map((entry) => entry.pct).filter((v): v is number => v !== null)
@@ -106,7 +120,10 @@ export function StudentView() {
           </div>
 
           <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
-            <Select value={student.id} onValueChange={(value) => value && setSelectedStudentId(value)}>
+            <Select
+              value={student.id}
+              onValueChange={(value) => value && setSelectedStudentId(value)}
+            >
               <SelectTrigger className="sm:w-52">
                 <SelectValue placeholder="Select student" />
               </SelectTrigger>
@@ -180,7 +197,9 @@ export function StudentView() {
               {trendData.length ? (
                 <TrendChart data={trendData} showAverage />
               ) : (
-                <p className="py-10 text-center text-sm text-muted-foreground">No assessments to show.</p>
+                <p className="py-10 text-center text-sm text-muted-foreground">
+                  No assessments to show.
+                </p>
               )}
             </CardContent>
           </Card>
@@ -193,11 +212,15 @@ export function StudentView() {
               {assessmentStats.map((entry) => {
                 const raw = marks[`${student.id}:${entry.assessment.id}`]
                 return (
-                  <li key={entry.assessment.id} className="flex items-center justify-between gap-4 px-5 py-3">
+                  <li
+                    key={entry.assessment.id}
+                    className="flex items-center justify-between gap-4 px-5 py-3"
+                  >
                     <div className="min-w-0">
                       <p className="truncate font-medium">{entry.assessment.title}</p>
                       <p className="text-xs text-muted-foreground">
-                        {entry.assessment.courseName} · {entry.assessment.type} · {formatDate(entry.assessment.date)}
+                        {entry.assessment.courseName} · {entry.assessment.type} ·{" "}
+                        {formatDate(entry.assessment.date)}
                       </p>
                     </div>
                     <div className="flex items-center gap-3 text-right">
@@ -210,7 +233,9 @@ export function StudentView() {
                 )
               })}
               {filtered.length === 0 && (
-                <li className="px-5 py-10 text-center text-sm text-muted-foreground">No assessments to show.</li>
+                <li className="px-5 py-10 text-center text-sm text-muted-foreground">
+                  No assessments to show.
+                </li>
               )}
             </ul>
           </Card>

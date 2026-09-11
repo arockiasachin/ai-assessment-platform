@@ -14,7 +14,11 @@ function getSessionState(cookieValue: string | undefined): SessionState {
   if (!cookieValue) return { role: null, isValid: false }
 
   try {
-    const parsed = JSON.parse(cookieValue) as { role?: string; user?: { role?: string }; expiresAt?: number }
+    const parsed = JSON.parse(cookieValue) as {
+      role?: string
+      user?: { role?: string }
+      expiresAt?: number
+    }
     const role = parsed.user?.role ?? parsed.role
     const expiresAt = parsed.expiresAt
 

@@ -1,7 +1,7 @@
-import { NextResponse } from "next/server";
-import bcrypt from "bcryptjs";
-import { prisma } from "@/lib/prisma";
-import { createSessionResponse } from "@/lib/auth";
+import { NextResponse } from "next/server"
+import bcrypt from "bcryptjs"
+import { prisma } from "@/lib/prisma"
+import { createSessionResponse } from "@/lib/auth"
 
 function toAuthRole(dbRole: "ADMIN" | "TEACHER" | "STUDENT") {
   if (dbRole === "ADMIN") return "admin" as const
@@ -20,36 +20,33 @@ function nameFromEmail(email: string) {
 
 export async function POST(request: Request) {
   try {
-    const { email, password, role } = await request.json();
+    const { email, password, role } = await request.json()
 
     if (!email || !password) {
       return NextResponse.json(
         { success: false, message: "Email and password are required." },
-        { status: 400 }
-      );
+        { status: 400 },
+      )
     }
 
-    const normalizedEmail = String(email).trim().toLowerCase();
+    const normalizedEmail = String(email).trim().toLowerCase()
 
     if (normalizedEmail === "admin" || role === "admin") {
       return NextResponse.json(
         { success: false, message: "The admin account is reserved." },
-        { status: 403 }
-      );
+        { status: 403 },
+      )
     }
 
-    const existingUser = await prisma.user.findUnique({ where: { email: normalizedEmail } });
+    const existingUser = await prisma.user.findUnique({ where: { email: normalizedEmail } })
 
     if (existingUser) {
-      return NextResponse.json(
-        { success: false, message: "User already exists." },
-        { status: 409 }
-      );
+      return NextResponse.json({ success: false, message: "User already exists." }, { status: 409 })
     }
 
-    const hashedPassword = await bcrypt.hash(password, 10);
+    const hashedPassword = await bcrypt.hash(password, 10)
 
-    const normalizedRole = role === "teacher" ? "TEACHER" : "STUDENT";
+    const normalizedRole = role === "teacher" ? "TEACHER" : "STUDENT"
 
     const user = await prisma.user.create({
       data: {
@@ -57,7 +54,7 @@ export async function POST(request: Request) {
         passwordHash: hashedPassword,
         role: normalizedRole,
       },
-    });
+    })
 
     if (normalizedRole === "TEACHER") {
       await prisma.staffProfile.create({
@@ -81,12 +78,9 @@ export async function POST(request: Request) {
       id: user.id,
       email: user.email,
       role: toAuthRole(user.role),
-    });
+    })
   } catch (error) {
-    console.error("Registration error:", error);
-    return NextResponse.json(
-      { success: false, message: "Server error." },
-      { status: 500 }
-    );
+    console.error("Registration error:", error)
+    return NextResponse.json({ success: false, message: "Server error." }, { status: 500 })
   }
 }

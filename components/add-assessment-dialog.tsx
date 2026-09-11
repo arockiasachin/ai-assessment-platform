@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useState } from "react"
 import { Plus } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
@@ -14,7 +14,13 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { useGradebook } from "@/components/gradebook-provider"
 import { type AssessmentType } from "@/lib/gradebook"
 
@@ -37,16 +43,13 @@ export function AddAssessmentDialog() {
     setMaxMarks("50")
   }
 
-  useEffect(() => {
-    if (!courseId && courses.length) {
-      setCourseId(courses[0].id)
-    }
-  }, [courseId, courses])
+  // Derive the effective course rather than syncing it into state via an effect.
+  const selectedCourseId = courseId || courses[0]?.id || ""
 
   const submit = () => {
     const max = Number(maxMarks)
-    if (!title.trim() || !courseId || !Number.isFinite(max) || max <= 0) return
-    addAssessment({ title: title.trim(), courseId, type, date, maxMarks: max })
+    if (!title.trim() || !selectedCourseId || !Number.isFinite(max) || max <= 0) return
+    addAssessment({ title: title.trim(), courseId: selectedCourseId, type, date, maxMarks: max })
     reset()
     setOpen(false)
   }
@@ -82,7 +85,7 @@ export function AddAssessmentDialog() {
           <div className="grid grid-cols-2 gap-3">
             <div className="grid gap-2">
               <Label>Course</Label>
-              <Select value={courseId} onValueChange={(value) => setCourseId(value ?? "")}>
+              <Select value={selectedCourseId} onValueChange={(value) => setCourseId(value ?? "")}>
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
@@ -132,7 +135,7 @@ export function AddAssessmentDialog() {
           <Button variant="outline" onClick={() => setOpen(false)}>
             Cancel
           </Button>
-          <Button onClick={submit} disabled={!title.trim() || !courseId}>
+          <Button onClick={submit} disabled={!title.trim() || !selectedCourseId}>
             Add assessment
           </Button>
         </DialogFooter>

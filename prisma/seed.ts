@@ -286,12 +286,37 @@ async function main() {
   const studentSeeds = [
     { name: "Ava Thompson", email: "ava.t@school.edu", reg: "REG-1001", stream: streamScience.id },
     { name: "Liam Chen", email: "liam.c@school.edu", reg: "REG-1002", stream: streamScience.id },
-    { name: "Sofia Martinez", email: "sofia.m@school.edu", reg: "REG-1003", stream: streamHumanities.id },
+    {
+      name: "Sofia Martinez",
+      email: "sofia.m@school.edu",
+      reg: "REG-1003",
+      stream: streamHumanities.id,
+    },
     { name: "Noah Patel", email: "noah.p@school.edu", reg: "REG-1004", stream: streamScience.id },
-    { name: "Mia Johnson", email: "mia.j@school.edu", reg: "REG-1005", stream: streamHumanities.id },
-    { name: "Ethan Williams", email: "ethan.w@school.edu", reg: "REG-1006", stream: streamScience.id },
-    { name: "Isabella Rossi", email: "bella.r@school.edu", reg: "REG-1007", stream: streamHumanities.id },
-    { name: "Lucas Nguyen", email: "lucas.n@school.edu", reg: "REG-1008", stream: streamScience.id },
+    {
+      name: "Mia Johnson",
+      email: "mia.j@school.edu",
+      reg: "REG-1005",
+      stream: streamHumanities.id,
+    },
+    {
+      name: "Ethan Williams",
+      email: "ethan.w@school.edu",
+      reg: "REG-1006",
+      stream: streamScience.id,
+    },
+    {
+      name: "Isabella Rossi",
+      email: "bella.r@school.edu",
+      reg: "REG-1007",
+      stream: streamHumanities.id,
+    },
+    {
+      name: "Lucas Nguyen",
+      email: "lucas.n@school.edu",
+      reg: "REG-1008",
+      stream: streamScience.id,
+    },
   ]
 
   const students: Array<{ id: string; name: string; reg: string; streamId: string }> = []
@@ -314,7 +339,12 @@ async function main() {
     })
 
     const profile = user.studentProfile!
-    students.push({ id: profile.id, name: profile.fullName, reg: profile.registerNumber, streamId: seed.stream })
+    students.push({
+      id: profile.id,
+      name: profile.fullName,
+      reg: profile.registerNumber,
+      streamId: seed.stream,
+    })
 
     await prisma.studentStream.create({
       data: {
@@ -368,25 +398,154 @@ async function main() {
   }
 
   const assessmentsSeed = [
-    { title: "Algebra Basics", type: "QUIZ", date: "2026-01-14", maxMarks: 20, offering: offeringMathA, course: courseMath, teacherId: teacherA.staffProfile!.id },
-    { title: "Cell Biology Write-up", type: "ASSIGNMENT", date: "2026-01-21", maxMarks: 50, offering: offeringScienceA, course: courseScience, teacherId: teacherA.staffProfile!.id },
-    { title: "Essay: The Great Gatsby", type: "ASSIGNMENT", date: "2026-01-28", maxMarks: 40, offering: offeringEnglishA, course: courseEnglish, teacherId: teacherB.staffProfile!.id },
-    { title: "World War I Quiz", type: "QUIZ", date: "2026-02-04", maxMarks: 50, offering: offeringHistoryB, course: courseHistory, teacherId: teacherB.staffProfile!.id },
-    { title: "Quadratic Practice", type: "ASSIGNMENT", date: "2026-02-11", maxMarks: 50, offering: offeringMathA, course: courseMath, teacherId: teacherA.staffProfile!.id },
-    { title: "Chemical Reactions", type: "QUIZ", date: "2026-02-18", maxMarks: 20, offering: offeringScienceA, course: courseScience, teacherId: teacherA.staffProfile!.id },
-    { title: "Poetry Analysis", type: "ASSIGNMENT", date: "2026-02-25", maxMarks: 60, offering: offeringEnglishA, course: courseEnglish, teacherId: teacherB.staffProfile!.id },
-    { title: "Geometry Quiz", type: "QUIZ", date: "2026-03-04", maxMarks: 100, offering: offeringMathA, course: courseMath, teacherId: teacherA.staffProfile!.id },
-    { title: "Cold War Reflection", type: "ASSIGNMENT", date: "2026-03-11", maxMarks: 40, offering: offeringHistoryB, course: courseHistory, teacherId: teacherB.staffProfile!.id },
-    { title: "Forces and Motion", type: "QUIZ", date: "2026-03-18", maxMarks: 100, offering: offeringScienceA, course: courseScience, teacherId: teacherA.staffProfile!.id },
-    { title: "Algebra Sprint", type: "QUIZ", date: "2026-04-05", maxMarks: 30, offering: offeringMathDev, course: courseMath, teacherId: devTeacher.staffProfile!.id },
-    { title: "Algebra Worksheet", type: "ASSIGNMENT", date: "2026-04-12", maxMarks: 40, offering: offeringMathDev, course: courseMath, teacherId: devTeacher.staffProfile!.id },
-    { title: "Math Reflection", type: "ASSIGNMENT", date: "2026-04-19", maxMarks: 25, offering: offeringMathDev, course: courseMath, teacherId: devTeacher.staffProfile!.id },
-    { title: "Science Quiz 1", type: "QUIZ", date: "2026-04-08", maxMarks: 25, offering: offeringScienceDev, course: courseScience, teacherId: devTeacher.staffProfile!.id },
-    { title: "Lab Notebook", type: "ASSIGNMENT", date: "2026-04-15", maxMarks: 35, offering: offeringScienceDev, course: courseScience, teacherId: devTeacher.staffProfile!.id },
-    { title: "Science Quiz 2", type: "QUIZ", date: "2026-04-22", maxMarks: 25, offering: offeringScienceDev, course: courseScience, teacherId: devTeacher.staffProfile!.id },
+    {
+      title: "Algebra Basics",
+      type: "QUIZ",
+      date: "2026-01-14",
+      maxMarks: 20,
+      offering: offeringMathA,
+      course: courseMath,
+      teacherId: teacherA.staffProfile!.id,
+    },
+    {
+      title: "Cell Biology Write-up",
+      type: "ASSIGNMENT",
+      date: "2026-01-21",
+      maxMarks: 50,
+      offering: offeringScienceA,
+      course: courseScience,
+      teacherId: teacherA.staffProfile!.id,
+    },
+    {
+      title: "Essay: The Great Gatsby",
+      type: "ASSIGNMENT",
+      date: "2026-01-28",
+      maxMarks: 40,
+      offering: offeringEnglishA,
+      course: courseEnglish,
+      teacherId: teacherB.staffProfile!.id,
+    },
+    {
+      title: "World War I Quiz",
+      type: "QUIZ",
+      date: "2026-02-04",
+      maxMarks: 50,
+      offering: offeringHistoryB,
+      course: courseHistory,
+      teacherId: teacherB.staffProfile!.id,
+    },
+    {
+      title: "Quadratic Practice",
+      type: "ASSIGNMENT",
+      date: "2026-02-11",
+      maxMarks: 50,
+      offering: offeringMathA,
+      course: courseMath,
+      teacherId: teacherA.staffProfile!.id,
+    },
+    {
+      title: "Chemical Reactions",
+      type: "QUIZ",
+      date: "2026-02-18",
+      maxMarks: 20,
+      offering: offeringScienceA,
+      course: courseScience,
+      teacherId: teacherA.staffProfile!.id,
+    },
+    {
+      title: "Poetry Analysis",
+      type: "ASSIGNMENT",
+      date: "2026-02-25",
+      maxMarks: 60,
+      offering: offeringEnglishA,
+      course: courseEnglish,
+      teacherId: teacherB.staffProfile!.id,
+    },
+    {
+      title: "Geometry Quiz",
+      type: "QUIZ",
+      date: "2026-03-04",
+      maxMarks: 100,
+      offering: offeringMathA,
+      course: courseMath,
+      teacherId: teacherA.staffProfile!.id,
+    },
+    {
+      title: "Cold War Reflection",
+      type: "ASSIGNMENT",
+      date: "2026-03-11",
+      maxMarks: 40,
+      offering: offeringHistoryB,
+      course: courseHistory,
+      teacherId: teacherB.staffProfile!.id,
+    },
+    {
+      title: "Forces and Motion",
+      type: "QUIZ",
+      date: "2026-03-18",
+      maxMarks: 100,
+      offering: offeringScienceA,
+      course: courseScience,
+      teacherId: teacherA.staffProfile!.id,
+    },
+    {
+      title: "Algebra Sprint",
+      type: "QUIZ",
+      date: "2026-04-05",
+      maxMarks: 30,
+      offering: offeringMathDev,
+      course: courseMath,
+      teacherId: devTeacher.staffProfile!.id,
+    },
+    {
+      title: "Algebra Worksheet",
+      type: "ASSIGNMENT",
+      date: "2026-04-12",
+      maxMarks: 40,
+      offering: offeringMathDev,
+      course: courseMath,
+      teacherId: devTeacher.staffProfile!.id,
+    },
+    {
+      title: "Math Reflection",
+      type: "ASSIGNMENT",
+      date: "2026-04-19",
+      maxMarks: 25,
+      offering: offeringMathDev,
+      course: courseMath,
+      teacherId: devTeacher.staffProfile!.id,
+    },
+    {
+      title: "Science Quiz 1",
+      type: "QUIZ",
+      date: "2026-04-08",
+      maxMarks: 25,
+      offering: offeringScienceDev,
+      course: courseScience,
+      teacherId: devTeacher.staffProfile!.id,
+    },
+    {
+      title: "Lab Notebook",
+      type: "ASSIGNMENT",
+      date: "2026-04-15",
+      maxMarks: 35,
+      offering: offeringScienceDev,
+      course: courseScience,
+      teacherId: devTeacher.staffProfile!.id,
+    },
+    {
+      title: "Science Quiz 2",
+      type: "QUIZ",
+      date: "2026-04-22",
+      maxMarks: 25,
+      offering: offeringScienceDev,
+      course: courseScience,
+      teacherId: devTeacher.staffProfile!.id,
+    },
   ] as const
 
-  const createdAssessments: Array<{ id: string; maxMarks: number; type: "QUIZ" | "ASSIGNMENT" }> = []
+  const createdAssessments: Array<{ id: string; maxMarks: number; type: "QUIZ" | "ASSIGNMENT" }> =
+    []
 
   for (const a of assessmentsSeed) {
     const created = await prisma.assessment.create({
@@ -402,7 +561,11 @@ async function main() {
         noSqlRefId: `mongo:assessments/${a.title.toLowerCase().replace(/\s+/g, "-")}`,
       },
     })
-    createdAssessments.push({ id: created.id, maxMarks: created.maxMarks, type: created.type as "QUIZ" | "ASSIGNMENT" })
+    createdAssessments.push({
+      id: created.id,
+      maxMarks: created.maxMarks,
+      type: created.type as "QUIZ" | "ASSIGNMENT",
+    })
   }
 
   const tendency: Record<string, number> = {
@@ -490,12 +653,7 @@ async function main() {
           quizId: quiz.id,
           order: i + 1,
           prompt: `Question ${i + 1} for ${qa.title}`,
-          optionsJson: [
-            "Option A",
-            "Option B",
-            "Option C",
-            "Option D",
-          ],
+          optionsJson: ["Option A", "Option B", "Option C", "Option D"],
           correctIndex: i % 4,
         },
       })

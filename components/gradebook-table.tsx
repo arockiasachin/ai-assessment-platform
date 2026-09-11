@@ -8,7 +8,13 @@ import { studentAverage } from "@/lib/analytics"
 import { initials, markKey, type Assessment } from "@/lib/gradebook"
 import { cn } from "@/lib/utils"
 
-function EditableMarkCell({ studentId, assessment }: { studentId: string; assessment: Assessment }) {
+function EditableMarkCell({
+  studentId,
+  assessment,
+}: {
+  studentId: string
+  assessment: Assessment
+}) {
   const { marks, setMark } = useGradebook()
   const raw = marks[markKey(studentId, assessment.id)]
   const pct = raw === undefined ? null : (raw / assessment.maxMarks) * 100
@@ -85,8 +91,14 @@ export function GradebookTable({ assessments }: { assessments: Assessment[] }) {
               Student
             </th>
             {assessments.map((a) => (
-              <th key={a.id} className="min-w-[112px] px-2 py-3 text-center align-bottom font-medium">
-                <span className="block max-w-[120px] truncate text-xs font-semibold text-foreground" title={a.title}>
+              <th
+                key={a.id}
+                className="min-w-[112px] px-2 py-3 text-center align-bottom font-medium"
+              >
+                <span
+                  className="block max-w-[120px] truncate text-xs font-semibold text-foreground"
+                  title={a.title}
+                >
                   {a.title}
                 </span>
                 <span className="mt-0.5 block text-[10px] font-normal text-muted-foreground">
@@ -94,7 +106,9 @@ export function GradebookTable({ assessments }: { assessments: Assessment[] }) {
                 </span>
               </th>
             ))}
-            <th className="min-w-[96px] px-3 py-3 text-center font-medium text-muted-foreground">Average</th>
+            <th className="min-w-[96px] px-3 py-3 text-center font-medium text-muted-foreground">
+              Average
+            </th>
           </tr>
         </thead>
         <tbody>
@@ -103,7 +117,10 @@ export function GradebookTable({ assessments }: { assessments: Assessment[] }) {
             return (
               <tr
                 key={student.id}
-                className={cn("border-b border-border/60 last:border-0", i % 2 === 1 && "bg-muted/25")}
+                className={cn(
+                  "border-b border-border/60 last:border-0",
+                  i % 2 === 1 && "bg-muted/25",
+                )}
               >
                 <td className="sticky left-0 z-10 bg-inherit px-4 py-2.5">
                   <div className="flex items-center gap-3">
@@ -114,7 +131,9 @@ export function GradebookTable({ assessments }: { assessments: Assessment[] }) {
                     </Avatar>
                     <div className="min-w-0">
                       <p className="truncate font-medium leading-none">{student.name}</p>
-                      <p className="mt-0.5 truncate text-xs text-muted-foreground">{student.email}</p>
+                      <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                        {student.email}
+                      </p>
                     </div>
                   </div>
                 </td>
@@ -131,7 +150,10 @@ export function GradebookTable({ assessments }: { assessments: Assessment[] }) {
           })}
           {filteredStudents.length === 0 && (
             <tr>
-              <td colSpan={assessments.length + 2} className="px-4 py-10 text-center text-sm text-muted-foreground">
+              <td
+                colSpan={assessments.length + 2}
+                className="px-4 py-10 text-center text-sm text-muted-foreground"
+              >
                 No students match &ldquo;{search}&rdquo;.
               </td>
             </tr>

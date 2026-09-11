@@ -39,7 +39,9 @@ export default async function AdminOfferingsPage() {
                     <p>{offering.teacherName}</p>
                     <p className="text-xs text-muted-foreground">{offering.teacherEmpId}</p>
                   </td>
-                  <td className="px-3 py-2">{offering.term} {offering.academicYear}</td>
+                  <td className="px-3 py-2">
+                    {offering.term} {offering.academicYear}
+                  </td>
                   <td className="px-3 py-2">{offering.capacity}</td>
                   <td className="px-3 py-2">{offering.enrolled}</td>
                   <td className="px-3 py-2">{offering.assessments}</td>

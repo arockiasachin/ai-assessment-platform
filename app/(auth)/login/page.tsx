@@ -33,7 +33,12 @@ export default function LoginPage() {
         return
       }
 
-      const destination = data.user.role === "admin" ? "/admin" : data.user.role === "teacher" ? "/teacher" : "/student"
+      const destination =
+        data.user.role === "admin"
+          ? "/admin"
+          : data.user.role === "teacher"
+            ? "/teacher"
+            : "/student"
       window.location.assign(destination)
     } catch {
       setError("Unable to reach the authentication server.")
@@ -49,8 +54,11 @@ export default function LoginPage() {
       footer={
         <>
           <p className="text-sm text-muted-foreground">
-            Don’t have an account yet?{' '}
-            <Link href="/register" className="font-medium text-primary underline-offset-4 hover:underline">
+            Don’t have an account yet?{" "}
+            <Link
+              href="/register"
+              className="font-medium text-primary underline-offset-4 hover:underline"
+            >
               Create one
             </Link>
           </p>

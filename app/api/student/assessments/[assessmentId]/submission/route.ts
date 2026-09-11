@@ -4,7 +4,10 @@ import { prisma } from "@/lib/prisma"
 
 type SubmitAction = "saveDraft" | "submit" | "resubmit"
 
-export async function POST(request: Request, { params }: { params: Promise<{ assessmentId: string }> }) {
+export async function POST(
+  request: Request,
+  { params }: { params: Promise<{ assessmentId: string }> },
+) {
   const user = await getSessionUser()
   if (!user || user.role !== "student") {
     return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 })
@@ -16,7 +19,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ ass
   })
 
   if (!student) {
-    return NextResponse.json({ success: false, message: "Student profile not found" }, { status: 404 })
+    return NextResponse.json(
+      { success: false, message: "Student profile not found" },
+      { status: 404 },
+    )
   }
 
   const { assessmentId } = await params
@@ -26,15 +32,24 @@ export async function POST(request: Request, { params }: { params: Promise<{ ass
   const action = body.action ?? "submit"
 
   if (!assessmentId) {
-    return NextResponse.json({ success: false, message: "Assessment is required." }, { status: 400 })
+    return NextResponse.json(
+      { success: false, message: "Assessment is required." },
+      { status: 400 },
+    )
   }
 
   if (contentText.length > 4000) {
-    return NextResponse.json({ success: false, message: "Submission content must be 4000 characters or fewer." }, { status: 400 })
+    return NextResponse.json(
+      { success: false, message: "Submission content must be 4000 characters or fewer." },
+      { status: 400 },
+    )
   }
 
   if (action !== "saveDraft" && !contentText.length) {
-    return NextResponse.json({ success: false, message: "Add submission content before submitting." }, { status: 400 })
+    return NextResponse.json(
+      { success: false, message: "Add submission content before submitting." },
+      { status: 400 },
+    )
   }
 
   const assessment = await prisma.assessment.findUnique({
@@ -61,11 +76,17 @@ export async function POST(request: Request, { params }: { params: Promise<{ ass
   }
 
   if (assessment.type !== "ASSIGNMENT") {
-    return NextResponse.json({ success: false, message: "Only assignments support submissions." }, { status: 409 })
+    return NextResponse.json(
+      { success: false, message: "Only assignments support submissions." },
+      { status: 409 },
+    )
   }
 
   if (assessment.offering.enrollments.length === 0) {
-    return NextResponse.json({ success: false, message: "You are not enrolled in this assessment offering." }, { status: 403 })
+    return NextResponse.json(
+      { success: false, message: "You are not enrolled in this assessment offering." },
+      { status: 403 },
+    )
   }
 
   const now = new Date()
@@ -101,6 +122,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ ass
 
   return NextResponse.json({
     success: true,
-    message: action === "saveDraft" ? "Draft saved." : `Submission recorded for ${assessment.title}.`,
+    message:
+      action === "saveDraft" ? "Draft saved." : `Submission recorded for ${assessment.title}.`,
   })
 }

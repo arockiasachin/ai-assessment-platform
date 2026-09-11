@@ -44,7 +44,9 @@ export function AdminDatasetsView({ datasets }: { datasets: Dataset[] }) {
             onClick={() => setView("table")}
             className={
               "rounded-md px-3 py-1.5 text-sm font-medium transition-colors " +
-              (view === "table" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground")
+              (view === "table"
+                ? "bg-background text-foreground shadow-sm"
+                : "text-muted-foreground hover:text-foreground")
             }
           >
             Table view
@@ -54,7 +56,9 @@ export function AdminDatasetsView({ datasets }: { datasets: Dataset[] }) {
             onClick={() => setView("json")}
             className={
               "rounded-md px-3 py-1.5 text-sm font-medium transition-colors " +
-              (view === "json" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground")
+              (view === "json"
+                ? "bg-background text-foreground shadow-sm"
+                : "text-muted-foreground hover:text-foreground")
             }
           >
             JSON view
@@ -64,9 +68,14 @@ export function AdminDatasetsView({ datasets }: { datasets: Dataset[] }) {
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {prepared.map((dataset) => (
-          <section key={dataset.name} className="rounded-2xl border border-border bg-card p-4 shadow-sm">
+          <section
+            key={dataset.name}
+            className="rounded-2xl border border-border bg-card p-4 shadow-sm"
+          >
             <div className="mb-3 flex items-center justify-between gap-3">
-              <h3 className="text-sm font-semibold uppercase tracking-[0.12em] text-muted-foreground">{dataset.name}</h3>
+              <h3 className="text-sm font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                {dataset.name}
+              </h3>
               <span className="rounded-md border border-border bg-muted/50 px-2 py-0.5 text-xs font-medium">
                 {dataset.count} rows
               </span>
@@ -77,14 +86,19 @@ export function AdminDatasetsView({ datasets }: { datasets: Dataset[] }) {
                 {JSON.stringify(dataset.rows, null, 2)}
               </pre>
             ) : dataset.rows.length === 0 ? (
-              <p className="rounded-lg bg-muted/25 p-3 text-xs text-muted-foreground">No rows found.</p>
+              <p className="rounded-lg bg-muted/25 p-3 text-xs text-muted-foreground">
+                No rows found.
+              </p>
             ) : (
               <div className="max-h-64 overflow-auto rounded-lg border border-border">
                 <table className="min-w-full divide-y divide-border text-xs">
                   <thead className="bg-muted/40">
                     <tr>
                       {dataset.columns.map((col) => (
-                        <th key={col} className="px-2 py-2 text-left font-medium text-muted-foreground">
+                        <th
+                          key={col}
+                          className="px-2 py-2 text-left font-medium text-muted-foreground"
+                        >
                           {col}
                         </th>
                       ))}
@@ -92,9 +106,16 @@ export function AdminDatasetsView({ datasets }: { datasets: Dataset[] }) {
                   </thead>
                   <tbody className="divide-y divide-border">
                     {dataset.rows.map((row, idx) => (
-                      <tr key={`${dataset.name}-${idx}`} className="odd:bg-background even:bg-muted/20">
+                      <tr
+                        key={`${dataset.name}-${idx}`}
+                        className="odd:bg-background even:bg-muted/20"
+                      >
                         {dataset.columns.map((col) => (
-                          <td key={col} className="max-w-[240px] truncate px-2 py-1.5" title={cellText(row[col])}>
+                          <td
+                            key={col}
+                            className="max-w-[240px] truncate px-2 py-1.5"
+                            title={cellText(row[col])}
+                          >
                             {cellText(row[col])}
                           </td>
                         ))}

@@ -85,9 +85,7 @@ export function GradebookProvider({ children }: { children: ReactNode }) {
     })
   }
 
-  const refresh = async () => {
-    setLoadError(null)
-    setIsLoading(true)
+  const loadGradebook = async () => {
     try {
       const response = await fetch("/api/gradebook", { cache: "no-store" })
       if (!response.ok) {
@@ -103,8 +101,14 @@ export function GradebookProvider({ children }: { children: ReactNode }) {
     }
   }
 
+  const refresh = async () => {
+    setLoadError(null)
+    setIsLoading(true)
+    await loadGradebook()
+  }
+
   useEffect(() => {
-    refresh()
+    void loadGradebook()
   }, [])
 
   const setMark = (studentId: string, assessmentId: string, score: number | null) => {

@@ -22,11 +22,17 @@ export async function POST(request: Request) {
     const maxMarks = Number(body.maxMarks)
 
     if (!title || !courseId || !date || !Number.isFinite(maxMarks) || maxMarks <= 0) {
-      return NextResponse.json({ success: false, message: "Invalid assessment payload." }, { status: 400 })
+      return NextResponse.json(
+        { success: false, message: "Invalid assessment payload." },
+        { status: 400 },
+      )
     }
 
     if (typeRaw !== "Quiz" && typeRaw !== "Assignment") {
-      return NextResponse.json({ success: false, message: "Invalid assessment type." }, { status: 400 })
+      return NextResponse.json(
+        { success: false, message: "Invalid assessment type." },
+        { status: 400 },
+      )
     }
 
     const assessment = await createAssessmentForSessionUser({

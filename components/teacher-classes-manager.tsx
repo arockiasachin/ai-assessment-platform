@@ -56,8 +56,6 @@ export function TeacherClassesManager() {
   >({})
 
   const load = async () => {
-    setError(null)
-    setIsLoading(true)
     try {
       const response = await fetch("/api/teacher/offerings", { cache: "no-store" })
       if (!response.ok) {
@@ -87,6 +85,12 @@ export function TeacherClassesManager() {
     }
   }
 
+  const refresh = async () => {
+    setError(null)
+    setIsLoading(true)
+    await load()
+  }
+
   useEffect(() => {
     void load()
   }, [])
@@ -104,7 +108,15 @@ export function TeacherClassesManager() {
     if (!needle) return rows
 
     return rows.filter((row) => {
-      const haystack = [row.courseCode, row.courseName, row.className, row.term, String(row.academicYear)].join(" ").toLowerCase()
+      const haystack = [
+        row.courseCode,
+        row.courseName,
+        row.className,
+        row.term,
+        String(row.academicYear),
+      ]
+        .join(" ")
+        .toLowerCase()
       return haystack.includes(needle)
     })
   }, [rows, search])
@@ -130,7 +142,7 @@ export function TeacherClassesManager() {
       const data = (await response.json()) as { success?: boolean; message?: string }
       setMessage(data.message ?? (response.ok ? "Saved" : "Unable to save"))
       if (response.ok) {
-        await load()
+        await refresh()
       }
     } catch {
       setMessage("Unable to save.")
@@ -149,7 +161,11 @@ export function TeacherClassesManager() {
 
   return (
     <div className="space-y-6">
-      {message && <div className="rounded-lg border border-border bg-muted/30 px-3 py-2 text-sm">{message}</div>}
+      {message && (
+        <div className="rounded-lg border border-border bg-muted/30 px-3 py-2 text-sm">
+          {message}
+        </div>
+      )}
 
       <Card className="border-primary/20 bg-gradient-to-br from-primary/10 via-background to-background shadow-sm">
         <CardContent className="flex flex-col gap-3 pt-6 sm:flex-row sm:items-center sm:justify-between">
@@ -159,7 +175,10 @@ export function TeacherClassesManager() {
               This page is scoped to offerings where you are the assigned teacher.
             </p>
           </div>
-          <Badge variant="outline" className="w-fit border-primary/30 bg-background/70 text-primary">
+          <Badge
+            variant="outline"
+            className="w-fit border-primary/30 bg-background/70 text-primary"
+          >
             Teacher-owned offerings only
           </Badge>
         </CardContent>
@@ -212,7 +231,10 @@ export function TeacherClassesManager() {
         const draft = drafts[row.id]
         if (!draft) return null
 
-        const fillPercent = Math.min(100, Math.round((row.enrolledCount / Math.max(draft.studentLimit, 1)) * 100))
+        const fillPercent = Math.min(
+          100,
+          Math.round((row.enrolledCount / Math.max(draft.studentLimit, 1)) * 100),
+        )
 
         return (
           <Card key={row.id} className="overflow-hidden border-border/70 shadow-sm">
@@ -260,7 +282,9 @@ export function TeacherClassesManager() {
                   />
                 </label>
                 <label className="text-sm">
-                  <span className="mb-1 block text-xs text-muted-foreground">Registration opens</span>
+                  <span className="mb-1 block text-xs text-muted-foreground">
+                    Registration opens
+                  </span>
                   <input
                     type="date"
                     value={draft.registrationOpenAt}
@@ -277,7 +301,9 @@ export function TeacherClassesManager() {
                   />
                 </label>
                 <label className="text-sm">
-                  <span className="mb-1 block text-xs text-muted-foreground">Registration closes</span>
+                  <span className="mb-1 block text-xs text-muted-foreground">
+                    Registration closes
+                  </span>
                   <input
                     type="date"
                     value={draft.registrationCloseAt}
@@ -331,9 +357,15 @@ export function TeacherClassesManager() {
 
               <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border/70 bg-muted/20 px-3 py-2 text-sm">
                 <p>
-                  Active: <span className="font-semibold">{row.enrolledCount}</span> · Waitlist: <span className="font-semibold">{row.waitlistedCount}</span>
+                  Active: <span className="font-semibold">{row.enrolledCount}</span> · Waitlist:{" "}
+                  <span className="font-semibold">{row.waitlistedCount}</span>
                 </p>
-                <Button type="button" variant="outline" onClick={() => save(row.id)} disabled={savingId === row.id}>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => save(row.id)}
+                  disabled={savingId === row.id}
+                >
                   <Save className="size-4" />
                   Save changes
                 </Button>

@@ -6,7 +6,13 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 
 type SubmissionItem = {
   id: string
@@ -59,7 +65,8 @@ function statusLabel(status: string) {
 function statusTone(status: string) {
   if (status === "GRADED") return "border-emerald-500/30 bg-emerald-500/10 text-emerald-700"
   if (status === "LATE") return "border-amber-500/30 bg-amber-500/10 text-amber-700"
-  if (status === "SUBMITTED" || status === "RESUBMITTED") return "border-blue-500/30 bg-blue-500/10 text-blue-700"
+  if (status === "SUBMITTED" || status === "RESUBMITTED")
+    return "border-blue-500/30 bg-blue-500/10 text-blue-700"
   if (status === "DRAFT") return "border-slate-400/30 bg-slate-500/10 text-slate-700"
   return "border-border bg-muted/20 text-foreground"
 }
@@ -76,8 +83,6 @@ export function TeacherSubmissionsManager() {
   const [feedbackDrafts, setFeedbackDrafts] = useState<Record<string, string>>({})
 
   const load = async () => {
-    setError(null)
-    setIsLoading(true)
     try {
       const response = await fetch("/api/teacher/assessments/submissions", { cache: "no-store" })
       if (!response.ok) {
@@ -87,7 +92,9 @@ export function TeacherSubmissionsManager() {
       const data = (await response.json()) as { submissions: SubmissionItem[] }
       setItems(data.submissions)
       setScoreDrafts(
-        Object.fromEntries(data.submissions.map((row) => [row.id, row.score === null ? "" : String(row.score)])),
+        Object.fromEntries(
+          data.submissions.map((row) => [row.id, row.score === null ? "" : String(row.score)]),
+        ),
       )
       setFeedbackDrafts(
         Object.fromEntries(data.submissions.map((row) => [row.id, row.feedback ?? ""])),
@@ -97,6 +104,12 @@ export function TeacherSubmissionsManager() {
     } finally {
       setIsLoading(false)
     }
+  }
+
+  const refresh = async () => {
+    setError(null)
+    setIsLoading(true)
+    await load()
   }
 
   useEffect(() => {
@@ -158,7 +171,7 @@ export function TeacherSubmissionsManager() {
       setMessage(data.message ?? (response.ok ? "Saved." : "Unable to save changes."))
 
       if (response.ok) {
-        await load()
+        await refresh()
       }
     } catch {
       setMessage("Unable to save changes.")
@@ -180,12 +193,19 @@ export function TeacherSubmissionsManager() {
       <Card className="border-primary/20 bg-gradient-to-br from-primary/10 via-background to-background shadow-sm">
         <CardContent className="flex flex-col gap-3 pt-6 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <Badge variant="outline" className="mb-2 w-fit gap-1.5 border-primary/30 bg-background/70 text-primary">
+            <Badge
+              variant="outline"
+              className="mb-2 w-fit gap-1.5 border-primary/30 bg-background/70 text-primary"
+            >
               <Sparkles className="size-3.5" />
               Submission studio
             </Badge>
-            <h3 className="text-lg font-semibold tracking-tight">Review, grade, and give feedback quickly</h3>
-            <p className="text-sm text-muted-foreground">Focused view of assignment submissions across your classes.</p>
+            <h3 className="text-lg font-semibold tracking-tight">
+              Review, grade, and give feedback quickly
+            </h3>
+            <p className="text-sm text-muted-foreground">
+              Focused view of assignment submissions across your classes.
+            </p>
           </div>
           <div className="grid grid-cols-3 gap-2 text-xs">
             <div className="rounded-md border border-border/70 bg-background/80 px-2 py-1.5 text-center">
@@ -204,7 +224,11 @@ export function TeacherSubmissionsManager() {
         </CardContent>
       </Card>
 
-      {message && <div className="rounded-md border border-border bg-muted/30 px-3 py-2 text-sm">{message}</div>}
+      {message && (
+        <div className="rounded-md border border-border bg-muted/30 px-3 py-2 text-sm">
+          {message}
+        </div>
+      )}
 
       <Card className="border-border/70 shadow-sm">
         <CardContent className="grid gap-3 pt-6 sm:grid-cols-3">
@@ -217,7 +241,12 @@ export function TeacherSubmissionsManager() {
               className="pl-8"
             />
           </div>
-          <Select value={statusFilter} onValueChange={(value) => setStatusFilter((value as "all" | "pending" | "graded") ?? "all")}>
+          <Select
+            value={statusFilter}
+            onValueChange={(value) =>
+              setStatusFilter((value as "all" | "pending" | "graded") ?? "all")
+            }
+          >
             <SelectTrigger>
               <SelectValue placeholder="Status" />
             </SelectTrigger>
@@ -236,9 +265,12 @@ export function TeacherSubmissionsManager() {
             <CardHeader className="border-b border-border/60 bg-muted/15">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
-                  <CardTitle className="text-base tracking-tight">{item.assessment.title}</CardTitle>
+                  <CardTitle className="text-base tracking-tight">
+                    {item.assessment.title}
+                  </CardTitle>
                   <p className="text-xs text-muted-foreground">
-                    {item.assessment.courseCode} · {item.assessment.courseName} · {item.assessment.className}
+                    {item.assessment.courseCode} · {item.assessment.courseName} ·{" "}
+                    {item.assessment.className}
                   </p>
                   <p className="text-xs text-muted-foreground">
                     {item.student.fullName} ({item.student.registerNumber}) · {item.student.email}
@@ -246,7 +278,9 @@ export function TeacherSubmissionsManager() {
                 </div>
                 <div className="flex items-center gap-2">
                   <Badge variant="outline">{item.assessment.type}</Badge>
-                  <Badge variant={item.score === null ? "secondary" : "outline"}>{item.score === null ? "Pending" : "Graded"}</Badge>
+                  <Badge variant={item.score === null ? "secondary" : "outline"}>
+                    {item.score === null ? "Pending" : "Graded"}
+                  </Badge>
                   <Badge variant="outline" className={statusTone(item.status)}>
                     {statusLabel(item.status)}
                   </Badge>
@@ -266,7 +300,11 @@ export function TeacherSubmissionsManager() {
                 </div>
                 <div className="rounded-md border border-border/70 bg-background px-3 py-2">
                   <p className="text-xs text-muted-foreground">Current score</p>
-                  <p className="mt-1 font-medium">{item.score === null ? "Not graded" : `${item.score}/${item.assessment.maxMarks}`}</p>
+                  <p className="mt-1 font-medium">
+                    {item.score === null
+                      ? "Not graded"
+                      : `${item.score}/${item.assessment.maxMarks}`}
+                  </p>
                 </div>
                 <div className="rounded-md border border-border/70 bg-background px-3 py-2">
                   <p className="text-xs text-muted-foreground">Status</p>
@@ -282,7 +320,9 @@ export function TeacherSubmissionsManager() {
                   <FileText className="size-3.5" />
                   Submission content
                 </p>
-                <p className="whitespace-pre-wrap">{item.contentText?.trim() || "No text submitted."}</p>
+                <p className="whitespace-pre-wrap">
+                  {item.contentText?.trim() || "No text submitted."}
+                </p>
               </div>
 
               <div className="grid gap-3 lg:grid-cols-[140px_1fr_auto]">
@@ -291,13 +331,17 @@ export function TeacherSubmissionsManager() {
                   min={0}
                   max={item.assessment.maxMarks}
                   value={scoreDrafts[item.id] ?? ""}
-                  onChange={(event) => setScoreDrafts((prev) => ({ ...prev, [item.id]: event.target.value }))}
+                  onChange={(event) =>
+                    setScoreDrafts((prev) => ({ ...prev, [item.id]: event.target.value }))
+                  }
                   placeholder={`0-${item.assessment.maxMarks}`}
                   className="w-full"
                 />
                 <Input
                   value={feedbackDrafts[item.id] ?? ""}
-                  onChange={(event) => setFeedbackDrafts((prev) => ({ ...prev, [item.id]: event.target.value }))}
+                  onChange={(event) =>
+                    setFeedbackDrafts((prev) => ({ ...prev, [item.id]: event.target.value }))
+                  }
                   placeholder="Optional grading feedback"
                   maxLength={1000}
                   className="w-full"

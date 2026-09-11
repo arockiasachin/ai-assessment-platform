@@ -11,7 +11,13 @@ import { UpcomingEventsPanel } from "@/components/upcoming-events-panel"
 import { useGradebook } from "@/components/gradebook-provider"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import {
   assessmentAverage,
   classAverage,
@@ -36,7 +42,10 @@ export function TeacherView() {
     setSearch,
   } = useGradebook()
 
-  const filtered = useMemo(() => filterAssessments(assessments, courseFilter), [assessments, courseFilter])
+  const filtered = useMemo(
+    () => filterAssessments(assessments, courseFilter),
+    [assessments, courseFilter],
+  )
 
   const summary = useMemo(
     () => ({
@@ -65,7 +74,10 @@ export function TeacherView() {
     [filtered, marks, students],
   )
 
-  const distData = useMemo(() => gradeDistribution(marks, students, filtered), [marks, students, filtered])
+  const distData = useMemo(
+    () => gradeDistribution(marks, students, filtered),
+    [marks, students, filtered],
+  )
 
   if (isLoading) {
     return <p className="py-10 text-center text-sm text-muted-foreground">Loading gradebook…</p>
@@ -76,7 +88,10 @@ export function TeacherView() {
       <Card className="border-primary/20 bg-gradient-to-br from-primary/10 via-background to-background shadow-sm">
         <CardContent className="flex flex-col gap-4 pt-6 sm:flex-row sm:items-end sm:justify-between">
           <div className="space-y-2">
-            <Badge variant="outline" className="w-fit gap-1.5 border-primary/30 bg-background/70 text-primary">
+            <Badge
+              variant="outline"
+              className="w-fit gap-1.5 border-primary/30 bg-background/70 text-primary"
+            >
               <Sparkles className="size-3.5" />
               Teaching command center
             </Badge>
@@ -94,7 +109,13 @@ export function TeacherView() {
       </Card>
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <StatCard label="Students" value={String(students.length)} sub="Enrolled" icon={Users} accent="primary" />
+        <StatCard
+          label="Students"
+          value={String(students.length)}
+          sub="Enrolled"
+          icon={Users}
+          accent="primary"
+        />
         <StatCard
           label="Class average"
           value={summary.avg === null ? "—" : `${round(summary.avg)}%`}
@@ -120,20 +141,28 @@ export function TeacherView() {
 
       <div className="grid gap-6 lg:grid-cols-12 lg:items-start">
         <div className="lg:col-span-4 xl:col-span-3">
-          <UpcomingEventsPanel role="teacher" events={upcomingEvents} onFocusCourse={(courseId) => setCourseFilter(courseId)} />
+          <UpcomingEventsPanel
+            role="teacher"
+            events={upcomingEvents}
+            onFocusCourse={(courseId) => setCourseFilter(courseId)}
+          />
         </div>
 
         <div className="flex min-w-0 flex-col gap-6 lg:col-span-8 xl:col-span-9">
           <div className="grid gap-4 lg:grid-cols-5">
             <Card className="lg:col-span-3 shadow-sm">
               <CardHeader>
-                <CardTitle className="text-base tracking-tight">Average score by assessment</CardTitle>
+                <CardTitle className="text-base tracking-tight">
+                  Average score by assessment
+                </CardTitle>
               </CardHeader>
               <CardContent>
                 {classAvgData.length ? (
                   <ClassAverageChart data={classAvgData} />
                 ) : (
-                  <p className="py-10 text-center text-sm text-muted-foreground">No assessments to show.</p>
+                  <p className="py-10 text-center text-sm text-muted-foreground">
+                    No assessments to show.
+                  </p>
                 )}
               </CardContent>
             </Card>
@@ -166,7 +195,10 @@ export function TeacherView() {
                       className="pl-8 sm:w-56"
                     />
                   </div>
-                  <Select value={courseFilter} onValueChange={(value) => setCourseFilter(value ?? "all")}>
+                  <Select
+                    value={courseFilter}
+                    onValueChange={(value) => setCourseFilter(value ?? "all")}
+                  >
                     <SelectTrigger className="sm:w-44">
                       <SelectValue placeholder="All courses" />
                     </SelectTrigger>

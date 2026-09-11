@@ -2,7 +2,14 @@
 
 import Link from "next/link"
 import { useEffect, useMemo, useRef, useState } from "react"
-import { ChevronLeft, ChevronRight, CalendarDays, ClipboardList, Bell, BookOpen } from "lucide-react"
+import {
+  ChevronLeft,
+  ChevronRight,
+  CalendarDays,
+  ClipboardList,
+  Bell,
+  BookOpen,
+} from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { cn } from "@/lib/utils"
@@ -73,7 +80,11 @@ export function UpcomingEventsPanel({ role, events, onFocusCourse }: Props) {
   const calendarDays = useMemo(() => getCalendarDays(monthStart), [monthStart])
 
   useEffect(() => {
-    if (didAutoAlignToEvent.current || sortedEvents.length === 0 || eventsByDate.has(selectedDate)) {
+    if (
+      didAutoAlignToEvent.current ||
+      sortedEvents.length === 0 ||
+      eventsByDate.has(selectedDate)
+    ) {
       return
     }
 
@@ -84,8 +95,12 @@ export function UpcomingEventsPanel({ role, events, onFocusCourse }: Props) {
   }, [eventsByDate, selectedDate, sortedEvents])
 
   const selectedDateLabel = useMemo(() => {
-    const [selectedYear, selectedMonth, selectedDay] = selectedDate.split("-").map((part) => Number(part))
-    return formatDate(new Date(selectedYear, selectedMonth - 1, selectedDay, 12, 0, 0).toISOString())
+    const [selectedYear, selectedMonth, selectedDay] = selectedDate
+      .split("-")
+      .map((part) => Number(part))
+    return formatDate(
+      new Date(selectedYear, selectedMonth - 1, selectedDay, 12, 0, 0).toISOString(),
+    )
   }, [selectedDate])
 
   return (
@@ -104,7 +119,9 @@ export function UpcomingEventsPanel({ role, events, onFocusCourse }: Props) {
               variant="ghost"
               size="icon"
               onClick={() =>
-                setMonthStart((prev) => startOfMonth(new Date(prev.getFullYear(), prev.getMonth() - 1, 1)))
+                setMonthStart((prev) =>
+                  startOfMonth(new Date(prev.getFullYear(), prev.getMonth() - 1, 1)),
+                )
               }
               aria-label="Previous month"
             >
@@ -118,7 +135,9 @@ export function UpcomingEventsPanel({ role, events, onFocusCourse }: Props) {
               variant="ghost"
               size="icon"
               onClick={() =>
-                setMonthStart((prev) => startOfMonth(new Date(prev.getFullYear(), prev.getMonth() + 1, 1)))
+                setMonthStart((prev) =>
+                  startOfMonth(new Date(prev.getFullYear(), prev.getMonth() + 1, 1)),
+                )
               }
               aria-label="Next month"
             >
@@ -193,7 +212,9 @@ export function UpcomingEventsPanel({ role, events, onFocusCourse }: Props) {
 
                     {(event.description || event.assessmentType) && (
                       <div className="mt-2 rounded-md bg-muted/40 px-2 py-1.5 text-xs text-muted-foreground">
-                        {event.assessmentType ? `${event.assessmentType} assessment` : "Class event"}
+                        {event.assessmentType
+                          ? `${event.assessmentType} assessment`
+                          : "Class event"}
                         {event.description ? ` · ${event.description}` : ""}
                       </div>
                     )}

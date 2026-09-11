@@ -1,4 +1,5 @@
-export type CourseRegistrationStatus = "open" | "upcoming" | "closed" | "full" | "enrolled" | "waitlisted"
+export type CourseRegistrationStatus =
+  "open" | "upcoming" | "closed" | "full" | "enrolled" | "waitlisted"
 
 export type CourseCatalogItem = {
   offeringId: string

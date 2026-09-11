@@ -2,7 +2,15 @@
 
 import Link from "next/link"
 import { useMemo, useState } from "react"
-import { ArrowLeft, CheckCircle2, XCircle, GraduationCap, Clock, RotateCcw, Trophy } from "lucide-react"
+import {
+  ArrowLeft,
+  CheckCircle2,
+  XCircle,
+  GraduationCap,
+  Clock,
+  RotateCcw,
+  Trophy,
+} from "lucide-react"
 import { Button, buttonVariants } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -120,7 +128,9 @@ export function QuizRunner() {
           <div className="flex flex-col gap-6">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
               <div>
-                <h2 className="text-xl font-semibold tracking-tight text-balance">Available quizzes</h2>
+                <h2 className="text-xl font-semibold tracking-tight text-balance">
+                  Available quizzes
+                </h2>
                 <p className="mt-1 text-sm text-muted-foreground text-pretty">
                   Pick a quiz to attempt. Your score is graded instantly and saved to the gradebook.
                 </p>
@@ -129,7 +139,9 @@ export function QuizRunner() {
                 <span className="text-xs font-medium text-muted-foreground">Taking as</span>
                 <Select value={student.id} onValueChange={(v) => v && setSelectedStudentId(v)}>
                   <SelectTrigger className="w-52">
-                    <SelectValue>{(value) => students.find((s) => s.id === value)?.name}</SelectValue>
+                    <SelectValue>
+                      {(value) => students.find((s) => s.id === value)?.name}
+                    </SelectValue>
                   </SelectTrigger>
                   <SelectContent>
                     {students.map((s) => (
@@ -152,7 +164,9 @@ export function QuizRunner() {
                         <Badge variant="secondary">{a.courseName}</Badge>
                         <span className="text-xs text-muted-foreground">{formatDate(a.date)}</span>
                       </div>
-                      <CardTitle className="text-base leading-snug text-pretty">{a.title}</CardTitle>
+                      <CardTitle className="text-base leading-snug text-pretty">
+                        {a.title}
+                      </CardTitle>
                     </CardHeader>
                     <CardContent className="mt-auto flex flex-col gap-4">
                       <div className="flex items-center gap-4 text-sm text-muted-foreground">
@@ -186,7 +200,9 @@ export function QuizRunner() {
                 <Badge variant="secondary">{assessment.courseName}</Badge>
               </div>
               <div>
-                <h2 className="text-xl font-semibold tracking-tight text-balance">{assessment.title}</h2>
+                <h2 className="text-xl font-semibold tracking-tight text-balance">
+                  {assessment.title}
+                </h2>
                 <p className="mt-1 text-sm text-muted-foreground">
                   Question {current + 1} of {quiz.questions.length}
                 </p>
@@ -200,7 +216,9 @@ export function QuizRunner() {
               return (
                 <Card>
                   <CardHeader>
-                    <CardTitle className="text-lg leading-snug text-pretty">{question.prompt}</CardTitle>
+                    <CardTitle className="text-lg leading-snug text-pretty">
+                      {question.prompt}
+                    </CardTitle>
                   </CardHeader>
                   <CardContent className="flex flex-col gap-3">
                     {question.options.map((opt, i) => {
@@ -220,7 +238,9 @@ export function QuizRunner() {
                           <span
                             className={cn(
                               "flex size-6 shrink-0 items-center justify-center rounded-full border text-xs font-semibold",
-                              active ? "border-primary bg-primary text-primary-foreground" : "border-border",
+                              active
+                                ? "border-primary bg-primary text-primary-foreground"
+                                : "border-border",
                             )}
                           >
                             {String.fromCharCode(65 + i)}
@@ -277,7 +297,9 @@ export function QuizRunner() {
                 </div>
                 {(() => {
                   const pct = round((correctCount / quiz.questions.length) * 100)
-                  const score = Math.round((correctCount / quiz.questions.length) * assessment.maxMarks)
+                  const score = Math.round(
+                    (correctCount / quiz.questions.length) * assessment.maxMarks,
+                  )
                   return (
                     <div className="flex items-center gap-2">
                       <Badge className="text-sm">{pct}%</Badge>
@@ -291,7 +313,8 @@ export function QuizRunner() {
                   )
                 })()}
                 <p className="max-w-sm text-sm text-muted-foreground text-pretty">
-                  Saved to {student.name}&apos;s record. Review the answers below or head back to the dashboard.
+                  Saved to {student.name}&apos;s record. Review the answers below or head back to
+                  the dashboard.
                 </p>
               </CardContent>
             </Card>
@@ -322,7 +345,8 @@ export function QuizRunner() {
                         </p>
                         {!correct && (
                           <p className="text-muted-foreground">
-                            Correct answer: <span className="text-success">{q.options[q.correctIndex]}</span>
+                            Correct answer:{" "}
+                            <span className="text-success">{q.options[q.correctIndex]}</span>
                           </p>
                         )}
                       </div>

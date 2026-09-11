@@ -55,7 +55,10 @@ export function TeacherRatingsReport() {
 
   const totals = useMemo(() => {
     const count = offerings.reduce((sum, row) => sum + row.ratingsCount, 0)
-    const weighted = offerings.reduce((sum, row) => sum + (row.averageRating ?? 0) * row.ratingsCount, 0)
+    const weighted = offerings.reduce(
+      (sum, row) => sum + (row.averageRating ?? 0) * row.ratingsCount,
+      0,
+    )
     return {
       count,
       average: count ? weighted / count : null,
@@ -76,29 +79,50 @@ export function TeacherRatingsReport() {
       <Card className="border-primary/20 bg-gradient-to-br from-primary/10 via-background to-background shadow-sm">
         <CardContent className="flex flex-col gap-3 pt-6 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <Badge variant="outline" className="mb-2 w-fit gap-1.5 border-primary/30 bg-background/70 text-primary">
+            <Badge
+              variant="outline"
+              className="mb-2 w-fit gap-1.5 border-primary/30 bg-background/70 text-primary"
+            >
               <Sparkles className="size-3.5" />
               Feedback intelligence
             </Badge>
             <p className="text-sm font-semibold">Student sentiment and rating trends</p>
-            <p className="text-xs text-muted-foreground">See what learners are saying about your course delivery.</p>
+            <p className="text-xs text-muted-foreground">
+              See what learners are saying about your course delivery.
+            </p>
           </div>
-          <Badge variant="secondary" className="w-fit">{offerings.length} offerings</Badge>
+          <Badge variant="secondary" className="w-fit">
+            {offerings.length} offerings
+          </Badge>
         </CardContent>
       </Card>
 
       <div className="grid gap-3 sm:grid-cols-3">
         <Card className="shadow-sm">
-          <CardHeader><CardTitle className="text-sm">Total ratings</CardTitle></CardHeader>
-          <CardContent><p className="text-2xl font-semibold">{totals.count}</p></CardContent>
+          <CardHeader>
+            <CardTitle className="text-sm">Total ratings</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-2xl font-semibold">{totals.count}</p>
+          </CardContent>
         </Card>
         <Card className="shadow-sm">
-          <CardHeader><CardTitle className="text-sm">Average score</CardTitle></CardHeader>
-          <CardContent><p className="text-2xl font-semibold">{totals.average !== null ? totals.average.toFixed(2) : "—"}</p></CardContent>
+          <CardHeader>
+            <CardTitle className="text-sm">Average score</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-2xl font-semibold">
+              {totals.average !== null ? totals.average.toFixed(2) : "—"}
+            </p>
+          </CardContent>
         </Card>
         <Card className="shadow-sm">
-          <CardHeader><CardTitle className="text-sm">Comments shared</CardTitle></CardHeader>
-          <CardContent><p className="text-2xl font-semibold">{totals.comments}</p></CardContent>
+          <CardHeader>
+            <CardTitle className="text-sm">Comments shared</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-2xl font-semibold">{totals.comments}</p>
+          </CardContent>
         </Card>
       </div>
 
@@ -117,7 +141,8 @@ export function TeacherRatingsReport() {
               <div>
                 <CardTitle className="text-base">{offering.courseName}</CardTitle>
                 <p className="text-xs text-muted-foreground">
-                  {offering.courseCode} · {offering.className} · {offering.term} {offering.academicYear}
+                  {offering.courseCode} · {offering.className} · {offering.term}{" "}
+                  {offering.academicYear}
                 </p>
               </div>
               <Badge variant="outline">{offering.ratingsCount} ratings</Badge>
@@ -126,12 +151,16 @@ export function TeacherRatingsReport() {
           <CardContent className="space-y-3">
             <p className="inline-flex items-center gap-1 rounded-lg border border-border bg-background px-2 py-1 text-sm">
               <Star className="size-4" />
-              Average: {offering.averageRating !== null ? offering.averageRating.toFixed(2) : "No ratings"}
+              Average:{" "}
+              {offering.averageRating !== null ? offering.averageRating.toFixed(2) : "No ratings"}
             </p>
 
             <div className="space-y-2">
               {offering.ratings.map((rating) => (
-                <div key={rating.id} className="rounded-lg border border-border/70 bg-muted/20 px-3 py-2 text-sm shadow-sm">
+                <div
+                  key={rating.id}
+                  className="rounded-lg border border-border/70 bg-muted/20 px-3 py-2 text-sm shadow-sm"
+                >
                   <p className="font-medium">
                     {rating.studentName} ({rating.registerNumber}) · {rating.rating}/5
                   </p>
@@ -145,7 +174,9 @@ export function TeacherRatingsReport() {
                   )}
                 </div>
               ))}
-              {offering.ratings.length === 0 && <p className="text-sm text-muted-foreground">No ratings for this course yet.</p>}
+              {offering.ratings.length === 0 && (
+                <p className="text-sm text-muted-foreground">No ratings for this course yet.</p>
+              )}
             </div>
           </CardContent>
         </Card>

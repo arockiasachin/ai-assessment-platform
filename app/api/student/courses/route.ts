@@ -1,7 +1,11 @@
 import { NextResponse } from "next/server"
 import { getSessionUser } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import type { CourseCatalogItem, CourseRegistrationStatus, StudentCoursesPayload } from "@/lib/student-courses"
+import type {
+  CourseCatalogItem,
+  CourseRegistrationStatus,
+  StudentCoursesPayload,
+} from "@/lib/student-courses"
 
 function toStatus(input: {
   isEnrolled: boolean
@@ -15,8 +19,10 @@ function toStatus(input: {
   if (input.isEnrolled) return { status: "enrolled", canRegister: false }
   if (input.isWaitlisted) return { status: "waitlisted", canRegister: false }
   if (input.enrolledCount >= input.studentLimit) return { status: "full", canRegister: false }
-  if (input.registrationOpenAt && input.now < input.registrationOpenAt) return { status: "upcoming", canRegister: false }
-  if (input.registrationCloseAt && input.now > input.registrationCloseAt) return { status: "closed", canRegister: false }
+  if (input.registrationOpenAt && input.now < input.registrationOpenAt)
+    return { status: "upcoming", canRegister: false }
+  if (input.registrationCloseAt && input.now > input.registrationCloseAt)
+    return { status: "closed", canRegister: false }
   return { status: "open", canRegister: true }
 }
 

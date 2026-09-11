@@ -5,7 +5,11 @@ import { RolePageShell } from "@/components/role-page-shell"
 export default async function StudentResourcesPage() {
   return (
     <RoleGuard role="student">
-      <RolePageShell role="student" title="Resources" description="Future student resources workspace.">
+      <RolePageShell
+        role="student"
+        title="Resources"
+        description="Future student resources workspace."
+      >
         <FuturePagePlaceholder role="student" pageName="Resources" />
       </RolePageShell>
     </RoleGuard>

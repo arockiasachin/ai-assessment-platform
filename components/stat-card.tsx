@@ -20,12 +20,19 @@ const accentMap = {
 export function StatCard({ label, value, sub, icon: Icon, accent = "primary" }: StatCardProps) {
   return (
     <Card className="flex flex-row items-center gap-4 p-4">
-      <div className={cn("flex size-11 shrink-0 items-center justify-center rounded-xl", accentMap[accent])}>
+      <div
+        className={cn(
+          "flex size-11 shrink-0 items-center justify-center rounded-xl",
+          accentMap[accent],
+        )}
+      >
         <Icon className="size-5" />
       </div>
       <div className="min-w-0">
         <p className="text-xs font-medium text-muted-foreground">{label}</p>
-        <p className="font-mono text-2xl font-semibold leading-tight tabular-nums text-foreground">{value}</p>
+        <p className="font-mono text-2xl font-semibold leading-tight tabular-nums text-foreground">
+          {value}
+        </p>
         {sub && <p className="truncate text-xs text-muted-foreground">{sub}</p>}
       </div>
     </Card>

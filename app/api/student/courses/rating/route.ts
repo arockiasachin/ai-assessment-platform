@@ -14,7 +14,10 @@ export async function POST(request: Request) {
   })
 
   if (!student) {
-    return NextResponse.json({ success: false, message: "Student profile not found" }, { status: 404 })
+    return NextResponse.json(
+      { success: false, message: "Student profile not found" },
+      { status: 404 },
+    )
   }
 
   const body = (await request.json()) as { offeringId?: string; rating?: number; comment?: string }
@@ -26,7 +29,10 @@ export async function POST(request: Request) {
     return NextResponse.json({ success: false, message: "Offering is required." }, { status: 400 })
   }
   if (!Number.isInteger(rating) || rating < 1 || rating > 5) {
-    return NextResponse.json({ success: false, message: "Rating must be an integer between 1 and 5." }, { status: 400 })
+    return NextResponse.json(
+      { success: false, message: "Rating must be an integer between 1 and 5." },
+      { status: 400 },
+    )
   }
 
   const enrollment = await prisma.enrollment.findUnique({
@@ -44,12 +50,18 @@ export async function POST(request: Request) {
   })
 
   if (!enrollment) {
-    return NextResponse.json({ success: false, message: "You must be enrolled to rate this course." }, { status: 403 })
+    return NextResponse.json(
+      { success: false, message: "You must be enrolled to rate this course." },
+      { status: 403 },
+    )
   }
 
   const isCompleted = Boolean(enrollment.offering.endsOn && enrollment.offering.endsOn < new Date())
   if (!isCompleted) {
-    return NextResponse.json({ success: false, message: "You can rate this course only after completion." }, { status: 409 })
+    return NextResponse.json(
+      { success: false, message: "You can rate this course only after completion." },
+      { status: 409 },
+    )
   }
 
   await prisma.courseRating.upsert({
@@ -71,5 +83,8 @@ export async function POST(request: Request) {
     },
   })
 
-  return NextResponse.json({ success: true, message: `Saved rating for ${enrollment.offering.course.name}.` })
+  return NextResponse.json({
+    success: true,
+    message: `Saved rating for ${enrollment.offering.course.name}.`,
+  })
 }

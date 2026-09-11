@@ -1,7 +1,7 @@
-import { NextResponse } from "next/server";
-import bcrypt from "bcryptjs";
-import { prisma } from "@/lib/prisma";
-import { getSessionUser } from "@/lib/auth";
+import { NextResponse } from "next/server"
+import bcrypt from "bcryptjs"
+import { prisma } from "@/lib/prisma"
+import { getSessionUser } from "@/lib/auth"
 
 export async function POST() {
   const sessionUser = await getSessionUser()
@@ -21,7 +21,10 @@ export async function POST() {
   ] as const
 
   for (const legacy of legacyAccounts) {
-    const existing = await prisma.user.findUnique({ where: { email: legacy.oldEmail }, select: { id: true } })
+    const existing = await prisma.user.findUnique({
+      where: { email: legacy.oldEmail },
+      select: { id: true },
+    })
     if (!existing) continue
 
     await prisma.user.update({
@@ -264,7 +267,10 @@ export async function POST() {
   })
 
   if (!devTeacher || !devTeacherTwo || !devStudent) {
-    return NextResponse.json({ success: false, message: "Unable to resolve dev profiles." }, { status: 500 })
+    return NextResponse.json(
+      { success: false, message: "Unable to resolve dev profiles." },
+      { status: 500 },
+    )
   }
 
   const teacherIdByEmpId: Record<string, string> = {
@@ -410,7 +416,14 @@ export async function POST() {
     },
   ] as const
 
-  const offerings: Array<{ id: string; courseId: string; classId: string; courseCode: string; classCode: string; teacherId: string }> = []
+  const offerings: Array<{
+    id: string
+    courseId: string
+    classId: string
+    courseCode: string
+    classCode: string
+    teacherId: string
+  }> = []
   for (const def of offeringDefs) {
     const course = courses.find((c) => c.code === def.courseCode)
     const classRoom = classes.find((c) => c.code === def.classCode)
@@ -470,7 +483,10 @@ export async function POST() {
 
   if (offerings.length === 0) {
     return NextResponse.json(
-      { success: false, message: "No course offerings could be seeded. Check teacher/course/class seed data." },
+      {
+        success: false,
+        message: "No course offerings could be seeded. Check teacher/course/class seed data.",
+      },
       { status: 500 },
     )
   }
@@ -567,12 +583,18 @@ export async function POST() {
 
   if (assessments.length === 0) {
     return NextResponse.json(
-      { success: false, message: "No assessments could be seeded. Check offering mappings and assessment templates." },
+      {
+        success: false,
+        message:
+          "No assessments could be seeded. Check offering mappings and assessment templates.",
+      },
       { status: 500 },
     )
   }
 
-  const offeringTeacherById = new Map(offerings.map((offering) => [offering.id, offering.teacherId]))
+  const offeringTeacherById = new Map(
+    offerings.map((offering) => [offering.id, offering.teacherId]),
+  )
 
   const enrollmentRows = await prisma.enrollment.findMany({
     where: { offeringId: { in: offerings.map((o) => o.id) } },
@@ -731,11 +753,23 @@ export async function POST() {
     credentials: {
       admin: { email: "admin", password: "admin", empId: "EMP-ADMIN-001" },
       devAdmin: { email: "olivia.hayes@school.edu", password: "dev12345", empId: "EMP-A-3001" },
-      coreTeacher: { email: "teacher.math@school.edu", password: "teacher123", empId: "EMP-T-1001" },
+      coreTeacher: {
+        email: "teacher.math@school.edu",
+        password: "teacher123",
+        empId: "EMP-T-1001",
+      },
       teacher: { email: "samuel.brooks@school.edu", password: "dev12345", empId: "EMP-T-3002" },
       teacherTwo: { email: "aisha.collins@school.edu", password: "dev12345", empId: "EMP-T-3003" },
-      coreStudent: { email: "ava.t@school.edu", password: "student123", registerNumber: "REG-1001" },
-      student: { email: "nolan.rivera@school.edu", password: "dev12345", registerNumber: "REG-3001" },
+      coreStudent: {
+        email: "ava.t@school.edu",
+        password: "student123",
+        registerNumber: "REG-1001",
+      },
+      student: {
+        email: "nolan.rivera@school.edu",
+        password: "dev12345",
+        registerNumber: "REG-3001",
+      },
     },
-  });
+  })
 }
