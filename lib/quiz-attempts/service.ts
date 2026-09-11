@@ -405,29 +405,44 @@ export async function startQuizAttempt(user: AuthUser, input: unknown): Promise<
   })
   if (inProgress) return getStudentAttempt(user, inProgress.id)
 
-  const attempts = await prisma.quizAttempt.findMany({
-    where: { assessmentId: assessment.id, studentId },
-    select: { attemptNumber: true, status: true },
-  })
-  const used = attempts.filter((attempt) =>
-    (COUNTED_STATUSES as readonly string[]).includes(attempt.status),
-  ).length
-  const eligibility = evaluateAttemptEligibility({
-    existingAttemptCount: used,
-    maxAttempts: resolveMaxAttempts(),
-    now: new Date(),
-    dueDate: assessment.dueDate,
-  })
-  if (!eligibility.allowed) {
-    throw new QuizAttemptError(
-      eligibility.code === "cap" ? 429 : 409,
-      eligibility.reason ?? "Blocked.",
-    )
-  }
-
-  const attemptNumber =
-    attempts.reduce((max, attempt) => Math.max(max, attempt.attemptNumber), 0) + 1
+  // Everything that decides the next attempt number runs under a lock on the
+  // assessment row. Without it, two concurrent starts each read the same count,
+  // both compute the same `attemptNumber`, and the loser collides on the
+  // `(assessmentId, studentId, attemptNumber)` unique key — surfacing a generic
+  // 500 to a student who simply double-tapped "Start". Serializing here also
+  // closes the check-then-create window on the attempt cap.
   const created = await prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT "id" FROM "Assessment" WHERE "id" = ${assessment.id} FOR UPDATE`
+
+    const existing = await tx.quizAttempt.findFirst({
+      where: { assessmentId: assessment.id, studentId, status: "IN_PROGRESS" },
+      orderBy: { attemptNumber: "desc" },
+      select: { id: true },
+    })
+    if (existing) return { id: existing.id }
+
+    const attempts = await tx.quizAttempt.findMany({
+      where: { assessmentId: assessment.id, studentId },
+      select: { attemptNumber: true, status: true },
+    })
+    const used = attempts.filter((attempt) =>
+      (COUNTED_STATUSES as readonly string[]).includes(attempt.status),
+    ).length
+    const eligibility = evaluateAttemptEligibility({
+      existingAttemptCount: used,
+      maxAttempts: resolveMaxAttempts(),
+      now: new Date(),
+      dueDate: assessment.dueDate,
+    })
+    if (!eligibility.allowed) {
+      throw new QuizAttemptError(
+        eligibility.code === "cap" ? 429 : 409,
+        eligibility.reason ?? "Blocked.",
+      )
+    }
+
+    const attemptNumber =
+      attempts.reduce((max, attempt) => Math.max(max, attempt.attemptNumber), 0) + 1
     const attempt = await tx.quizAttempt.create({
       data: { assessmentId: assessment.id, studentId, attemptNumber, status: "IN_PROGRESS" },
     })
@@ -438,7 +453,7 @@ export async function startQuizAttempt(user: AuthUser, input: unknown): Promise<
       actor: { id: user.id, role: user.role },
       after: { assessmentId: assessment.id, attemptNumber, status: "IN_PROGRESS" },
     })
-    return attempt
+    return { id: attempt.id }
   })
 
   return getStudentAttempt(user, created.id)

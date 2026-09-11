@@ -108,19 +108,36 @@ export async function PUT(request: Request) {
     )
   }
 
-  const body = (await request.json()) as {
+  let body: {
     submissionId?: string
     score?: number | string | null
     feedback?: string
   }
+  try {
+    body = (await request.json()) as typeof body
+  } catch {
+    return NextResponse.json({ success: false, message: "Invalid JSON body." }, { status: 400 })
+  }
+
+  // Partial-update semantics (bug-fix run 3, S-1): only a field the request
+  // actually carries is written. An omitted `score` must never be read as an
+  // explicit `null` (which deliberately un-grades).
+  const hasScore = Object.prototype.hasOwnProperty.call(body, "score")
+  const hasFeedback = Object.prototype.hasOwnProperty.call(body, "feedback")
 
   const submissionId = String(body.submissionId ?? "").trim()
-  const feedback = String(body.feedback ?? "").trim()
   const rawScore = body.score
 
   if (!submissionId) {
     return NextResponse.json(
       { success: false, message: "Submission is required." },
+      { status: 400 },
+    )
+  }
+
+  if (!hasScore && !hasFeedback) {
+    return NextResponse.json(
+      { success: false, message: "Provide a score or feedback to update." },
       { status: 400 },
     )
   }
@@ -149,6 +166,7 @@ export async function PUT(request: Request) {
     rawScore === null || rawScore === undefined || rawScore === "" ? null : Number(rawScore)
 
   if (
+    hasScore &&
     score !== null &&
     (!Number.isFinite(score) || score < 0 || score > submission.assessment.maxMarks)
   ) {
@@ -159,7 +177,7 @@ export async function PUT(request: Request) {
   }
 
   await prisma.$transaction(async (tx) => {
-    if (score !== null) {
+    if (hasScore && score !== null) {
       await tx.assessmentGrade.upsert({
         where: {
           assessmentId_studentId: {
@@ -180,15 +198,24 @@ export async function PUT(request: Request) {
       })
     }
 
-    await tx.submission.update({
-      where: { id: submission.id },
-      data: {
-        status: score === null ? "SUBMITTED" : "GRADED",
-        gradedAt: score === null ? null : new Date(),
-        gradedById: score === null ? null : staffId,
-        feedback: feedback.length ? feedback.slice(0, 1000) : null,
-      },
-    })
+    const data: {
+      status?: "SUBMITTED" | "GRADED"
+      gradedAt?: Date | null
+      gradedById?: string | null
+      feedback?: string | null
+    } = {}
+
+    if (hasScore) {
+      data.status = score === null ? "SUBMITTED" : "GRADED"
+      data.gradedAt = score === null ? null : new Date()
+      data.gradedById = score === null ? null : staffId
+    }
+    if (hasFeedback) {
+      const feedback = String(body.feedback ?? "").trim()
+      data.feedback = feedback.length ? feedback.slice(0, 1000) : null
+    }
+
+    await tx.submission.update({ where: { id: submission.id }, data })
   })
 
   return NextResponse.json({

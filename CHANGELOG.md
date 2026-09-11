@@ -213,6 +213,28 @@ Real-time bug-fixing pass 2 of 3 (see [`docs/verification/bugfix-run-2.md`](docs
   `Question.subtopic`. It now reads only the bullet tags in the first section and falls back to
   `<topic> fundamentals`.
 
+### bugfix-run-3
+
+Real-time bug-fixing pass 3 of 3 (see [`docs/verification/bugfix-run-3.md`](docs/verification/bugfix-run-3.md)).
+
+#### Fixed
+
+- **A partial `PUT /api/teacher/assessments/submissions` no longer destroys an existing grade**
+  (`app/api/teacher/assessments/submissions/route.ts`). The legacy route treated an omitted `score`
+  as `score: null`, so a feedback-only request reverted a `GRADED` submission to `SUBMITTED`, cleared
+  `gradedAt`/`gradedById` and wiped the feedback — the same full-replace data-loss class as
+  `bugfix-run-2`'s offering PUT. It is now a partial update: only fields the body actually carries
+  are written (an explicit `score: null` still un-grades deliberately), a body with neither `score`
+  nor `feedback` is a 400, and a malformed JSON body returns 400 instead of throwing.
+- **Concurrent quiz-attempt starts no longer return a 500 or race the attempt cap**
+  (`lib/quiz-attempts/service.ts`). Two simultaneous `POST /api/student/quiz-attempts` requests both
+  computed the same `attemptNumber`, and the loser collided on the
+  `(assessmentId, studentId, attemptNumber)` unique key — surfacing a generic 500 to a student who
+  simply double-tapped "Start" and leaving a check-then-create window on the attempt cap. Attempt
+  creation now runs in one transaction that takes a `SELECT … FOR UPDATE` lock on the assessment row
+  and re-checks the existing in-progress attempt and the cap, so a concurrent start resumes the
+  winner instead of erroring.
+
 ## [0.1.0] - 2026-09-11
 
 Phase 0 (foundations): make the repository buildable, reviewable, and secret-free before product
