@@ -55,7 +55,7 @@ export async function similaritySearch(
       embedding: {
         embeddings: [],
         model: "",
-        provider: "mock",
+        provider: options.provider?.name ?? "mock",
         dimensions: options.dimensions ?? 0,
         latencyMs: 0,
       },
