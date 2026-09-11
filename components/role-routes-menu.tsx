@@ -16,6 +16,7 @@ import {
   ListChecks,
   Route,
   Sparkles,
+  Users,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -33,6 +34,7 @@ const studentRoutes: RouteItem[] = [
   { label: "Assessments", href: "/student/assessments", icon: ClipboardList },
   { label: "Courses", href: "/student/courses", icon: BookOpen },
   { label: "Events", href: "/student/events", icon: CalendarDays },
+  { label: "Peer eval", href: "/student/peer-evaluation", icon: Users },
   { label: "Resources", href: "/student/resources", icon: Sparkles },
 ]
 
@@ -42,6 +44,7 @@ const teacherRoutes: RouteItem[] = [
   { label: "Quiz AI", href: "/teacher/quiz-generation", icon: Sparkles },
   { label: "Rubrics", href: "/teacher/rubrics", icon: ListChecks },
   { label: "Reviews", href: "/teacher/reviews", icon: ClipboardCheck },
+  { label: "Groups", href: "/teacher/groups", icon: Users },
   { label: "Classes", href: "/teacher/classes", icon: Layers },
   { label: "Planner", href: "/teacher/planner", icon: CalendarDays },
   { label: "Reports", href: "/teacher/reports", icon: ClipboardList },

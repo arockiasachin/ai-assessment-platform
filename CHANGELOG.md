@@ -18,6 +18,7 @@ harness, auth hardening, the `zod` API contract, and the grade review state mach
 client, and quiz results are graded by `POST /api/quiz/grade`. Nothing below is released.
 
 - **LLM quiz generation (Phase 2)** — a teacher describes a topic; the system retrieves their own course material, generates multiple-choice drafts with misconception-targeting distractors tagged by subtopic and difficulty, and keeps them unpublished until an explicit publish action (`lib/quiz-generation/**`, `app/api/teacher/quiz-generation/**`, `components/teacher-quiz-generator.tsx`). See [`docs/features/quiz-generation.md`](docs/features/quiz-generation.md).
+- **Team formation, peer evaluation, contribution tracking and milestones (Phase 2)** — instructor-weighted CATME-style formation that maximises the worst-fitting team and respects schedule availability, confidential five-dimension peer evaluation with adjustment factors computed with and without self-ratings, free-rider detection, contribution events as evidence only, and milestones with timestamped completion (`lib/groups/**`, `app/api/teacher/groups/**`, `app/api/student/peer-evaluation/**`, `components/teacher-groups-manager.tsx`, `components/student-peer-evaluation.tsx`). See [`docs/features/groups-peereval.md`](docs/features/groups-peereval.md).
 
 ### Security
 
