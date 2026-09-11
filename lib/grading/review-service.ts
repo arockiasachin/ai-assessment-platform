@@ -97,6 +97,62 @@ async function resolveMaxPoints(
 }
 
 /**
+ * The logical bucket a suggestion scores, so re-running the model for the same
+ * criterion/response supersedes the previous score instead of adding to it.
+ * Without this, every model re-run silently inflates the draft (and then the
+ * published) grade.
+ */
+function suggestionGroupKey(suggestion: {
+  rubricCriterionId: string | null
+  quizResponseId: string | null
+  submissionId: string | null
+  criterionLabel: string | null
+}): string {
+  if (suggestion.rubricCriterionId) return `criterion:${suggestion.rubricCriterionId}`
+  if (suggestion.quizResponseId) return `quizResponse:${suggestion.quizResponseId}`
+  if (suggestion.submissionId) return `submission:${suggestion.submissionId}`
+  if (suggestion.criterionLabel) return `label:${suggestion.criterionLabel}`
+  return "overall"
+}
+
+/**
+ * Sum the *latest* suggestion per logical bucket. `count` is the number of
+ * suggestion rows seen, which callers use to distinguish "no AI input" from
+ * "all suggestions scored zero".
+ */
+async function latestSuggestionTotals(
+  tx: Prisma.TransactionClient,
+  assessmentId: string,
+  studentId: string,
+): Promise<{ total: number; count: number }> {
+  const suggestions = await tx.aIGradeSuggestion.findMany({
+    where: { assessmentId, studentId },
+    select: {
+      suggestedPoints: true,
+      rubricCriterionId: true,
+      quizResponseId: true,
+      submissionId: true,
+      criterionLabel: true,
+      createdAt: true,
+    },
+    orderBy: { createdAt: "desc" },
+  })
+
+  const latestPointsByGroup = new Map<string, number>()
+  for (const suggestion of suggestions) {
+    const key = suggestionGroupKey(suggestion)
+    if (!latestPointsByGroup.has(key)) {
+      latestPointsByGroup.set(key, Number(suggestion.suggestedPoints))
+    }
+  }
+
+  let total = 0
+  for (const points of latestPointsByGroup.values()) total += points
+
+  return { total: Math.max(0, total), count: suggestions.length }
+}
+
+/**
  * Object-level authorization: a teacher may only manage reviews for assessments
  * they created or offer. Admins may manage any. Returns the reviewer's staff id
  * (null when an admin has no staff profile), for `Grade.approvedById`.
@@ -236,11 +292,12 @@ export async function recordAiSuggestion(
     })
 
     const maxPoints = await resolveMaxPoints(tx, assessment.id, assessment.maxMarks)
-    const aggregate = await tx.aIGradeSuggestion.aggregate({
-      where: { assessmentId: data.assessmentId, studentId: data.studentId },
-      _sum: { suggestedPoints: true },
-    })
-    const total = Math.min(Math.max(0, Number(aggregate._sum.suggestedPoints ?? 0)), maxPoints)
+    const { total: latestTotal } = await latestSuggestionTotals(
+      tx,
+      data.assessmentId,
+      data.studentId,
+    )
+    const total = Math.min(latestTotal, maxPoints)
 
     const existingGrade = await tx.grade.findUnique({
       where: {
@@ -276,6 +333,18 @@ export async function recordAiSuggestion(
               source: "AI_SUGGESTED",
             },
           })
+
+    // A model output may only refresh an *unpublished* draft. A published grade
+    // is returned untouched (and deliberately not re-audited) above.
+    if (existingGrade?.publishedAt == null) {
+      await writeAuditLog(tx, {
+        entityType: "Grade",
+        entityId: grade.id,
+        action: existingGrade ? "grade.ai_draft_updated" : "grade.ai_draft_created",
+        actor,
+        after: { points: total, maxPoints, source: "AI_SUGGESTED" },
+      })
+    }
 
     return {
       suggestion: serializeSuggestion(suggestion),
@@ -333,13 +402,11 @@ export async function submitReviewDecision(input: SubmitReviewDecisionInput) {
       )
     }
 
-    const aggregate = await tx.aIGradeSuggestion.aggregate({
-      where: { assessmentId: input.assessmentId, studentId: input.studentId },
-      _sum: { suggestedPoints: true },
-      _count: true,
-    })
-    const suggestedTotal = Math.max(0, Number(aggregate._sum.suggestedPoints ?? 0))
-    const suggestionCount = aggregate._count
+    const { total: suggestedTotal, count: suggestionCount } = await latestSuggestionTotals(
+      tx,
+      input.assessmentId,
+      input.studentId,
+    )
 
     if (decision.action === "accept" && suggestionCount === 0) {
       throw new GradePipelineError(409, "No AI suggestions to accept.")
