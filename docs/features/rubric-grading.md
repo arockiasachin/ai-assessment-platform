@@ -5,7 +5,8 @@ AI suggestions and a teacher review queue. This is the pod that makes the
 "AI produces suggestions, a human approves every grade" rule concrete for
 free-text work.
 
-Branch: `feat/rubric-grading` (off `dev` at `8e46b12`).
+Merged to `dev` in `d5f949b` (`feat(rubric-grading): weighted rubrics, per-criterion AI
+evaluation, review queue`); the branch was cut from `dev` at `8e46b12` and deleted after merging.
 
 ## What it does
 

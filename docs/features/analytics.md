@@ -4,7 +4,8 @@ Item analysis from real quiz attempts, cohort distribution and pass rate,
 threshold-driven intervention alerts for the owning teacher, and a targeted
 adaptive retake containing only the questions a student failed.
 
-Branch: `p2/analytics`.
+Merged to `dev` in `6ffff60` (`feat(analytics): item analysis, intervention alerts and adaptive
+retake`); the `p2/analytics` branch was deleted after merging.
 
 ## Goal and product rules
 

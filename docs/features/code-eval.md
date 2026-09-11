@@ -5,7 +5,9 @@ locked-down Docker container — never on the app host. Results are reported
 PrairieLearn-style, per test, with output. A `TestRun` is **evidence** for a
 teacher; it never publishes a `Grade`.
 
-Branch: `p2/code-sandbox`.
+Merged to `dev` in `b9d8242` (`Merge p2/code-sandbox into dev`), landing `cfad031` plus the
+follow-up `eb73b68` (`fix(phase-2): partial update, CSV injection, group roster, offline mock`); the
+`p2/code-sandbox` branch was deleted after merging.
 
 ## Goal and product rules
 

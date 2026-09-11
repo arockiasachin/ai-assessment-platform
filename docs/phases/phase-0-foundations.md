@@ -50,7 +50,7 @@ Phase 0 is an engineering phase, so the criteria are the repository-level invari
 - `next.config.mjs` no longer sets `typescript.ignoreBuildErrors`; the project typechecks.
 - `npm run typecheck`, `npm run lint`, and `npm run format:check` pass.
 - The production build succeeds without a live database and without an LLM API key.
-- CI runs the full gate list on every pull request and on pushes to `main`.
+- CI runs the full gate list on every pull request and on pushes to `main` and `dev`.
 
 ## Status
 
@@ -112,13 +112,20 @@ git ls-files | rg -i 'pass$|\.env'     # only .env.example is tracked
 
 ## Risks and open questions
 
-- **Branch protection is deferred.** It needs the repository to be public, because GitHub Free does
-  not offer branch protection on private repositories. Until then, no-direct-pushes-to-`main` is a
-  convention, not a GitHub-enforced rule.
-- **Thirteen lint warnings remain.** They are all the demoted React effect rule in legacy
-  components. Phase 2 must actually remove the pattern or the warnings become permanent.
-- **CI does not yet run tests, a migration drift check, or Playwright.** The plan lists those gates,
-  and a test harness is being landed concurrently. See
+The items below were open at the end of Phase 0; their resolution is noted inline.
+
+- **Branch protection is deferred.** _Resolved._ The repository is public and branch protection is
+  enabled on `main` and `dev` (required `Verify` check; 0 required approvals on `main`;
+  `enforce_admins: false`). See
+  [`development-workflow.md`](../development-workflow.md#branch-protection).
+- **Thirteen lint warnings remain.** _Mostly resolved._ The count was 13 at `22f608b` and 9 at
+  `b9d8242`; the residual warnings are the demoted React effect rule in the remaining fetch-on-mount
+  views plus two deliberate `window.location` assignments. The rule returns to `error` once those
+  views are server-seeded. The exact count at the current tip is unverified.
+- **CI does not yet run tests, a migration drift check, or Playwright.** _Partly resolved._ CI now
+  runs `npm test` against a `pgvector/pgvector:pg16` service (commit `f54b2f0`); the test harness
+  provisions its database by applying the committed migrations, which is the migration drift check.
+  Playwright is still not present (no `playwright.config.*`). See
   [`development-workflow.md`](../development-workflow.md#ci-gates).
 - **The plan lists the `MOCK` LLM provider under Phase 0.** It actually landed in Phase 1 in commit
   `f0088ef`. The CI workflow was already written to assume it.

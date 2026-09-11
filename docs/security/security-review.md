@@ -1,7 +1,8 @@
 # Phase 3 — Security review and hardening
 
 Date: 2026-09-12
-Branch: `p3/security-review` (worktree `.worktrees/security-review`; not pushed or merged)
+Branch: `p3/security-review` — reviewed and green before merge; since **merged to `dev`** in
+`ddbb30f` (the fixes landed in `7360b16`). The `.worktrees/security-review` worktree is gone.
 Base: `b9d8242` (`Merge p2/code-sandbox into dev`)
 Scope: the API surface (`app/api/**`, ~57 route handlers), the Phase 2 feature
 modules (`lib/code-eval/**`, `lib/groups/**`, `lib/lms-export/**`,
@@ -239,7 +240,7 @@ UPDATE` row locks, which need no schema change. No schema gap blocked a fix.
 
 ## Branch status
 
-`p3/security-review` is green:
+`p3/security-review` was green at review time and has since merged to `dev` (`ddbb30f`):
 
 - `npm test` with `TEST_DATABASE_URL` → **332 passed, 5 skipped**.
 - `npm run verify` → exit 0 (0 errors, 9 pre-existing warnings).

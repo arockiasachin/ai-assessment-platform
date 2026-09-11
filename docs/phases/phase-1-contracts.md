@@ -106,11 +106,16 @@ the migration applies cleanly, and the harness runs a spine smoke test against e
 
 ## Status
 
-**Contracts landed; Phase 2 may proceed.** The schema, baseline migration, LLM adapter, retrieval
-module, and test harness are committed, and as of `e87d7bd` / `3470a33` / `ab1dd82` the auth
-hardening, the `zod` API contract, and the grade review state machine are landed as well. The legacy
-quiz path was subsequently moved server-side, so no answer key reaches the client; only quiz grade
-persistence and partial credit remain for Phase 2.
+**Complete.** The schema, baseline migration, LLM adapter, retrieval module, and test harness are
+committed, and as of `e87d7bd` / `3470a33` / `ab1dd82` the auth hardening, the `zod` API contract,
+and the grade review state machine are landed as well. The legacy quiz path was subsequently moved
+server-side (`63e642a`, `9ab0b64`, `8128b97`), so no answer key reaches the client.
+
+Two items that Phase 1 left open for Phase 2 have since landed: quiz grade persistence
+(`a21ee3b`, the quiz-grading pod) and a DB-backed state-machine/dedupe suite
+(`tests/grading-state-machine.test.ts`, `tests/grading-suggestion-dedupe.test.ts`). Short-answer
+partial credit remains unbuilt. `main` carries this phase at the `22f608b` boundary; the full phase
+history is on `dev`.
 
 ## Key decisions and why
 
@@ -156,7 +161,8 @@ persistence and partial credit remain for Phase 2.
 
 ## Evidence
 
-Commits on `dev` (from `git log --oneline origin/main..dev`):
+Phase 1 landing commits on `dev` (from `git log --oneline origin/main..dev` at the acceptance
+point):
 
 | Commit    | Subject                                                                | Files                                                                                                                                                               |
 | --------- | ---------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -205,13 +211,14 @@ service image. See the verification report for the full run log.
   a forged admin cookie and a student self-grading attempt are both rejected.
 - **The state machine is enforced.** `lib/grading/state-machine.ts` defines the legal transitions and
   `lib/grading/review-service.ts` writes `AuditLog` rows in the same transaction as each transition.
-  Only a human `accept`/`override` publishes a `Grade`. A DB-backed service test for the state
-  machine is deferred to the Phase 2 grading pod; the harness itself now runs locally against a
-  pgvector Postgres, so that test is no longer blocked on the environment.
+  Only a human `accept`/`override` publishes a `Grade`. The deferred DB-backed coverage landed in
+  `tests/grading-state-machine.test.ts` and `tests/grading-suggestion-dedupe.test.ts`, the latter
+  added by bug-fix run 1.
 - **Legacy quiz answer keys no longer reach the client.** `lib/gradebook-db.ts` stopped serializing
   `correctIndex`, and `components/quiz-runner.tsx` posts selected answers to `POST /api/quiz/grade`,
-  which grades server-side. Persisting auto-graded quiz results and short-answer partial credit stay
-  with the Phase 2 grading pod.
+  which grades server-side. Persisting auto-graded quiz results landed in the Phase 2 quiz-grading
+  pod (`a21ee3b`); short-answer partial credit is still unbuilt (see
+  [`../features/quiz-grading.md`](../features/quiz-grading.md#deferred-items-and-limits)).
 - **Unresolved spec questions that belong to this phase** (from
   [`product-spec.md`](../product-spec.md#open-questions-to-resolve-during-phase-1)): default LLM
   provider and model per task; retention policy for student work, rationales, and evidence quotes;
@@ -224,6 +231,7 @@ service image. See the verification report for the full run log.
 
 - **Depends on Phase 0** for CI, ESLint and Prettier, the removal of `ignoreBuildErrors`, and
   `product-spec.md`.
-- **Phase 2 depends on this phase** for the frozen schema, the LLM interface, the `zod` contract, the
-  review state machine, and the test harness. Those items have landed, so the gate to Phase 2 is
-  met; the only carried-over item is moving quiz grading server-side.
+- **Phase 2 depended on this phase** for the frozen schema, the LLM interface, the `zod` contract,
+  the review state machine, and the test harness. All landed, so the gate to Phase 2 was met and all
+  seven Phase 2 pods have since shipped. The only Phase 1 carry-over was moving quiz grading
+  server-side, which landed in `63e642a` and was completed by quiz persistence in `a21ee3b`.

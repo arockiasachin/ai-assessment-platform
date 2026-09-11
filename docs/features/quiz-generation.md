@@ -6,7 +6,8 @@ questions with credible, misconception-targeting distractors, tagged by subtopic
 and difficulty. Generated questions are **drafts** until the teacher explicitly
 publishes them.
 
-Branch: `p2/quiz-generation`.
+Merged to `dev` in `25e47ed` (`feat(quiz-generation): retrieval-grounded LLM quiz drafts with
+publish workflow`); the `p2/quiz-generation` branch was deleted after merging.
 
 ## Goal and product rules
 

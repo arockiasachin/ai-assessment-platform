@@ -10,8 +10,8 @@ formula). No new tooling was added; the repo has no axe/Lighthouse dependency an
 installed.
 
 Legend — **severity**: High = blocks a core flow for keyboard/AT users or a clear AA failure on a
-primary surface; Medium = real but narrower; Low = polish. **status**: fixed in this branch, or
-deferred with rationale.
+primary surface; Medium = real but narrower; Low = polish. **status**: fixed in this pass (merged
+to `dev` in `ebeaa1a`), or deferred with rationale.
 
 ## Findings
 

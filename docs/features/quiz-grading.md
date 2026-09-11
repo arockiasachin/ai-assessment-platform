@@ -4,7 +4,8 @@ A student can take and submit a quiz, the answers are scored server-side and
 persisted, and the outcome flows into the existing human grade-approval pipeline
 as a **suggestion only**. Nothing in this pod publishes a grade.
 
-Branch: `p2/quiz-grading`.
+Merged to `dev` in `a21ee3b` (`feat(quiz-grading): persist quiz attempts through the grade
+pipeline`); the `p2/quiz-grading` branch was deleted after merging.
 
 ## Goal and product rules
 
