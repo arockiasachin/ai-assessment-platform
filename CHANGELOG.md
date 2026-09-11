@@ -12,10 +12,24 @@ section.
 
 ## [Unreleased]
 
-Phase 1 (contracts) is complete. The schema, baseline migration, LLM adapter, retrieval module, test
-harness, auth hardening, the `zod` API contract, and the grade review state machine are landed on
-`dev`. The legacy quiz path is now also server-authoritative: answer keys no longer reach the
-client, and quiz results are graded by `POST /api/quiz/grade`. Nothing below is released.
+Phase 1 (contracts), Phase 2 (feature pods) and Phase 3 (hardening) are complete and landed on
+`dev`. Phase 2 delivered seven feature pods (quiz generation, quiz attempt persistence, rubric
+grading, sandboxed code evaluation, groups/peer evaluation, analytics, LMS export) and Phase 3
+delivered three hardening pods (security review, accessibility/performance, observability). Phases 0
+through 3 are merged; Phase 4 (cutover) has not started. Nothing below is released — `package.json`
+is still `0.1.0`.
+
+Known issues deliberately left open at this boundary: the Prisma schema remains frozen, and six
+features work around it via JSON columns or request-supplied values (team-formation
+attributes/availability, analytics alert thresholds, quiz draft/published state in
+`Question.metadata`, the grading suggestion dedupe key ordering, LTI registration and user-mapping
+persistence, and the per-assessment quiz attempt cap); a migration is the clean fix and is not done.
+The legacy `AssessmentGrade` model still coexists with the modern `Grade`. Four security items remain
+decisions rather than defects (no login rate limiting; the signed session carries the role for up to
+7 days without re-validation; in-process `unit` code execution is an arms race; container cleanup
+depends on the Docker daemon). One duplicate, unmerged implementation of quiz generation exists on a
+preserved branch and was intentionally not merged. See [`docs/README.md`](docs/README.md) for the
+full gap list.
 
 - **LLM quiz generation (Phase 2)** — a teacher describes a topic; the system retrieves their own course material, generates multiple-choice drafts with misconception-targeting distractors tagged by subtopic and difficulty, and keeps them unpublished until an explicit publish action (`lib/quiz-generation/**`, `app/api/teacher/quiz-generation/**`, `components/teacher-quiz-generator.tsx`). See [`docs/features/quiz-generation.md`](docs/features/quiz-generation.md).
 - **Team formation, peer evaluation, contribution tracking and milestones (Phase 2)** — instructor-weighted CATME-style formation that maximises the worst-fitting team and respects schedule availability, confidential five-dimension peer evaluation with adjustment factors computed with and without self-ratings, free-rider detection, contribution events as evidence only, and milestones with timestamped completion (`lib/groups/**`, `app/api/teacher/groups/**`, `app/api/student/peer-evaluation/**`, `components/teacher-groups-manager.tsx`, `components/student-peer-evaluation.tsx`). See [`docs/features/groups-peereval.md`](docs/features/groups-peereval.md).
@@ -26,6 +40,15 @@ client, and quiz results are graded by `POST /api/quiz/grade`. Nothing below is 
 - **Observability instrumentation (Phase 3)** — dependency-free structured JSON logging with correlation ids and a redaction policy (secrets/cookies/passwords never serialized), per-request and per-response lines, unhandled-error capture, per-call LLM telemetry (provider/model/usage/latency; prompt content off by default), a teacher-scoped grade-activity reader over `AuditLog`, and an unauthenticated `GET /api/health` with a timeout-bounded database check (`lib/observability/**`, `app/api/health/route.ts`, `app/api/teacher/observability/**`, `instrumentation.ts`). See [`docs/observability.md`](docs/observability.md).
 
 - **Accessibility & performance audit of the Phase 2 surfaces** — charts now expose a text alternative (`title`/`desc`), grade badges and destructive-on-tint text meet WCAG AA contrast, placeholder-only inputs and unlabeled `Select` triggers across the new dashboards got accessible names, quiz options expose their selected state, and `app/(dashboard)/loading.tsx` + `error.tsx` give the new routes real loading/error states. See [`docs/quality/a11y-perf-audit.md`](docs/quality/a11y-perf-audit.md).
+
+### Fixed
+
+- **bugfix-run-3 (final pass)** — two defects, each reproduced with a failing-then-passing test.
+  - **Partial `PUT /api/teacher/assessments/submissions` destroyed a grade (High, data loss).** The handler was a full replace written as a partial update: an _omitted_ `score` was indistinguishable from an explicit `score: null`, and `status`/`gradedAt`/`gradedById`/`feedback` were written unconditionally. A partial request therefore reverted a `GRADED` submission to `SUBMITTED` and wiped its grade and feedback. Now updates only the fields actually present; an explicit `null` still un-grades; a body with neither field is a `400` that writes nothing (`tests/teacher-submissions-partial-update.test.ts`). This closes suspicion S-1 carried since bugfix-run-2, and is the same class as run-2's offering-PUT fix.
+  - **Concurrent quiz attempt start returned a generic 500.** Two simultaneous starts both computed the same `attemptNumber`, and the loser hit a Prisma `P2002` unique-constraint error. Now takes a row lock on the assessment, re-checks in-progress state and the cap inside the transaction, and resumes the winning attempt (`tests/quiz-attempts-adversarial.test.ts`).
+  - Also added regression coverage for the instrumentation change below (`tests/observability-instrumentation.test.ts`) and confirmed clean behaviour for quiz-attempt double-submit, foreign-question IDOR, answer-key leakage, observability redaction, and `/api/health` against a dead database (`503` in ~0.3s, no hang, no leak). See [`docs/verification/bugfix-run-3.md`](docs/verification/bugfix-run-3.md).
+- **Edge-runtime instrumentation defect.** `instrumentation.ts` statically imported the observability logger, which reaches `process.stdout` and `process.version`. Next.js bundles this file for both the Node.js and Edge instrumentation runtimes, so Turbopack emitted Edge-runtime warnings and would have thrown had the Edge hooks executed. It is now a thin `NEXT_RUNTIME` dispatcher that dynamically imports `lib/observability/instrumentation-node.ts`, which is the pattern the Next.js instrumentation docs prescribe. Turbopack Edge warnings: 2 → 0. (Note: `proxy.ts` itself runs on the Node.js runtime in Next 16, so middleware logging was never affected.)
+- **Documentation drift.** An audit found the phase documents contradicting the shipped code — Phase 1 described as in progress and Phases 2–3 as not started while all ten pods were merged, plus stale commit hashes, an outdated "CI runs on `main` only" claim, and a stale branch-protection note. Sixteen `docs/**` files corrected, with a "Known gaps and open decisions" section added rather than leaving the workarounds undocumented.
 
 ### Security
 
@@ -242,10 +265,11 @@ work. Not yet git-tagged; `package.json` declares `0.1.0`.
 
 ### Added
 
-- **CI pipeline** (`.github/workflows/ci.yml`). Runs on every pull request and on pushes to `main`:
-  `npm ci`, `prisma generate`, `prisma validate`, typecheck, lint, format check, and build, on Node
-  24, with placeholder environment values and `LLM_PROVIDER=mock` so CI needs no secrets, no
-  database, and no network. Concurrency cancels superseded runs.
+- **CI pipeline** (`.github/workflows/ci.yml`). Runs on every pull request and on pushes to both
+  `main` and `dev`: `npm ci`, `prisma generate`, `prisma validate`, typecheck, lint, format check,
+  `npm test` against a `pgvector/pgvector:pg16` service container (so migrations and the database-backed
+  suite are exercised on every run), and build, on Node 24, with placeholder environment values and
+  `LLM_PROVIDER=mock` so CI needs no secrets and no network. Concurrency cancels superseded runs.
 - **ESLint flat config** (`eslint.config.mjs`). `eslint-config-next` core-web-vitals and typescript,
   with `eslint-config-prettier` last. `react-hooks/set-state-in-effect` is demoted to `warn` until
   Phase 2 replaces the legacy fetch-on-mount components.
