@@ -29,11 +29,15 @@ export type Assessment = {
 // key format: `${studentId}:${assessmentId}` -> score (out of assessment.maxMarks)
 export type MarksMap = Record<string, number>
 
+/**
+ * Client-safe quiz question. `correctIndex` must never be added back here: the
+ * answer key stays on the server and is only returned after grading via
+ * `POST /api/quiz/grade` (see `lib/quiz-scoring.ts`).
+ */
 export type QuizQuestion = {
   id: string
   prompt: string
   options: string[]
-  correctIndex: number
 }
 
 export type Quiz = {

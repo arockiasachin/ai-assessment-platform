@@ -160,7 +160,6 @@ export async function getGradebookPayloadForSessionUser(
           id: q.id,
           prompt: q.prompt,
           options: Array.isArray(q.optionsJson) ? (q.optionsJson as string[]) : [],
-          correctIndex: q.correctIndex,
         })),
       }))
 
@@ -321,7 +320,6 @@ export async function getGradebookPayloadForSessionUser(
         id: q.id,
         prompt: q.prompt,
         options: Array.isArray(q.optionsJson) ? (q.optionsJson as string[]) : [],
-        correctIndex: q.correctIndex,
       })),
     }))
 
