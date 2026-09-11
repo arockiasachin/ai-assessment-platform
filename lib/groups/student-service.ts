@@ -271,16 +271,19 @@ export async function recomputeAdjustmentFactorsForGroup(groupId: string): Promi
   const group = await prisma.group.findUnique({
     where: { id: groupId },
     select: {
-      members: { select: { id: true, studentId: true } },
+      members: { select: { id: true, studentId: true, leftAt: true } },
       peerEvaluations: {
         where: { status: "SUBMITTED" },
         select: { evaluatorId: true, evaluateeId: true, status: true, dimensions: true },
       },
     },
   })
-  if (!group || group.members.length === 0) return
+  // Only the current roster is scored: a soft-removed member keeps their
+  // historical evaluations but no longer counts toward the team norm.
+  const members = group?.members.filter((member) => member.leftAt === null) ?? []
+  if (!group || members.length === 0) return
 
-  const memberIds = group.members.map((member) => member.studentId)
+  const memberIds = members.map((member) => member.studentId)
   const rows = group.peerEvaluations.flatMap((evaluation) => {
     const ratings = readStoredRatings(evaluation.dimensions)
     if (ratings === null) return []
@@ -299,7 +302,7 @@ export async function recomputeAdjustmentFactorsForGroup(groupId: string): Promi
   const withSelf = new Map(analysis.withSelf.map((entry) => [entry.studentId, entry]))
 
   await prisma.$transaction(
-    group.members.map((member) =>
+    members.map((member) =>
       prisma.groupMember.update({
         where: { id: member.id },
         data: {

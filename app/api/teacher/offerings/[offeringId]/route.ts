@@ -4,11 +4,22 @@ import { requireRole } from "@/lib/authz"
 import { updateOfferingRequestSchema } from "@/lib/contracts"
 import { prisma } from "@/lib/prisma"
 
-function parseDateOrNull(value: string | null | undefined) {
-  if (!value) return null
+/**
+ * Map a schedule field from a partial update.
+ *
+ * `undefined` means the caller omitted the field, so it must be left untouched;
+ * `null` means the caller explicitly asked to clear it; a string is parsed.
+ * The previous helper collapsed "omitted" and "invalid" into `null`, so a body
+ * such as `{ "studentLimit": 30 }` silently wiped every schedule date on the
+ * offering (bug-fix run 2). The contract already rejects unparseable strings;
+ * returning `undefined` here is defence in depth so a bad value can never clear
+ * a field either.
+ */
+function toNullableDate(value: string | null | undefined): Date | null | undefined {
+  if (value === undefined) return undefined
+  if (value === null) return null
   const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return null
-  return date
+  return Number.isNaN(date.getTime()) ? undefined : date
 }
 
 export async function PUT(
@@ -32,10 +43,10 @@ export async function PUT(
   const { offeringId } = await params
 
   const studentLimit = parsed.data.studentLimit
-  const registrationOpenAt = parseDateOrNull(parsed.data.registrationOpenAt)
-  const registrationCloseAt = parseDateOrNull(parsed.data.registrationCloseAt)
-  const startsOn = parseDateOrNull(parsed.data.startsOn)
-  const endsOn = parseDateOrNull(parsed.data.endsOn)
+  const registrationOpenAt = toNullableDate(parsed.data.registrationOpenAt)
+  const registrationCloseAt = toNullableDate(parsed.data.registrationCloseAt)
+  const startsOn = toNullableDate(parsed.data.startsOn)
+  const endsOn = toNullableDate(parsed.data.endsOn)
 
   if (registrationOpenAt && registrationCloseAt && registrationOpenAt > registrationCloseAt) {
     return NextResponse.json(
@@ -64,10 +75,12 @@ export async function PUT(
     where: { id: offeringId },
     data: {
       studentLimit,
-      registrationOpenAt,
-      registrationCloseAt,
-      startsOn,
-      endsOn,
+      // Only fields the caller actually supplied are written. An explicit `null`
+      // still clears the field (the run-1 contract test pins that behaviour).
+      ...(registrationOpenAt !== undefined ? { registrationOpenAt } : {}),
+      ...(registrationCloseAt !== undefined ? { registrationCloseAt } : {}),
+      ...(startsOn !== undefined ? { startsOn } : {}),
+      ...(endsOn !== undefined ? { endsOn } : {}),
     },
   })
 

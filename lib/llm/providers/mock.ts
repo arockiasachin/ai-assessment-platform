@@ -78,13 +78,20 @@ function mockQuizResponse(prompt: string): string {
   const difficultyMatch = prompt.match(/^Difficulty target:\s*(\w+)/im)
   const target = (difficultyMatch?.[1] ?? "mixed").toLowerCase()
 
-  const subtopics = prompt
-    .split(/Subtopic tags to use:\s*\n/i)[1]
-    ?.split("\n")
-    .map((line) => line.replace(/^-\s*/, "").trim())
-    .filter((line) => line.length > 0)
-    .slice(0, 20)
-  const subtopicTags = subtopics && subtopics.length > 0 ? subtopics : [`${topic} fundamentals`]
+  const subtopicTags = (() => {
+    // The prompt renders the subtopic block as blank-line-delimited bullets, so
+    // only the first section is considered. Taking every following line leaked
+    // the "Course material" heading and the retrieved source text into the
+    // persisted subtopic tags.
+    const block = prompt.split(/Subtopic tags to use:\s*\n/i)[1]?.split(/\n\s*\n/)[0] ?? ""
+    const tags = block
+      .split("\n")
+      .filter((line) => /^\s*-\s+/.test(line))
+      .map((line) => line.replace(/^\s*-\s+/, "").trim())
+      .filter((line) => line.length > 0)
+      .slice(0, 20)
+    return tags.length > 0 ? tags : [`${topic} fundamentals`]
+  })()
 
   const difficultyFor = (index: number): number => {
     if (target === "easy") return 0.3
@@ -129,6 +136,34 @@ function mockQuizResponse(prompt: string): string {
 }
 
 /**
+ * Synthesize a deterministic, schema-valid per-criterion rubric evaluation for
+ * the `rubric-grading` task. Without this branch the generic mock JSON has no
+ * `score`, so `parseCriterionEvaluation` rejects it and every evaluation the
+ * offline (`LLM_PROVIDER=mock`) app runs returns a 502.
+ *
+ * The evidence span is the first words of the submission so it is a verbatim
+ * quote and passes `evidenceVerified`; the score sits at 75% of the criterion
+ * ceiling, which is deliberately unremarkable so no flag is raised.
+ */
+function mockRubricResponse(prompt: string): string {
+  const maxMatch = prompt.match(/Maximum points:\s*([0-9]+(?:\.[0-9]+)?)/i)
+  const maxPoints = maxMatch ? Number(maxMatch[1]) : 1
+  const criterionMatch = prompt.match(/^Criterion:\s*(.+)$/im)
+  const criterion = criterionMatch?.[1]?.trim() || "the criterion"
+  const submissionMatch = prompt.match(/"""\s*([\s\S]*?)\s*"""/)
+  const submission = (submissionMatch?.[1] ?? "").replace(/\s+/g, " ").trim()
+  const evidence = submission.split(" ").filter(Boolean).slice(0, 12).join(" ")
+  const score = maxPoints > 0 ? Math.round(maxPoints * 0.75 * 100) / 100 : 0
+
+  return JSON.stringify({
+    score,
+    rationale: `Deterministic offline score for "${criterion}" derived from the quoted evidence.`,
+    evidence: evidence || criterion,
+    confidence: 0.9,
+  })
+}
+
+/**
  * Offline provider for CI and tests. It performs no network I/O, needs no API
  * key, and returns byte-identical output for identical input. Tests can pin an
  * exact response with `providerOptions.mockResponse`.
@@ -164,6 +199,8 @@ export function createMockProvider(config: MockProviderConfig = {}): LlmProvider
         text = override
       } else if (task === "quiz-generation") {
         text = mockQuizResponse(lastUserMessage || promptText)
+      } else if (task === "rubric-grading") {
+        text = mockRubricResponse(lastUserMessage || promptText)
       } else if (request.json) {
         text = JSON.stringify({
           mock: true,

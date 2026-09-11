@@ -169,6 +169,44 @@ Real-time bug-fixing pass 1 of 3 (see [`docs/verification/bugfix-run-1.md`](docs
   `components/student-courses-view.tsx`): `payload?.x ?? []` allocated a fresh array every render,
   forcing downstream `useMemo`s to recompute on every render.
 
+### bugfix-run-2
+
+Real-time bug-fixing pass 2 of 3 (see [`docs/verification/bugfix-run-2.md`](docs/verification/bugfix-run-2.md)).
+
+#### Security
+
+- **OneRoster CSV export no longer allows spreadsheet formula injection** (`lib/lms-export/csv.ts`).
+  A free-text cell (assessment title, comment, description) beginning with `=`, `+`, `-`, `@`, a tab,
+  or a CR was emitted verbatim, so a crafted title such as `=cmd|'/C calc'!A0` would execute when the
+  exported file was opened in Excel/Sheets/LibreOffice. String cells are now prefixed with an
+  apostrophe (OWASP mitigation); numeric cells are exempt so negative numbers stay numeric, and
+  RFC-4180 quoting still applies afterwards.
+
+#### Fixed
+
+- **A partial `PUT /api/teacher/offerings/[id]` no longer wipes the offering's schedule dates**
+  (`app/api/teacher/offerings/[offeringId]/route.ts`). `parseDateOrNull` collapsed "field omitted"
+  and "field invalid" into `null`, and the route wrote all four date columns unconditionally, so a
+  body such as `{ "studentLimit": 30 }` returned 200 while clearing `registrationOpenAt`,
+  `registrationCloseAt`, `startsOn`, and `endsOn`. Omitted fields are now left untouched, an explicit
+  `null` still clears a field, and an unparseable date is rejected with 400.
+- **Soft-removed group members are no longer scored or offered an individual grade**
+  (`lib/groups/service.ts`, `lib/groups/student-service.ts`). `getOfferingAnalysisForTeacher`,
+  `resolveUniformGroupGrade`, and `recomputeAdjustmentFactorsForGroup` built their roster from every
+  `GroupMember` without filtering `leftAt`, so a former member received an adjustment factor and a
+  suggested individual grade and their retained ratings skewed the team norm for everyone else. Only
+  current members (`leftAt = null`) are scored; removed members' historical rows are retained.
+- **Rubric evaluation now runs under the offline `mock` provider** (`lib/llm/providers/mock.ts`).
+  The mock only synthesized the `quiz-generation` task, so `task: "rubric-grading"` received generic
+  JSON that `parseCriterionEvaluation` rejects and `POST /api/teacher/reviews/evaluate` always
+  answered 502 with `LLM_PROVIDER=mock`. The mock now returns a deterministic, schema-valid
+  per-criterion evaluation whose evidence is a verbatim quote of the submission.
+- **Mock quiz generation no longer leaks the prompt's material section into subtopic tags**
+  (`lib/llm/providers/mock.ts`). The parser consumed every line after `Subtopic tags to use:`,
+  including the `Course material …` heading and the retrieved source text, and persisted those as
+  `Question.subtopic`. It now reads only the bullet tags in the first section and falls back to
+  `<topic> fundamentals`.
+
 ## [0.1.0] - 2026-09-11
 
 Phase 0 (foundations): make the repository buildable, reviewable, and secret-free before product

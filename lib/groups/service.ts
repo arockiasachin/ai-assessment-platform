@@ -462,7 +462,13 @@ export async function getOfferingAnalysisForTeacher(
 
   const analysisByGroup = new Map<string, GroupAnalysis>()
   for (const group of groups) {
-    const memberIds = group.members.map((member) => member.studentId)
+    // Soft-removed members (`leftAt != null`) keep their historical evaluations
+    // for audit, but they are no longer on the roster: they must not receive an
+    // adjustment factor or a suggested individual grade, and their past ratings
+    // must not skew the team norm. `serializeGroupSummary` already hides them.
+    const memberIds = group.members
+      .filter((member) => member.leftAt === null)
+      .map((member) => member.studentId)
     const rows: GroupEvaluationRow[] = evaluations
       .filter((evaluation) => evaluation.groupId === group.id)
       .map((evaluation) => ({
@@ -539,7 +545,13 @@ async function resolveUniformGroupGrade(
   })
   if (!assessment) throw new GroupError(404, "Group-project assessment not found.")
 
-  const memberIds = [...new Set(groups.flatMap((group) => group.members.map((m) => m.studentId)))]
+  const memberIds = [
+    ...new Set(
+      groups.flatMap((group) =>
+        group.members.filter((member) => member.leftAt === null).map((m) => m.studentId),
+      ),
+    ),
+  ]
   if (memberIds.length === 0) return null
   const grades = await prisma.assessmentGrade.findMany({
     where: { assessmentId, studentId: { in: memberIds } },
