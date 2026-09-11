@@ -1,0 +1,350 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../lib/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum UserRole {
+  ADMIN
+  TEACHER
+  STUDENT
+}
+
+enum AssessmentType {
+  QUIZ
+  ASSIGNMENT
+}
+
+enum AttendanceStatus {
+  PRESENT
+  ABSENT
+  LATE
+  EXCUSED
+}
+
+enum EventType {
+  CLASS
+  ASSESSMENT
+  HOLIDAY
+  REMINDER
+}
+
+enum SubmissionStatus {
+  DRAFT
+  SUBMITTED
+  LATE
+  GRADED
+  RESUBMITTED
+}
+
+model User {
+  id             String          @id @default(cuid())
+  email          String          @unique
+  passwordHash   String
+  legacyPassword String?         @map("password")
+  role           UserRole
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  studentProfile StudentProfile?
+  staffProfile   StaffProfile?
+}
+
+model StudentProfile {
+  id                String               @id @default(cuid())
+  userId            String               @unique
+  fullName          String
+  registerNumber    String               @unique
+  profilePicUrl     String?
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
+  user              User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  streamMemberships StudentStream[]
+  enrollments       Enrollment[]
+  submissions       Submission[]
+  grades            AssessmentGrade[]
+  attendance        AttendanceRecord[]
+  courseHistory     CourseGradeHistory[]
+  courseRatings     CourseRating[]
+}
+
+model StaffProfile {
+  id                 String           @id @default(cuid())
+  userId             String           @unique
+  fullName           String
+  empId              String           @unique
+  profilePicUrl      String?
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
+  user               User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  offerings          CourseOffering[] @relation("TeacherOfferings")
+  createdAssessments Assessment[]     @relation("AssessmentCreator")
+  gradedSubmissions  Submission[]     @relation("SubmissionGrader")
+}
+
+model Stream {
+  id        String          @id @default(cuid())
+  code      String          @unique
+  name      String
+  createdAt DateTime        @default(now())
+  students  StudentStream[]
+}
+
+model StudentStream {
+  id        String         @id @default(cuid())
+  studentId String
+  streamId  String
+  fromDate  DateTime       @default(now())
+  toDate    DateTime?
+  student   StudentProfile @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  stream    Stream         @relation(fields: [streamId], references: [id], onDelete: Cascade)
+
+  @@index([studentId])
+  @@index([streamId])
+}
+
+model Course {
+  id          String               @id @default(cuid())
+  code        String               @unique
+  name        String
+  description String?
+  credits     Int                  @default(3)
+  createdAt   DateTime             @default(now())
+  updatedAt   DateTime             @updatedAt
+  offerings   CourseOffering[]
+  assessments Assessment[]
+  history     CourseGradeHistory[]
+}
+
+model ClassRoom {
+  id             String               @id @default(cuid())
+  code           String               @unique
+  name           String
+  academicYear   Int
+  section        String?
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+  offerings      CourseOffering[]
+  calendarEvents CalendarEvent[]
+  assessments    Assessment[]
+  history        CourseGradeHistory[]
+}
+
+model CourseOffering {
+  id                 String              @id @default(cuid())
+  courseId           String
+  classId            String
+  teacherId          String
+  term               String
+  academicYear       Int
+  studentLimit       Int                 @default(40)
+  registrationOpenAt DateTime?
+  registrationCloseAt DateTime?
+  startsOn           DateTime?
+  endsOn             DateTime?
+  noSqlRefId         String?
+  course             Course              @relation(fields: [courseId], references: [id], onDelete: Restrict)
+  classRoom          ClassRoom           @relation(fields: [classId], references: [id], onDelete: Cascade)
+  teacher            StaffProfile        @relation("TeacherOfferings", fields: [teacherId], references: [id], onDelete: Restrict)
+  enrollments        Enrollment[]
+  assessments        Assessment[]
+  attendanceSessions AttendanceSession[]
+  calendarEvents     CalendarEvent[]
+  ratings            CourseRating[]
+
+  @@unique([courseId, classId, teacherId, term, academicYear])
+  @@index([classId, courseId])
+}
+
+model CourseRating {
+  id         String         @id @default(cuid())
+  offeringId String
+  studentId  String
+  rating     Int
+  comment    String?
+  createdAt  DateTime       @default(now())
+  updatedAt  DateTime       @updatedAt
+  offering   CourseOffering @relation(fields: [offeringId], references: [id], onDelete: Cascade)
+  student    StudentProfile @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@unique([offeringId, studentId])
+  @@index([offeringId])
+  @@index([studentId])
+}
+
+model Enrollment {
+  id         String         @id @default(cuid())
+  studentId  String
+  offeringId String
+  enrolledAt DateTime       @default(now())
+  status     String         @default("active")
+  student    StudentProfile @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  offering   CourseOffering @relation(fields: [offeringId], references: [id], onDelete: Cascade)
+
+  @@unique([studentId, offeringId])
+  @@index([offeringId])
+}
+
+model Assessment {
+  id            String            @id @default(cuid())
+  offeringId    String
+  courseId      String
+  classId       String
+  title         String
+  type          AssessmentType
+  dueDate       DateTime
+  maxMarks      Int
+  createdById   String
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+  noSqlRefId    String?
+  offering      CourseOffering    @relation(fields: [offeringId], references: [id], onDelete: Cascade)
+  course        Course            @relation(fields: [courseId], references: [id], onDelete: Restrict)
+  classRoom     ClassRoom         @relation(fields: [classId], references: [id], onDelete: Restrict)
+  createdBy     StaffProfile      @relation("AssessmentCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  submissions   Submission[]
+  grades        AssessmentGrade[]
+  calendarLinks CalendarEvent[]
+  quiz          Quiz?
+
+  @@index([offeringId, dueDate])
+  @@index([courseId, classId])
+}
+
+model Quiz {
+  id           String         @id @default(cuid())
+  assessmentId String         @unique
+  assessment   Assessment     @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  questions    QuizQuestion[]
+}
+
+model QuizQuestion {
+  id           String @id @default(cuid())
+  quizId       String
+  prompt       String
+  optionsJson  Json
+  correctIndex Int
+  order        Int
+  quiz         Quiz   @relation(fields: [quizId], references: [id], onDelete: Cascade)
+
+  @@unique([quizId, order])
+}
+
+model Submission {
+  id           String           @id @default(cuid())
+  assessmentId String
+  studentId    String
+  submittedAt  DateTime?
+  status       SubmissionStatus @default(DRAFT)
+  contentText  String?
+  artifactUrl  String?
+  noSqlRefId   String?
+  gradedAt     DateTime?
+  gradedById   String?
+  feedback     String?
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+  assessment   Assessment       @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  student      StudentProfile   @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  gradedBy     StaffProfile?    @relation("SubmissionGrader", fields: [gradedById], references: [id], onDelete: SetNull)
+
+  @@unique([assessmentId, studentId])
+  @@index([studentId, status])
+}
+
+model AssessmentGrade {
+  id            String         @id @default(cuid())
+  assessmentId  String
+  studentId     String
+  marksObtained Decimal        @db.Decimal(5, 2)
+  gradedAt      DateTime       @default(now())
+  graderId      String?
+  rubricRef     String?
+  assessment    Assessment     @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  student       StudentProfile @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@unique([assessmentId, studentId])
+  @@index([studentId])
+}
+
+model AttendanceSession {
+  id         String             @id @default(cuid())
+  offeringId String
+  classDate  DateTime
+  topic      String?
+  createdAt  DateTime           @default(now())
+  noSqlRefId String?
+  offering   CourseOffering     @relation(fields: [offeringId], references: [id], onDelete: Cascade)
+  records    AttendanceRecord[]
+
+  @@unique([offeringId, classDate])
+}
+
+model AttendanceRecord {
+  id                  String            @id @default(cuid())
+  attendanceSessionId String
+  studentId           String
+  status              AttendanceStatus
+  remarks             String?
+  session             AttendanceSession @relation(fields: [attendanceSessionId], references: [id], onDelete: Cascade)
+  student             StudentProfile    @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@unique([attendanceSessionId, studentId])
+  @@index([studentId])
+}
+
+model CourseGradeHistory {
+  id           String         @id @default(cuid())
+  studentId    String
+  courseId     String
+  classId      String
+  academicYear Int
+  term         String
+  finalMarks   Decimal?       @db.Decimal(6, 2)
+  finalGrade   String?
+  computedAt   DateTime       @default(now())
+  noSqlRefId   String?
+  student      StudentProfile @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  course       Course         @relation(fields: [courseId], references: [id], onDelete: Restrict)
+  classRoom    ClassRoom      @relation(fields: [classId], references: [id], onDelete: Restrict)
+
+  @@unique([studentId, courseId, classId, academicYear, term])
+  @@index([courseId, classId, academicYear])
+}
+
+model CalendarEvent {
+  id           String          @id @default(cuid())
+  classId      String?
+  offeringId   String?
+  assessmentId String?
+  title        String
+  description  String?
+  eventType    EventType
+  startAt      DateTime
+  endAt        DateTime?
+  isUpcoming   Boolean         @default(true)
+  noSqlRefId   String?
+  createdAt    DateTime        @default(now())
+  classRoom    ClassRoom?      @relation(fields: [classId], references: [id], onDelete: SetNull)
+  offering     CourseOffering? @relation(fields: [offeringId], references: [id], onDelete: SetNull)
+  assessment   Assessment?     @relation(fields: [assessmentId], references: [id], onDelete: SetNull)
+
+  @@index([startAt, isUpcoming])
+  @@index([classId, offeringId])
+}
+
+model ExternalReference {
+  id         String   @id @default(cuid())
+  entityType String
+  entityId   String
+  provider   String
+  documentId String
+  purpose    String?
+  metadata   Json?
+  createdAt  DateTime @default(now())
+
+  @@unique([entityType, entityId, provider, documentId])
+  @@index([entityType, entityId])
+}

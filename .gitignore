@@ -1,0 +1,33 @@
+# v0 sandbox internal files
+__v0_runtime_loader.js
+__v0_devtools.tsx
+__v0_jsx-dev-runtime.ts
+.snowflake/
+.v0-trash/
+.vercel/
+
+# Environment variables and secrets — never commit these
+.env
+.env.*
+!.env.example
+pass
+
+# Prisma generated client
+/lib/generated/prisma
+
+# Local scratch / document extraction
+.pdf-extract/
+.docx-extract/
+
+# Build and tooling artifacts
+node_modules
+.next/
+out/
+coverage/
+playwright-report/
+test-results/
+*.tsbuildinfo
+
+# OS / editor
+.DS_Store
+*.pem
