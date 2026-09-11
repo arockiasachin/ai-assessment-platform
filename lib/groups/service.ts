@@ -11,6 +11,7 @@ import {
 } from "@/lib/contracts/groups"
 import type { Prisma } from "@/lib/generated/prisma/client"
 import { writeAuditLog } from "@/lib/grading/audit"
+import { partialUpdate } from "@/lib/partial-update"
 import { prisma } from "@/lib/prisma"
 import type { AuthUser } from "@/lib/session"
 
@@ -307,11 +308,11 @@ export async function updateGroupForTeacher(
   await prisma.$transaction(async (tx) => {
     await tx.group.update({
       where: { id: groupId },
-      data: {
-        ...(request.name !== undefined ? { name: request.name } : {}),
-        ...(request.projectTitle !== undefined ? { projectTitle: request.projectTitle } : {}),
-        ...(request.status !== undefined ? { status: request.status } : {}),
-      },
+      data: partialUpdate(request, {
+        name: true,
+        projectTitle: true,
+        status: true,
+      }),
     })
 
     if (removeStudentIds.length > 0) {

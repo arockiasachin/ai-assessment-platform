@@ -5,6 +5,7 @@ import {
   type GenerationAssessmentSummary,
 } from "@/lib/contracts/quiz-generation"
 import { writeAuditLog } from "@/lib/grading/audit"
+import { partialUpdate } from "@/lib/partial-update"
 import { prisma } from "@/lib/prisma"
 import type { AuthUser } from "@/lib/session"
 
@@ -154,13 +155,13 @@ export async function editGeneratedQuestionForTeacher(
 
     await tx.question.update({
       where: { id: questionId },
-      data: {
-        ...(request.prompt !== undefined ? { prompt: request.prompt } : {}),
-        ...(request.explanation !== undefined ? { explanation: request.explanation } : {}),
-        ...(request.subtopic !== undefined ? { subtopic: request.subtopic } : {}),
-        ...(request.difficulty !== undefined ? { difficulty: request.difficulty } : {}),
-        ...(request.points !== undefined ? { points: request.points } : {}),
-      },
+      data: partialUpdate(request, {
+        prompt: true,
+        explanation: true,
+        subtopic: true,
+        difficulty: true,
+        points: true,
+      }),
     })
 
     await writeAuditLog(tx, {

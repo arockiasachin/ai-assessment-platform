@@ -302,14 +302,15 @@ export async function recomputeAdjustmentFactorsForGroup(groupId: string): Promi
   const withSelf = new Map(analysis.withSelf.map((entry) => [entry.studentId, entry]))
 
   await prisma.$transaction(
-    members.map((member) =>
-      prisma.groupMember.update({
+    members.map((member) => {
+      // Deterministic recompute: a member with no valid ratings gets a null
+      // factor, so both columns are always overwritten with the current value.
+      const factor = withoutSelf.get(member.studentId)?.adjustmentFactor ?? null
+      const selfFactor = withSelf.get(member.studentId)?.adjustmentFactor ?? null
+      return prisma.groupMember.update({
         where: { id: member.id },
-        data: {
-          adjustmentFactor: withoutSelf.get(member.studentId)?.adjustmentFactor ?? null,
-          selfAdjustmentFactor: withSelf.get(member.studentId)?.adjustmentFactor ?? null,
-        },
-      }),
-    ),
+        data: { adjustmentFactor: factor, selfAdjustmentFactor: selfFactor },
+      })
+    }),
   )
 }

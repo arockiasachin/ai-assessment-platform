@@ -1,25 +1,36 @@
 import { NextResponse } from "next/server"
 import { jsonError, parseJsonBody } from "@/lib/api"
 import { requireRole } from "@/lib/authz"
-import { updateOfferingRequestSchema } from "@/lib/contracts"
+import { updateOfferingRequestSchema, type UpdateOfferingRequest } from "@/lib/contracts"
+import { PartialUpdateError, partialUpdate } from "@/lib/partial-update"
 import { prisma } from "@/lib/prisma"
 
 /**
- * Map a schedule field from a partial update.
- *
- * `undefined` means the caller omitted the field, so it must be left untouched;
- * `null` means the caller explicitly asked to clear it; a string is parsed.
- * The previous helper collapsed "omitted" and "invalid" into `null`, so a body
- * such as `{ "studentLimit": 30 }` silently wiped every schedule date on the
- * offering (bug-fix run 2). The contract already rejects unparseable strings;
- * returning `undefined` here is defence in depth so a bad value can never clear
- * a field either.
+ * Parse a nullable schedule field. `null` is an explicit clear; a string is
+ * parsed into a `Date`. Omitted fields never reach this function.
  */
-function toNullableDate(value: string | null | undefined): Date | null | undefined {
-  if (value === undefined) return undefined
-  if (value === null) return null
-  const date = new Date(value)
-  return Number.isNaN(date.getTime()) ? undefined : date
+function toNullableDate(value: string | null): Date | null {
+  return value === null ? null : new Date(value)
+}
+
+/**
+ * Build the write payload from the fields the caller actually sent.
+ *
+ * The run-2 data-loss bug lived here: a helper collapsed "field omitted" and
+ * "field invalid" into `null`, then every date column was written
+ * unconditionally, so `{ "studentLimit": 30 }` wiped the offering's schedule.
+ * `partialUpdate` only includes the supplied fields; an explicit `null` still
+ * clears one date. The contract rejects unparseable strings, and a transform
+ * failure is mapped to a `400` below rather than reaching Prisma.
+ */
+function buildOfferingSettings(request: UpdateOfferingRequest) {
+  return partialUpdate(request, {
+    studentLimit: true,
+    registrationOpenAt: toNullableDate,
+    registrationCloseAt: toNullableDate,
+    startsOn: toNullableDate,
+    endsOn: toNullableDate,
+  })
 }
 
 export async function PUT(
@@ -42,11 +53,15 @@ export async function PUT(
 
   const { offeringId } = await params
 
-  const studentLimit = parsed.data.studentLimit
-  const registrationOpenAt = toNullableDate(parsed.data.registrationOpenAt)
-  const registrationCloseAt = toNullableDate(parsed.data.registrationCloseAt)
-  const startsOn = toNullableDate(parsed.data.startsOn)
-  const endsOn = toNullableDate(parsed.data.endsOn)
+  let settings: ReturnType<typeof buildOfferingSettings>
+  try {
+    settings = buildOfferingSettings(parsed.data)
+  } catch (error) {
+    if (error instanceof PartialUpdateError) return jsonError(error.message, 400)
+    throw error
+  }
+
+  const { registrationOpenAt, registrationCloseAt, startsOn, endsOn } = settings
 
   if (registrationOpenAt && registrationCloseAt && registrationOpenAt > registrationCloseAt) {
     return NextResponse.json(
@@ -73,15 +88,9 @@ export async function PUT(
 
   await prisma.courseOffering.update({
     where: { id: offeringId },
-    data: {
-      studentLimit,
-      // Only fields the caller actually supplied are written. An explicit `null`
-      // still clears the field (the run-1 contract test pins that behaviour).
-      ...(registrationOpenAt !== undefined ? { registrationOpenAt } : {}),
-      ...(registrationCloseAt !== undefined ? { registrationCloseAt } : {}),
-      ...(startsOn !== undefined ? { startsOn } : {}),
-      ...(endsOn !== undefined ? { endsOn } : {}),
-    },
+    // Only fields the caller actually supplied are written. An explicit `null`
+    // still clears the field (the run-1 contract test pins that behaviour).
+    data: settings,
   })
 
   return NextResponse.json({ success: true, message: "Offering settings updated." })

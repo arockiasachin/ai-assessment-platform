@@ -13,6 +13,7 @@ import {
 } from "@/lib/contracts/code-eval"
 import { writeAuditLog } from "@/lib/grading/audit"
 import { getLlmProvider, type LlmGenerateResult, type LlmProvider } from "@/lib/llm"
+import { partialUpdate } from "@/lib/partial-update"
 import { prisma } from "@/lib/prisma"
 import type { AuthUser } from "@/lib/session"
 
@@ -283,15 +284,15 @@ export async function updateTestCaseForTeacher(
   const updated = await prisma.$transaction(async (tx) => {
     const saved = await tx.testCase.update({
       where: { id: testCase.id },
-      data: {
-        ...(request.name !== undefined ? { name: request.name } : {}),
-        ...(request.description !== undefined ? { description: request.description } : {}),
-        ...(request.category !== undefined ? { category: request.category } : {}),
-        ...(request.input !== undefined ? { input: request.input } : {}),
-        ...(request.expectedOutput !== undefined ? { expectedOutput: request.expectedOutput } : {}),
-        ...(request.points !== undefined ? { points: request.points } : {}),
-        ...(request.isHidden !== undefined ? { isHidden: request.isHidden } : {}),
-      },
+      data: partialUpdate(request, {
+        name: true,
+        description: true,
+        category: true,
+        input: true,
+        expectedOutput: true,
+        points: true,
+        isHidden: true,
+      }),
     })
     await writeAuditLog(tx, {
       entityType: "TestCase",
