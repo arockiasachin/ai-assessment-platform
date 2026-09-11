@@ -12,10 +12,9 @@ section.
 
 ## [Unreleased]
 
-Phase 1 (contracts) is in progress. The schema, migration, LLM adapter, and retrieval module are
-landed on `dev`; auth and session hardening and the `zod` API contract with the grade review state
-machine are not yet landed, and the test harness is being landed concurrently but is uncommitted.
-Nothing below is released.
+Phase 1 (contracts) is in progress. The schema, baseline migration, LLM adapter, retrieval module,
+and test harness are landed on `dev`; auth and session hardening and the `zod` API contract with the
+grade review state machine are not yet landed. Nothing below is released.
 
 ### Added
 
@@ -29,9 +28,12 @@ Nothing below is released.
   `QuizAttemptStatus`, `GradeReviewStatus`, `GradeSource`, `TestRunStatus`, `GroupStatus`,
   `PeerEvaluationStatus`, `MilestoneStatus`, `ContributionEventType`, `SimilarityVerdict`.
   `AssessmentType` gained `DESCRIPTIVE`, `CODE`, and `GROUP_PROJECT`.
-- **Phase 1 migration** (`prisma/migrations/20260911140500_phase1_assessment_spine/migration.sql`).
-  Creates the new tables and enums, runs `CREATE EXTENSION IF NOT EXISTS vector`, and adds
-  `MaterialChunk_embedding_hnsw_idx`, an HNSW index using `vector_cosine_ops`.
+- **Baseline migration** (`prisma/migrations/20260911180000_baseline/migration.sql`). A single
+  squashed initial migration that takes an empty database all the way to the current
+  `prisma/schema.prisma`: the full assessment spine (tables, enums, indexes, foreign keys), plus
+  `CREATE EXTENSION IF NOT EXISTS vector` and
+  `MaterialChunk_embedding_hnsw_idx`, an HNSW index using `vector_cosine_ops`. It replaces the
+  incomplete Phase 1 migration chain.
 - **Pluggable LLM provider adapter** (`lib/llm/`). One `LlmProvider` interface with `generate` and
   `embed`, four providers (`openai-compatible`, `anthropic`, `ollama`, `mock`), env-driven selection
   via `LLM_PROVIDER`, a process-wide lazy singleton, and injected `env` / `fetchImpl` for tests.
@@ -50,9 +52,19 @@ Nothing below is released.
 ### Changed
 
 - `lib/admin-db.ts`: widened `DbAssessmentType` for the new `AssessmentType` enum values.
+- **Test database provisioning** (`tests/helpers/provision.ts`). The harness now resets the test
+  database and applies the committed migration history with `prisma migrate deploy`, instead of
+  diffing `prisma/schema.prisma` from empty. CI therefore exercises the real migration path and
+  fails if the history stops reproducing the schema from scratch.
 
 ### Fixed
 
+- **Prisma migration history.** `prisma migrate deploy` could not build a fresh database:
+  `20260807071217_init` created only the `User` table, `20260807124500_course_registration_rating`
+  altered `Course`/`CourseOffering` and referenced `StudentProfile` (none created by any migration),
+  and `20260807_manual_transition.sql` was a loose file Prisma never ran. The history was
+  re-baselined into one squashed migration so an empty database now reaches the current schema
+  through `prisma migrate deploy`.
 - `lib/vector/search.ts`: an empty query now reports the caller's configured provider instead of
   hardcoding the mock provider name.
 

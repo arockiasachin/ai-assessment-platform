@@ -33,12 +33,12 @@ Phase 1 work landed through commit `22f608b`.
   pipeline, ESLint flat config and Prettier, removal of `typescript.ignoreBuildErrors`, `zod`,
   `.env.example`, and `docs/product-spec.md`. Two build-breaking defects were caught by CI and
   fixed (the `hono` lockfile/override mismatch and admin pages that needed `force-dynamic`).
-- **Phase 1, contracts — in progress.** Landed: the additive Prisma assessment spine, the Phase 1
+- **Phase 1, contracts — in progress.** Landed: the additive Prisma assessment spine, the baseline
   migration with the `pgvector` extension and an HNSW cosine index, the pluggable LLM adapter with
-  a deterministic mock provider, and the pgvector chunk/embed/search module. Open: auth and session
-  hardening and the `zod` API contract with the grade review state machine. The test harness is being
-  landed by a concurrent workstream: `tests/` and `vitest.config.mts` are in the working tree but are
-  uncommitted at the time of writing.
+  a deterministic mock provider, the pgvector chunk/embed/search module, and the Vitest harness
+  (`tests/`, `vitest.config.mts`), which provisions its database by applying the committed
+  migrations. Open: auth and session hardening and the `zod` API contract with the grade review
+  state machine.
 - **Phase 2, feature pods — not started.** Seven pods: quiz generation, quiz grading, rubric
   grading, code sandbox, groups and peer evaluation, analytics, LMS export.
 - **Phase 3, hardening — not started.** Security review, a11y and performance, observability, docs,

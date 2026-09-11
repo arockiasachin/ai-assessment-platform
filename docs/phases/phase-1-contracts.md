@@ -35,13 +35,14 @@ unless the interfaces are frozen first.
 
 ### Landed on this branch
 
-| Area              | Path                                                                                    |
-| ----------------- | --------------------------------------------------------------------------------------- |
-| Assessment spine  | `prisma/schema.prisma`                                                                  |
-| Phase 1 migration | `prisma/migrations/20260911140500_phase1_assessment_spine/migration.sql`                |
-| LLM adapter       | `lib/llm/` (`index.ts`, `types.ts`, `env.ts`, `errors.ts`, `http.ts`, `providers/*.ts`) |
-| Retrieval module  | `lib/vector/` (`chunk.ts`, `embed.ts`, `search.ts`, `index.ts`)                         |
-| Enum widening     | `lib/admin-db.ts` (`DbAssessmentType` extended for the new `AssessmentType` values)     |
+| Area               | Path                                                                                    |
+| ------------------ | --------------------------------------------------------------------------------------- |
+| Assessment spine   | `prisma/schema.prisma`                                                                  |
+| Baseline migration | `prisma/migrations/20260911180000_baseline/migration.sql`                               |
+| LLM adapter        | `lib/llm/` (`index.ts`, `types.ts`, `env.ts`, `errors.ts`, `http.ts`, `providers/*.ts`) |
+| Retrieval module   | `lib/vector/` (`chunk.ts`, `embed.ts`, `search.ts`, `index.ts`)                         |
+| Enum widening      | `lib/admin-db.ts` (`DbAssessmentType` extended for the new `AssessmentType` values)     |
+| Test harness       | `tests/`, `vitest.config.mts`                                                           |
 
 New Prisma models landed with the spine: `Material`, `MaterialChunk`, `Rubric`, `RubricCriterion`,
 `AIGradeSuggestion`, `GradeReview`, `Grade`, `AuditLog`, `Question`, `QuestionOption`, `QuizAttempt`,
@@ -55,12 +56,11 @@ New enums: `MaterialKind`, `QuestionType`, `QuizAttemptStatus`, `GradeReviewStat
 
 ### Still open or in flight
 
-| Area                       | Intended path                                                                 | State                  |
-| -------------------------- | ----------------------------------------------------------------------------- | ---------------------- |
-| Signed session + authz     | `lib/auth.ts`, `proxy.ts`, `requireRole`, `app/api/**`                        | Not started            |
-| `zod` API contract         | Route handlers and shared schemas                                             | Not started            |
-| Grade review state machine | Service layer over `AIGradeSuggestion` / `GradeReview` / `Grade` / `AuditLog` | Not started            |
-| Test harness               | Vitest config, ephemeral Postgres, spine smoke test                           | In flight, uncommitted |
+| Area                       | Intended path                                                                 | State       |
+| -------------------------- | ----------------------------------------------------------------------------- | ----------- |
+| Signed session + authz     | `lib/auth.ts`, `proxy.ts`, `requireRole`, `app/api/**`                        | Not started |
+| `zod` API contract         | Route handlers and shared schemas                                             | Not started |
+| Grade review state machine | Service layer over `AIGradeSuggestion` / `GradeReview` / `Grade` / `AuditLog` | Not started |
 
 Evidence for the state of each:
 
@@ -70,10 +70,11 @@ Evidence for the state of each:
 - `zod` is a dependency in `package.json` but is imported nowhere in the codebase.
 - `app/api/auth/seed/route.ts` still creates the `admin` / `admin` credential, and there is no
   `requireRole` guard anywhere.
-- The test harness is being landed concurrently: `tests/` (including `tests/spine.test.ts`,
-  `tests/llm-mock.test.ts`, fixtures, and DB helpers) and `vitest.config.mts` are in the working tree
-  but are uncommitted, and `ci.yml` has an uncommitted change adding the test steps. There is no
-  `playwright.config.*`.
+- The test harness is landed (`0644bc1`, `f54b2f0`): `tests/` (including `tests/spine.test.ts`,
+  `tests/llm-mock.test.ts`, fixtures, and DB helpers) and `vitest.config.mts` are committed, and
+  `ci.yml` runs `npm test` in the `verify` job. Its global setup applies the committed migrations
+  with `prisma migrate deploy`, so the smoke test also proves the migration history builds the schema
+  from an empty database. There is no `playwright.config.*`.
 
 ## Acceptance criteria
 
@@ -93,10 +94,9 @@ the migration applies cleanly, and the harness runs a spine smoke test against e
 
 ## Status
 
-**In progress.** The schema, migration, LLM adapter, and retrieval module are landed and committed.
-Auth hardening and the `zod` contract with the review state machine are not landed. The test harness
-is being landed concurrently but is uncommitted. Three workers are actively writing code against this
-phase.
+**In progress.** The schema, baseline migration, LLM adapter, retrieval module, and test harness are
+landed and committed. Auth hardening and the `zod` contract with the review state machine are not
+landed.
 
 ## Key decisions and why
 
@@ -133,16 +133,16 @@ Commits on `dev` (from `git log --oneline origin/main..dev`):
 | `f0088ef` | `feat(llm): add pluggable provider adapter with deterministic mock`    | `lib/llm/**`, `.env.example`                                     |
 | `643f96d` | `feat(db): add Phase 1 assessment spine schema and migration`          | `prisma/schema.prisma`, the Phase 1 migration, `lib/admin-db.ts` |
 
-The migration's own header records how it was generated:
+The baseline migration's header records how it was generated:
 
 ```
-Generated with: prisma migrate diff --from-schema <old> --to-schema <new> --script
-pgvector is required for MaterialChunk.embedding (Unsupported("vector(1536)")).`
+prisma migrate diff --from-empty --to-schema prisma/schema.prisma --script
 ```
 
-`prisma/migrations/20260911140500_phase1_assessment_spine/migration.sql` contains
+`prisma/migrations/20260911180000_baseline/migration.sql` is that output plus
 `CREATE EXTENSION IF NOT EXISTS vector;` and the index
-`MaterialChunk_embedding_hnsw_idx ON "MaterialChunk" USING hnsw ("embedding" vector_cosine_ops)`.
+`MaterialChunk_embedding_hnsw_idx ON "MaterialChunk" USING hnsw ("embedding" vector_cosine_ops)`,
+neither of which Prisma emits for the `Unsupported("vector(1536)")` column.
 
 Commands used to verify (re-run on 2026-09-11 against `22f608b`):
 

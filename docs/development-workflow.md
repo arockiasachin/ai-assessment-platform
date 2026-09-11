@@ -58,11 +58,13 @@ harness and `zod` contract land; at the time of writing they are partly aspirati
 ## CI gates
 
 [`../.github/workflows/ci.yml`](../.github/workflows/ci.yml) runs on every pull request and on
-pushes to `main`. The `verify` job runs on Node 24 with `npm ci`, a cached npm store, and
-placeholder environment values so that Prisma and the build work without secrets:
+pushes to `main`. The `verify` job runs on Node 24 with `npm ci`, a cached npm store, a
+`pgvector/pgvector:pg16` service, and non-secret environment values so that Prisma, the tests, and
+the build work without secrets:
 
 ```yaml
-DATABASE_URL: postgresql://postgres:postgres@localhost:5432/ci
+DATABASE_URL: postgresql://postgres:postgres@localhost:5432/assessment_test
+TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/assessment_test
 SESSION_SECRET: ci-only-not-a-real-secret
 LLM_PROVIDER: mock
 ```
@@ -75,17 +77,15 @@ Steps, in order:
 4. Typecheck — `npm run typecheck`
 5. Lint — `npm run lint`
 6. Check formatting — `npm run format:check`
-7. Build — `npm run build`
+7. Provision test database and run tests — `npm test`
+8. Build — `npm run build`
 
 `LLM_PROVIDER=mock` keeps CI offline and deterministic: the mock provider needs no API key and makes
 no network calls.
 
-**Test gating is landing concurrently.** The committed workflow above (through `22f608b`) has no test
-step. A concurrent workstream has an uncommitted change to `ci.yml` that adds a
-`pgvector/pgvector:pg16` service plus two steps, `npm run test:db:migrate` and `npm test`, and adds
-`test`, `test:watch`, and `test:db:migrate` scripts with a `vitest` devDependency. Until that change
-lands, CI does not run tests, and a Prisma migration drift check and the Playwright spine test remain
-planned.
+`npm test`'s Vitest global setup resets the dedicated `assessment_test` database and applies the
+committed migrations with `prisma migrate deploy`, so step 7 also proves that the migration history
+builds the schema from an empty database. The Playwright spine test remains planned.
 
 ## Commit conventions
 
