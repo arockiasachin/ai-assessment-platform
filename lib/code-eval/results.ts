@@ -93,39 +93,52 @@ export function isSupportedCategory(value: string): value is TestCategory {
   return (TEST_CATEGORIES as readonly string[]).includes(value)
 }
 
-/** Parse the harness's sentinel-terminated JSON line out of container stdout. */
+/**
+ * Parse the harness's sentinel-terminated JSON line out of container stdout.
+ *
+ * SECURITY: only the harness may write the container's stdout. Untrusted
+ * student code that manages to write a `__CODE_EVAL_RESULT__` line (for example
+ * a trailing timer, or a direct `fs.writeSync(1, ...)` / `os.write(1, ...)`)
+ * would otherwise be able to forge per-test pass/fail evidence. The harness
+ * emits exactly one result line and nothing after it, so any deviation —
+ * a second sentinel, or any non-empty output after it — is treated as
+ * tampering: the parse fails closed and every test is reported as not executed.
+ */
 export function parseHarnessOutput(stdout: string): HarnessTestResult[] {
   if (!stdout) return []
   const lines = stdout.split(/\r?\n/)
-  for (let index = lines.length - 1; index >= 0; index -= 1) {
-    const line = lines[index]
-    const at = line.lastIndexOf(HARNESS_RESULT_SENTINEL)
-    if (at === -1) continue
-    const raw = line.slice(at + HARNESS_RESULT_SENTINEL.length)
-    try {
-      const parsed: unknown = JSON.parse(raw)
-      const tests = (parsed as { tests?: unknown })?.tests
-      if (!Array.isArray(tests)) return []
-      const results: HarnessTestResult[] = []
-      for (const entry of tests) {
-        if (!entry || typeof entry !== "object") continue
-        const record = entry as Record<string, unknown>
-        results.push({
-          id: asString(record.id),
-          passed: record.passed === true,
-          stdout: asString(record.stdout),
-          stderr: asString(record.stderr),
-          message: asString(record.message),
-          signal: typeof record.signal === "string" ? record.signal : null,
-          durationMs: Math.max(0, Math.round(asFiniteNumber(record.durationMs))),
-        })
-      }
-      return results
-    } catch {
-      return []
-    }
+  const sentinelLineIndexes: number[] = []
+  for (let index = 0; index < lines.length; index += 1) {
+    if (lines[index].includes(HARNESS_RESULT_SENTINEL)) sentinelLineIndexes.push(index)
   }
-  return []
+  if (sentinelLineIndexes.length !== 1) return []
+  const index = sentinelLineIndexes[0]
+  if (lines.slice(index + 1).some((line) => line.trim() !== "")) return []
+  const line = lines[index]
+  const at = line.lastIndexOf(HARNESS_RESULT_SENTINEL)
+  const raw = line.slice(at + HARNESS_RESULT_SENTINEL.length)
+  try {
+    const parsed: unknown = JSON.parse(raw)
+    const tests = (parsed as { tests?: unknown })?.tests
+    if (!Array.isArray(tests)) return []
+    const results: HarnessTestResult[] = []
+    for (const entry of tests) {
+      if (!entry || typeof entry !== "object") continue
+      const record = entry as Record<string, unknown>
+      results.push({
+        id: asString(record.id),
+        passed: record.passed === true,
+        stdout: asString(record.stdout),
+        stderr: asString(record.stderr),
+        message: asString(record.message),
+        signal: typeof record.signal === "string" ? record.signal : null,
+        durationMs: Math.max(0, Math.round(asFiniteNumber(record.durationMs))),
+      })
+    }
+    return results
+  } catch {
+    return []
+  }
 }
 
 /**

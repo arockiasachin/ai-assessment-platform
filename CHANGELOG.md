@@ -59,6 +59,7 @@ client, and quiz results are graded by `POST /api/quiz/grade`. Nothing below is 
   the student's own row plus a server-computed `classAverages` aggregate, so the "vs class average"
   view still works without leaking per-student grades. Teachers keep the full cohort view they are
   authorized to see.
+- **Phase 3 security review** (see [`docs/security/security-review.md`](docs/security/security-review.md)). Hardened the code-eval harness so untrusted student code cannot forge per-test evidence, made the code-submission cap and course-enrollment capacity checks atomic under concurrency, and confirmed the published-grade invariant holds across all Phase 2 features.
 
 ### Added
 

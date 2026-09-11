@@ -181,22 +181,6 @@ export async function submitCodeForStudent(
   const enrolled = await loadEnrolledCodeTask(user, request.assessmentId)
   const executor = deps.executor ?? executeSandbox
 
-  const existingRunCount = await prisma.testRun.count({
-    where: { codeTaskId: enrolled.codeTaskId, studentId: enrolled.studentId },
-  })
-  const eligibility = evaluateSubmissionEligibility({
-    existingRunCount,
-    maxSubmissions: enrolled.maxSubmissions,
-    now: new Date(),
-    dueDate: enrolled.dueDate,
-  })
-  if (!eligibility.allowed) {
-    throw new CodeEvalError(
-      eligibility.code === "cap" ? 429 : 409,
-      eligibility.reason ?? "Blocked.",
-    )
-  }
-
   const testCaseRows = await prisma.testCase.findMany({
     where: { codeTaskId: enrolled.codeTaskId },
     orderBy: { order: "asc" },
@@ -205,53 +189,82 @@ export async function submitCodeForStudent(
     throw new CodeEvalError(409, "This code task has no test cases yet.")
   }
 
-  const existingSubmission = await prisma.submission.findUnique({
-    where: {
-      assessmentId_studentId: {
-        assessmentId: enrolled.assessmentId,
-        studentId: enrolled.studentId,
-      },
-    },
-    select: { id: true, status: true },
-  })
-  if (existingSubmission?.status === "GRADED") {
-    throw new CodeEvalError(409, "This submission has already been graded.")
-  }
-
+  // Reserve the submission slot atomically. The cap is check-then-act, so a
+  // plain count followed by a create lets two concurrent requests both pass the
+  // check at the boundary and each cost a sandbox run. Locking the code task row
+  // serializes reservations for the same task; the slot is committed before the
+  // (expensive) container starts, and released only if the transaction rolls
+  // back.
   const now = new Date()
-  const submission = await prisma.submission.upsert({
-    where: {
-      assessmentId_studentId: {
+  const reservation = await prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT "id" FROM "CodeTask" WHERE "id" = ${enrolled.codeTaskId} FOR UPDATE`
+
+    const existingRunCount = await tx.testRun.count({
+      where: { codeTaskId: enrolled.codeTaskId, studentId: enrolled.studentId },
+    })
+    const eligibility = evaluateSubmissionEligibility({
+      existingRunCount,
+      maxSubmissions: enrolled.maxSubmissions,
+      now,
+      dueDate: enrolled.dueDate,
+    })
+    if (!eligibility.allowed) {
+      throw new CodeEvalError(
+        eligibility.code === "cap" ? 429 : 409,
+        eligibility.reason ?? "Blocked.",
+      )
+    }
+
+    const existingSubmission = await tx.submission.findUnique({
+      where: {
+        assessmentId_studentId: {
+          assessmentId: enrolled.assessmentId,
+          studentId: enrolled.studentId,
+        },
+      },
+      select: { id: true, status: true },
+    })
+    if (existingSubmission?.status === "GRADED") {
+      throw new CodeEvalError(409, "This submission has already been graded.")
+    }
+
+    const submission = await tx.submission.upsert({
+      where: {
+        assessmentId_studentId: {
+          assessmentId: enrolled.assessmentId,
+          studentId: enrolled.studentId,
+        },
+      },
+      create: {
         assessmentId: enrolled.assessmentId,
         studentId: enrolled.studentId,
+        status: "SUBMITTED",
+        contentText: request.sourceCode,
+        submittedAt: now,
       },
-    },
-    create: {
-      assessmentId: enrolled.assessmentId,
-      studentId: enrolled.studentId,
-      status: "SUBMITTED",
-      contentText: request.sourceCode,
-      submittedAt: now,
-    },
-    update: {
-      status: "RESUBMITTED",
-      contentText: request.sourceCode,
-      submittedAt: now,
-    },
-    select: { id: true },
-  })
+      update: {
+        status: "RESUBMITTED",
+        contentText: request.sourceCode,
+        submittedAt: now,
+      },
+      select: { id: true },
+    })
 
-  const run = await prisma.testRun.create({
-    data: {
-      codeTaskId: enrolled.codeTaskId,
-      studentId: enrolled.studentId,
-      submissionId: submission.id,
-      status: "RUNNING",
-      language: enrolled.language,
-      sourceCode: request.sourceCode,
-      queuedAt: now,
-      startedAt: now,
-    },
+    const run = await tx.testRun.create({
+      data: {
+        codeTaskId: enrolled.codeTaskId,
+        studentId: enrolled.studentId,
+        submissionId: submission.id,
+        status: "RUNNING",
+        language: enrolled.language,
+        sourceCode: request.sourceCode,
+        queuedAt: now,
+        startedAt: now,
+      },
+      select: { id: true },
+    })
+
+    return { runId: run.id }
   })
 
   const outcome = await executor({
@@ -283,7 +296,7 @@ export async function submitCodeForStudent(
 
   const updated = await prisma.$transaction(async (tx) => {
     const saved = await tx.testRun.update({
-      where: { id: run.id },
+      where: { id: reservation.runId },
       data: {
         status,
         passedCount: summary.passedCount,
