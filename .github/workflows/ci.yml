@@ -3,7 +3,9 @@ name: CI
 on:
   pull_request:
   push:
-    branches: [main]
+    # `main` is the release branch; `dev` is the integration branch. Both must
+    # be verified on push, otherwise the integration branch has no gate.
+    branches: [main, dev]
 
 concurrency:
   group: ci-${{ github.ref }}
