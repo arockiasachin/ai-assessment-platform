@@ -26,10 +26,16 @@ type Decision =
   | { action: "flag"; notes?: string }
   | { action: "override"; points: number; reason: string }
 
+// The app themes via `prefers-color-scheme`, so the `.dark`-scoped Tailwind
+// `dark:` variant never activates; the explicit media variant keeps these
+// status chips readable on a dark page.
 function statusTone(status: string): string {
-  if (status === "AUTO_ACCEPTED") return "border-emerald-500/30 bg-emerald-500/10 text-emerald-700"
-  if (status === "OVERRIDDEN") return "border-violet-500/30 bg-violet-500/10 text-violet-700"
-  if (status === "NEEDS_REVIEW") return "border-amber-500/30 bg-amber-500/10 text-amber-700"
+  if (status === "AUTO_ACCEPTED")
+    return "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 [@media(prefers-color-scheme:dark)]:text-emerald-400"
+  if (status === "OVERRIDDEN")
+    return "border-violet-500/30 bg-violet-500/10 text-violet-700 [@media(prefers-color-scheme:dark)]:text-violet-400"
+  if (status === "NEEDS_REVIEW")
+    return "border-amber-500/30 bg-amber-500/10 text-amber-700 [@media(prefers-color-scheme:dark)]:text-amber-400"
   if (status === "REJECTED") return "border-destructive/30 bg-destructive/10 text-destructive"
   return "border-border bg-muted/20 text-foreground"
 }
@@ -37,7 +43,7 @@ function statusTone(status: string): string {
 function confidenceTone(confidence: number): string {
   return confidence < 0.6
     ? "border-destructive/30 bg-destructive/10 text-destructive"
-    : "border-emerald-500/30 bg-emerald-500/10 text-emerald-700"
+    : "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 [@media(prefers-color-scheme:dark)]:text-emerald-400"
 }
 
 export function TeacherReviewQueue({
@@ -130,12 +136,18 @@ export function TeacherReviewQueue({
   return (
     <div className="space-y-6">
       {message && (
-        <div className="rounded-md border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-700">
+        <div
+          role="status"
+          className="rounded-md border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-700 [@media(prefers-color-scheme:dark)]:text-emerald-400"
+        >
           {message}
         </div>
       )}
       {error && (
-        <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+        <div
+          role="alert"
+          className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive"
+        >
           {error}
         </div>
       )}
@@ -252,14 +264,17 @@ export function TeacherReviewQueue({
                         : "No draft"}
                     </Badge>
                     {published && (
-                      <Badge variant="outline" className="border-emerald-500/30 text-emerald-700">
+                      <Badge
+                        variant="outline"
+                        className="border-emerald-500/30 text-emerald-700 [@media(prefers-color-scheme:dark)]:text-emerald-400"
+                      >
                         Published
                       </Badge>
                     )}
                   </div>
                 </div>
                 {item.flags.length > 0 && (
-                  <ul className="mt-2 list-inside list-disc text-xs text-amber-700">
+                  <ul className="mt-2 list-inside list-disc text-xs text-amber-700 [@media(prefers-color-scheme:dark)]:text-amber-400">
                     {item.flags.map((flag) => (
                       <li key={flag}>{flag}</li>
                     ))}

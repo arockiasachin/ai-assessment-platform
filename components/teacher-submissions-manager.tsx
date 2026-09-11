@@ -62,12 +62,18 @@ function statusLabel(status: string) {
   return status
 }
 
+// The app themes via `prefers-color-scheme`, so the `.dark`-scoped Tailwind
+// `dark:` variant never activates; the explicit media variant keeps the status
+// chip readable on a dark page.
 function statusTone(status: string) {
-  if (status === "GRADED") return "border-emerald-500/30 bg-emerald-500/10 text-emerald-700"
-  if (status === "LATE") return "border-amber-500/30 bg-amber-500/10 text-amber-700"
+  if (status === "GRADED")
+    return "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 [@media(prefers-color-scheme:dark)]:text-emerald-400"
+  if (status === "LATE")
+    return "border-amber-500/30 bg-amber-500/10 text-amber-700 [@media(prefers-color-scheme:dark)]:text-amber-400"
   if (status === "SUBMITTED" || status === "RESUBMITTED")
-    return "border-blue-500/30 bg-blue-500/10 text-blue-700"
-  if (status === "DRAFT") return "border-slate-400/30 bg-slate-500/10 text-slate-700"
+    return "border-blue-500/30 bg-blue-500/10 text-blue-700 [@media(prefers-color-scheme:dark)]:text-blue-400"
+  if (status === "DRAFT")
+    return "border-slate-400/30 bg-slate-500/10 text-slate-700 [@media(prefers-color-scheme:dark)]:text-slate-300"
   return "border-border bg-muted/20 text-foreground"
 }
 
@@ -225,7 +231,10 @@ export function TeacherSubmissionsManager() {
       </Card>
 
       {message && (
-        <div className="rounded-md border border-border bg-muted/30 px-3 py-2 text-sm">
+        <div
+          role="status"
+          className="rounded-md border border-border bg-muted/30 px-3 py-2 text-sm"
+        >
           {message}
         </div>
       )}
@@ -238,6 +247,7 @@ export function TeacherSubmissionsManager() {
               value={search}
               onChange={(event) => setSearch(event.target.value)}
               placeholder="Search by student, register number, or assessment"
+              aria-label="Search submissions"
               className="pl-8"
             />
           </div>
@@ -247,7 +257,7 @@ export function TeacherSubmissionsManager() {
               setStatusFilter((value as "all" | "pending" | "graded") ?? "all")
             }
           >
-            <SelectTrigger>
+            <SelectTrigger aria-label="Filter by grading status">
               <SelectValue placeholder="Status" />
             </SelectTrigger>
             <SelectContent>
@@ -334,6 +344,7 @@ export function TeacherSubmissionsManager() {
                   onChange={(event) =>
                     setScoreDrafts((prev) => ({ ...prev, [item.id]: event.target.value }))
                   }
+                  aria-label={`Score for ${item.student.fullName} on ${item.assessment.title}`}
                   placeholder={`0-${item.assessment.maxMarks}`}
                   className="w-full"
                 />
@@ -342,6 +353,7 @@ export function TeacherSubmissionsManager() {
                   onChange={(event) =>
                     setFeedbackDrafts((prev) => ({ ...prev, [item.id]: event.target.value }))
                   }
+                  aria-label={`Feedback for ${item.student.fullName} on ${item.assessment.title}`}
                   placeholder="Optional grading feedback"
                   maxLength={1000}
                   className="w-full"

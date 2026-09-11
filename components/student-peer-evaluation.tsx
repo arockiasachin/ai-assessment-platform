@@ -148,8 +148,19 @@ export function StudentPeerEvaluation({
 
   return (
     <div className="space-y-5">
-      {notice && <p className="text-sm text-emerald-600">{notice}</p>}
-      {error && <p className="text-sm text-destructive">{error}</p>}
+      {notice && (
+        <p
+          role="status"
+          className="text-sm text-emerald-700 [@media(prefers-color-scheme:dark)]:text-emerald-400"
+        >
+          {notice}
+        </p>
+      )}
+      {error && (
+        <p role="alert" className="text-sm text-destructive">
+          {error}
+        </p>
+      )}
 
       <p className="flex items-center gap-2 text-xs text-muted-foreground">
         <Lock className="size-3.5" />
@@ -232,6 +243,7 @@ export function StudentPeerEvaluation({
                     </div>
                     <Input
                       className="mt-2"
+                      aria-label={`Comment about ${teammate.fullName}`}
                       placeholder="Optional comment (visible only to the instructor)"
                       value={draft?.comments ?? ""}
                       onChange={(event) =>

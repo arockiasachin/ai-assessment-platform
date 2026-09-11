@@ -341,7 +341,7 @@ export function TeacherGroupsManager({
                 if (value) void handleOfferingChange(value)
               }}
             >
-              <SelectTrigger className="w-[320px]">
+              <SelectTrigger className="w-[320px]" aria-label="Course offering">
                 <SelectValue placeholder="Select an offering" />
               </SelectTrigger>
               <SelectContent>
@@ -360,8 +360,19 @@ export function TeacherGroupsManager({
             )}
             {busy && <Loader2 className="size-4 animate-spin text-muted-foreground" />}
           </div>
-          {notice && <p className="text-sm text-emerald-600">{notice}</p>}
-          {error && <p className="text-sm text-destructive">{error}</p>}
+          {notice && (
+            <p
+              role="status"
+              className="text-sm text-emerald-700 [@media(prefers-color-scheme:dark)]:text-emerald-400"
+            >
+              {notice}
+            </p>
+          )}
+          {error && (
+            <p role="alert" className="text-sm text-destructive">
+              {error}
+            </p>
+          )}
         </CardContent>
       </Card>
 
@@ -373,6 +384,7 @@ export function TeacherGroupsManager({
           <CardContent className="space-y-3">
             <Input
               placeholder="Group name"
+              aria-label="New group name"
               value={newGroupName}
               onChange={(event) => setNewGroupName(event.target.value)}
             />

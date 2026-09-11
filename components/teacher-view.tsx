@@ -192,6 +192,7 @@ export function TeacherView() {
                       value={search}
                       onChange={(e) => setSearch(e.target.value)}
                       placeholder="Search students…"
+                      aria-label="Search students"
                       className="pl-8 sm:w-56"
                     />
                   </div>
@@ -199,7 +200,7 @@ export function TeacherView() {
                     value={courseFilter}
                     onValueChange={(value) => setCourseFilter(value ?? "all")}
                   >
-                    <SelectTrigger className="sm:w-44">
+                    <SelectTrigger className="sm:w-44" aria-label="Filter by course">
                       <SelectValue placeholder="All courses" />
                     </SelectTrigger>
                     <SelectContent>

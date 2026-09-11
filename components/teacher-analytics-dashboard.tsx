@@ -167,7 +167,7 @@ export function TeacherAnalyticsDashboard({
         <CardContent className="space-y-4">
           <div className="flex flex-wrap items-center gap-3">
             <Select value={offeringId} onValueChange={(value) => setOfferingId(value ?? "")}>
-              <SelectTrigger className="w-full sm:w-80">
+              <SelectTrigger className="w-full sm:w-80" aria-label="Course offering">
                 <SelectValue placeholder="Select an offering" />
               </SelectTrigger>
               <SelectContent>
@@ -180,7 +180,11 @@ export function TeacherAnalyticsDashboard({
             </Select>
             {busy && <Loader2 className="size-4 animate-spin text-muted-foreground" />}
           </div>
-          {error && <p className="text-sm text-destructive">{error}</p>}
+          {error && (
+            <p role="alert" className="text-sm text-destructive">
+              {error}
+            </p>
+          )}
           {overview && (
             <p className="text-xs text-muted-foreground">
               Alerts use thresholds: class average &lt; {overview.thresholds.classAverageBelow}%,

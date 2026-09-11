@@ -101,6 +101,8 @@ export function RoleRoutesMenu({ role }: { role: Role }) {
               <Link
                 key={item.href}
                 href={item.href}
+                aria-label={item.label}
+                aria-current={isActive ? "page" : undefined}
                 className={[
                   "flex items-center gap-2 rounded-lg border px-3 py-2 text-sm transition-colors",
                   isActive

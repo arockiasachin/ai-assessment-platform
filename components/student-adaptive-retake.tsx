@@ -87,7 +87,7 @@ export function StudentAdaptiveRetake({
         </CardHeader>
         <CardContent className="flex flex-wrap items-center gap-3">
           <Select value={selectedId} onValueChange={(value) => setSelectedId(value ?? "")}>
-            <SelectTrigger className="w-full sm:w-96">
+            <SelectTrigger className="w-full sm:w-96" aria-label="Assessment to retake">
               <SelectValue placeholder="Select an assessment" />
             </SelectTrigger>
             <SelectContent>
@@ -103,7 +103,7 @@ export function StudentAdaptiveRetake({
             value={includeUnanswered}
             onValueChange={(value) => setIncludeUnanswered(value ?? "true")}
           >
-            <SelectTrigger className="w-full sm:w-56">
+            <SelectTrigger className="w-full sm:w-56" aria-label="Include unanswered questions">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>

@@ -221,6 +221,7 @@ export function TeacherClassesManager() {
               value={search}
               onChange={(event) => setSearch(event.target.value)}
               placeholder="Filter by course, class, term, or year"
+              aria-label="Filter classes"
               className="pl-8"
             />
           </div>

@@ -124,8 +124,19 @@ export function StudentCodeSubmissions({ initialTasks }: Props) {
         </CardContent>
       </Card>
 
-      {message && <p className="text-sm text-emerald-600">{message}</p>}
-      {error && <p className="text-sm text-destructive">{error}</p>}
+      {message && (
+        <p
+          role="status"
+          className="text-sm text-emerald-700 [@media(prefers-color-scheme:dark)]:text-emerald-400"
+        >
+          {message}
+        </p>
+      )}
+      {error && (
+        <p role="alert" className="text-sm text-destructive">
+          {error}
+        </p>
+      )}
 
       {selected && (
         <>
@@ -151,6 +162,7 @@ export function StudentCodeSubmissions({ initialTasks }: Props) {
               )}
               <textarea
                 className="min-h-64 w-full rounded-md border border-input bg-background p-3 font-mono text-sm"
+                aria-label={`Code submission for ${selected.assessmentTitle}`}
                 placeholder={selected.starterCode ?? "Write your solution here"}
                 value={source}
                 onChange={(event) => setSource(event.target.value)}
@@ -199,7 +211,13 @@ export function StudentCodeSubmissions({ initialTasks }: Props) {
                           key={result.testCaseId}
                           className="rounded border border-border/70 bg-muted/30 p-2 text-xs"
                         >
-                          <span className={result.passed ? "text-emerald-600" : "text-destructive"}>
+                          <span
+                            className={
+                              result.passed
+                                ? "text-emerald-700 [@media(prefers-color-scheme:dark)]:text-emerald-400"
+                                : "text-destructive"
+                            }
+                          >
                             {result.passed ? "PASS" : "FAIL"}
                           </span>
                           <span className="ml-2 font-medium">{result.name}</span>
