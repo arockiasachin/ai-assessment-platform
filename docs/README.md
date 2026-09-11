@@ -37,7 +37,7 @@ Phase 1 work landed through commit `22f608b`.
   migration with the `pgvector` extension and an HNSW cosine index, the pluggable LLM adapter with
   a deterministic mock provider, and the pgvector chunk/embed/search module. Open: auth and session
   hardening and the `zod` API contract with the grade review state machine. The test harness is being
-  landed by a concurrent workstream: `tests/` and `vitest.config.ts` are in the working tree but are
+  landed by a concurrent workstream: `tests/` and `vitest.config.mts` are in the working tree but are
   uncommitted at the time of writing.
 - **Phase 2, feature pods — not started.** Seven pods: quiz generation, quiz grading, rubric
   grading, code sandbox, groups and peer evaluation, analytics, LMS export.

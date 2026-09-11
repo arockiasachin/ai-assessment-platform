@@ -71,7 +71,7 @@ Evidence for the state of each:
 - `app/api/auth/seed/route.ts` still creates the `admin` / `admin` credential, and there is no
   `requireRole` guard anywhere.
 - The test harness is being landed concurrently: `tests/` (including `tests/spine.test.ts`,
-  `tests/llm-mock.test.ts`, fixtures, and DB helpers) and `vitest.config.ts` are in the working tree
+  `tests/llm-mock.test.ts`, fixtures, and DB helpers) and `vitest.config.mts` are in the working tree
   but are uncommitted, and `ci.yml` has an uncommitted change adding the test steps. There is no
   `playwright.config.*`.
 
