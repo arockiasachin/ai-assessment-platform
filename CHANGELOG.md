@@ -12,12 +12,46 @@ section.
 
 ## [Unreleased]
 
-Phase 1 (contracts) is in progress. The schema, baseline migration, LLM adapter, retrieval module,
-and test harness are landed on `dev`; auth and session hardening and the `zod` API contract with the
-grade review state machine are not yet landed. Nothing below is released.
+Phase 1 (contracts) is complete. The schema, baseline migration, LLM adapter, retrieval module, test
+harness, auth hardening, the `zod` API contract, and the grade review state machine are landed on
+`dev`. The one residual is the legacy quiz path, which still ships an answer key to the client (Phase
+2). Nothing below is released.
+
+### Security
+
+- **Signed, expiring sessions replace the unsigned plaintext cookie** (`lib/session.ts`,
+  `lib/auth.ts`, `proxy.ts`). The `auth-user` cookie is now
+  `base64url(payload).base64url(HMAC-SHA256)`, verified in constant time on every read; expired,
+  malformed, or tampered values are rejected. `SESSION_SECRET` is read from the environment, and a
+  missing secret throws in production. `proxy.ts` verifies the signature rather than parsing the
+  cookie, and `/quiz` was added to the matcher.
+- **`requireRole` / `requireUser` authorization helper** (`lib/authz.ts`) re-verifies the signed
+  session server-side and enforces the role on every protected route. Object-level checks limit a
+  teacher to their own offerings/assessments and a student to their own data.
+- **Deleted the `admin`/`admin` login backdoor** (`app/api/auth/login/route.ts`): every login is a
+  database lookup plus a bcrypt comparison.
+- **Locked down the destructive seed endpoint** (`app/api/auth/seed/route.ts`): it now requires a
+  signature-verified admin session re-checked against the database, an explicit
+  `{ "confirm": "RESET-SEED" }` body, and `ALLOW_DESTRUCTIVE_SEED=true` in production. It no longer
+  echoes credentials.
+- **Closed the student self-grading hole** (`app/api/gradebook/marks/route.ts`,
+  `lib/gradebook-db.ts`): only teachers and admins may write marks, and a teacher may only write
+  marks for assessments in their own offerings.
 
 ### Added
 
+- **`zod` API contract** (`lib/contracts/`). Request/response schemas for auth, gradebook, and the
+  grading pipeline, plus `lib/api.ts` body parsing. Route handlers touched in this change validate
+  input against these schemas instead of hand-rolling checks.
+- **Grade review state machine** (`lib/grading/`). `recordAiSuggestion` stores the full
+  explainability envelope (rationale, evidence, confidence, model, prompt version, tokens, latency);
+  `submitReviewDecision` enforces legal `GradeReviewStatus` transitions
+  (`PENDING` / `NEEDS_REVIEW` / `AUTO_ACCEPTED` / `OVERRIDDEN` / `REJECTED`); every transition writes
+  an `AuditLog` row in the same transaction. Only the human `accept`/`override` actions set
+  `Grade.publishedAt`, so no grade publishes without teacher sign-off.
+- **Tests** (`tests/auth.test.ts`, `tests/authorization.test.ts`, `tests/contracts.test.ts`,
+  `tests/grading-state-machine.test.ts`). They prove a forged admin cookie and a student
+  self-grading attempt are rejected, and exercise the contract schemas and state machine.
 - **Assessment spine schema** (`prisma/schema.prisma`). Additive models for rubrics and criteria
   (`Rubric`, `RubricCriterion`); the grading pipeline (`AIGradeSuggestion`, `GradeReview`, `Grade`)
   with an append-only `AuditLog`; quiz questions, attempts, and responses (`Question`,
@@ -51,6 +85,10 @@ grade review state machine are not yet landed. Nothing below is released.
 
 ### Changed
 
+- **Route handlers authorize and validate through shared helpers** (`app/api/**`). Protected routes
+  now call `requireRole`, and the auth, gradebook, teacher, and student handlers parse bodies with
+  the `lib/contracts` schemas. `lib/gradebook-db.ts` takes the authenticated actor instead of
+  re-reading the session.
 - `lib/admin-db.ts`: widened `DbAssessmentType` for the new `AssessmentType` enum values.
 - **Test database provisioning** (`tests/helpers/provision.ts`). The harness now resets the test
   database and applies the committed migration history with `prisma migrate deploy`, instead of
@@ -59,6 +97,8 @@ grade review state machine are not yet landed. Nothing below is released.
 
 ### Fixed
 
+- **Unsigned session cookie.** `lib/auth.ts` stored a plaintext JSON cookie and trusted its
+  client-supplied `role`/`id`; `proxy.ts` parsed the same value. Both now verify the HMAC signature.
 - **Prisma migration history.** `prisma migrate deploy` could not build a fresh database:
   `20260807071217_init` created only the `User` table, `20260807124500_course_registration_rating`
   altered `Course`/`CourseOffering` and referenced `StudentProfile` (none created by any migration),

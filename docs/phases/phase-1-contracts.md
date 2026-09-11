@@ -35,14 +35,18 @@ unless the interfaces are frozen first.
 
 ### Landed on this branch
 
-| Area               | Path                                                                                    |
-| ------------------ | --------------------------------------------------------------------------------------- |
-| Assessment spine   | `prisma/schema.prisma`                                                                  |
-| Baseline migration | `prisma/migrations/20260911180000_baseline/migration.sql`                               |
-| LLM adapter        | `lib/llm/` (`index.ts`, `types.ts`, `env.ts`, `errors.ts`, `http.ts`, `providers/*.ts`) |
-| Retrieval module   | `lib/vector/` (`chunk.ts`, `embed.ts`, `search.ts`, `index.ts`)                         |
-| Enum widening      | `lib/admin-db.ts` (`DbAssessmentType` extended for the new `AssessmentType` values)     |
-| Test harness       | `tests/`, `vitest.config.mts`                                                           |
+| Area                 | Path                                                                                    |
+| -------------------- | --------------------------------------------------------------------------------------- |
+| Assessment spine     | `prisma/schema.prisma`                                                                  |
+| Baseline migration   | `prisma/migrations/20260911180000_baseline/migration.sql`                               |
+| LLM adapter          | `lib/llm/` (`index.ts`, `types.ts`, `env.ts`, `errors.ts`, `http.ts`, `providers/*.ts`) |
+| Retrieval module     | `lib/vector/` (`chunk.ts`, `embed.ts`, `search.ts`, `index.ts`)                         |
+| Signed sessions      | `lib/session.ts`, `lib/auth.ts`, `lib/authz.ts`                                         |
+| Route authorization  | `proxy.ts`, `lib/api.ts`, `app/api/**`                                                  |
+| API contract         | `lib/contracts/` (`common.ts`, `auth.ts`, `gradebook.ts`, `grading.ts`)                 |
+| Review state machine | `lib/grading/` (`state-machine.ts`, `review-service.ts`, `audit.ts`, `errors.ts`)       |
+| Enum widening        | `lib/admin-db.ts` (`DbAssessmentType` extended for the new `AssessmentType` values)     |
+| Test harness         | `tests/`, `vitest.config.mts`                                                           |
 
 New Prisma models landed with the spine: `Material`, `MaterialChunk`, `Rubric`, `RubricCriterion`,
 `AIGradeSuggestion`, `GradeReview`, `Grade`, `AuditLog`, `Question`, `QuestionOption`, `QuizAttempt`,
@@ -54,22 +58,24 @@ New enums: `MaterialKind`, `QuestionType`, `QuizAttemptStatus`, `GradeReviewStat
 `SimilarityVerdict`. `AssessmentType` was extended with `DESCRIPTIVE`, `CODE`, and `GROUP_PROJECT`
 (no removals).
 
+### Landed since the first draft
+
+| Area                       | Path                                                        | Commit    |
+| -------------------------- | ----------------------------------------------------------- | --------- |
+| Signed session + authz     | `lib/session.ts`, `lib/auth.ts`, `lib/authz.ts`, `proxy.ts` | `e87d7bd` |
+| `zod` API contract         | `lib/contracts/**`, `lib/api.ts`, route handlers            | `3470a33` |
+| Grade review state machine | `lib/grading/**`                                            | `ab1dd82` |
+
 ### Still open or in flight
 
-| Area                       | Intended path                                                                 | State       |
-| -------------------------- | ----------------------------------------------------------------------------- | ----------- |
-| Signed session + authz     | `lib/auth.ts`, `proxy.ts`, `requireRole`, `app/api/**`                        | Not started |
-| `zod` API contract         | Route handlers and shared schemas                                             | Not started |
-| Grade review state machine | Service layer over `AIGradeSuggestion` / `GradeReview` / `Grade` / `AuditLog` | Not started |
+| Area                              | Intended path                               | State              |
+| --------------------------------- | ------------------------------------------- | ------------------ |
+| Server-authoritative quiz answers | `lib/gradebook-db.ts`, a quiz grading route | Open (Phase 2 pod) |
 
-Evidence for the state of each:
-
-- `lib/auth.ts` still stores the session as a plaintext JSON cookie (`auth-user`) and reads it back
-  with `JSON.parse`; there is no signature and no verification. `proxy.ts` reads the same unsigned
-  cookie for routing.
-- `zod` is a dependency in `package.json` but is imported nowhere in the codebase.
-- `app/api/auth/seed/route.ts` still creates the `admin` / `admin` credential, and there is no
-  `requireRole` guard anywhere.
+- The legacy quiz path is the one place grading is still client-trusted:
+  `lib/gradebook-db.ts` returns `QuizQuestion.correctIndex` in the gradebook payload and
+  `components/quiz-runner.tsx` grades in the browser. The new pipeline is the intended path; moving
+  quiz grading server-side is a Phase 2 deliverable.
 - The test harness is landed (`0644bc1`, `f54b2f0`): `tests/` (including `tests/spine.test.ts`,
   `tests/llm-mock.test.ts`, fixtures, and DB helpers) and `vitest.config.mts` are committed, and
   `ci.yml` runs `npm test` in the `verify` job. Its global setup applies the committed migrations
@@ -94,9 +100,11 @@ the migration applies cleanly, and the harness runs a spine smoke test against e
 
 ## Status
 
-**In progress.** The schema, baseline migration, LLM adapter, retrieval module, and test harness are
-landed and committed. Auth hardening and the `zod` contract with the review state machine are not
-landed.
+**Contracts landed; Phase 2 may proceed.** The schema, baseline migration, LLM adapter, retrieval
+module, and test harness are committed, and as of `e87d7bd` / `3470a33` / `ab1dd82` the auth
+hardening, the `zod` API contract, and the grade review state machine are landed as well. The one
+deliberate residual is the legacy quiz path, which still ships an answer key to the client; that is
+now explicitly a Phase 2 item (see above).
 
 ## Key decisions and why
 
@@ -121,17 +129,38 @@ landed.
 - **Explainability is carried in the type system.** Every `generate` result includes `provider`,
   `model`, `usage`, and `latencyMs`, and the request carries `task` and `promptVersion` — the fields
   the `AIGradeSuggestion` row must store.
+- **Sessions are HMAC-SHA256 signed with a server secret.** `lib/session.ts` encodes
+  `base64url(payload).base64url(HMAC)`; `verifySessionValue` recomputes the MAC, compares it with
+  `timingSafeEqual`, then checks expiry and shape with `zod`. The secret comes from `SESSION_SECRET`
+  and a missing secret throws in production; dev/test fall back to a clearly non-secret value so the
+  build and tests stay offline. `proxy.ts` verifies the same value instead of parsing it blindly, and
+  `/quiz` is now in the matcher.
+- **`requireRole` is the authorization boundary; `proxy.ts` is only a redirect.** Next documents
+  Proxy as an optimistic pre-check, so every protected route re-verifies the signed session
+  server-side and enforces the role, and object-level checks (teacher owns offering/assessment,
+  student owns data) stay in the data layer. The `admin`/`admin` login backdoor is deleted; every
+  login is a database lookup plus a bcrypt comparison.
+- **`AUTO_ACCEPTED` means a human accepted the AI value.** The product rule is that a teacher
+  approves every grade, so no machine path publishes: only the `accept` and `override` human actions
+  set `Grade.publishedAt`, and `lib/grading/state-machine.ts` refuses every other transition.
+- **Seeding is destructive only by explicit consent.** `POST /api/auth/seed` requires a
+  signature-verified admin session re-checked against the database, an explicit
+  `{ "confirm": "RESET-SEED" }` body, and (in production) `ALLOW_DESTRUCTIVE_SEED=true`; it no longer
+  echoes credentials.
 
 ## Evidence
 
 Commits on `dev` (from `git log --oneline origin/main..dev`):
 
-| Commit    | Subject                                                                | Files                                                            |
-| --------- | ---------------------------------------------------------------------- | ---------------------------------------------------------------- |
-| `22f608b` | `fix(vector): report configured provider for empty queries`            | `lib/vector/search.ts`                                           |
-| `db9e7a2` | `feat(vector): add pgvector chunking, embedding and similarity search` | `lib/vector/{chunk,embed,index,search}.ts`                       |
-| `f0088ef` | `feat(llm): add pluggable provider adapter with deterministic mock`    | `lib/llm/**`, `.env.example`                                     |
-| `643f96d` | `feat(db): add Phase 1 assessment spine schema and migration`          | `prisma/schema.prisma`, the Phase 1 migration, `lib/admin-db.ts` |
+| Commit    | Subject                                                                | Files                                                                                                                                                               |
+| --------- | ---------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `22f608b` | `fix(vector): report configured provider for empty queries`            | `lib/vector/search.ts`                                                                                                                                              |
+| `db9e7a2` | `feat(vector): add pgvector chunking, embedding and similarity search` | `lib/vector/{chunk,embed,index,search}.ts`                                                                                                                          |
+| `f0088ef` | `feat(llm): add pluggable provider adapter with deterministic mock`    | `lib/llm/**`, `.env.example`                                                                                                                                        |
+| `643f96d` | `feat(db): add Phase 1 assessment spine schema and migration`          | `prisma/schema.prisma`, the Phase 1 migration, `lib/admin-db.ts`                                                                                                    |
+| `3470a33` | `feat(contracts): add zod schemas as the shared API contract`          | `lib/contracts/**`, `tests/contracts.test.ts`                                                                                                                       |
+| `ab1dd82` | `feat(grading): add grade review state machine with audit logging`     | `lib/grading/**`, `tests/grading-state-machine.test.ts`                                                                                                             |
+| `e87d7bd` | `feat(auth): sign session cookies and enforce role authorization`      | `lib/session.ts`, `lib/auth.ts`, `lib/authz.ts`, `lib/api.ts`, `proxy.ts`, `lib/gradebook-db.ts`, `app/api/**`, `tests/auth.test.ts`, `tests/authorization.test.ts` |
 
 The baseline migration's header records how it was generated:
 
@@ -144,26 +173,32 @@ prisma migrate diff --from-empty --to-schema prisma/schema.prisma --script
 `MaterialChunk_embedding_hnsw_idx ON "MaterialChunk" USING hnsw ("embedding" vector_cosine_ops)`,
 neither of which Prisma emits for the `Unsupported("vector(1536)")` column.
 
-Commands used to verify (re-run on 2026-09-11 against `22f608b`):
+Commands used to verify (re-run on 2026-09-11 against `e87d7bd`):
 
 ```bash
 npx prisma generate
 npx prisma validate
-npm run typecheck      # 0 errors
-npm run lint           # 0 errors, 13 warnings
-npx prettier --check . # clean
+npm run verify         # typecheck + lint + format:check; 0 errors, 13 warnings
+DATABASE_URL="postgresql://postgres:postgres@127.0.0.1:59999/ci" SESSION_SECRET=x LLM_PROVIDER=mock npm run build
+npx vitest run tests/auth.test.ts tests/authorization.test.ts tests/contracts.test.ts tests/grading-state-machine.test.ts tests/llm-mock.test.ts
 ```
+
+The build succeeds with no reachable database. The unit suite proves the forged-admin-cookie attack
+and the student self-grading attempt are both rejected (see `tests/auth.test.ts` and
+`tests/authorization.test.ts`). The DB-backed `tests/spine.test.ts` still needs Docker and runs in CI.
 
 ## Risks and open questions
 
-- **Auth is the largest open risk.** Until the unsigned cookie is replaced, anyone can forge a
-  session by editing a cookie, and the seed endpoint still exposes `admin` / `admin`. This is the
-  first item to close before Phase 2.
-- **The grade state machine exists only as enums and models.** `GradeReviewStatus` and the tables
-  are in place, but no service enforces legal transitions or writes `AuditLog` rows yet. A schema
-  without the transition logic is not a state machine.
-- **No tests.** Every "verified" claim in this phase currently rests on `prisma validate` and the
-  type/lint gates, not on behavioural tests.
+- **Auth risk closed.** The unsigned cookie is gone; sessions are HMAC-signed, expiring, and
+  verified on every read, with `requireRole` on every protected route and the seed endpoint gated
+  behind an explicit confirmation. `tests/auth.test.ts` and `tests/authorization.test.ts` assert that
+  a forged admin cookie and a student self-grading attempt are both rejected.
+- **The state machine is enforced.** `lib/grading/state-machine.ts` defines the legal transitions and
+  `lib/grading/review-service.ts` writes `AuditLog` rows in the same transaction as each transition.
+  Only a human `accept`/`override` publishes a `Grade`. A DB-backed service test is deferred until
+  the ephemeral-Postgres harness runs (the current local run has no Docker).
+- **Legacy quiz answer keys still reach the client.** `lib/gradebook-db.ts` and
+  `components/quiz-runner.tsx` are unchanged; server-authoritative quiz grading is a Phase 2 pod.
 - **Unresolved spec questions that belong to this phase** (from
   [`product-spec.md`](../product-spec.md#open-questions-to-resolve-during-phase-1)): default LLM
   provider and model per task; retention policy for student work, rationales, and evidence quotes;
@@ -177,4 +212,5 @@ npx prettier --check . # clean
 - **Depends on Phase 0** for CI, ESLint and Prettier, the removal of `ignoreBuildErrors`, and
   `product-spec.md`.
 - **Phase 2 depends on this phase** for the frozen schema, the LLM interface, the `zod` contract, the
-  review state machine, and the test harness. Those open items are the gate to starting Phase 2.
+  review state machine, and the test harness. Those items have landed, so the gate to Phase 2 is
+  met; the only carried-over item is moving quiz grading server-side.
