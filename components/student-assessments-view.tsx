@@ -115,7 +115,7 @@ export function StudentAssessmentsView() {
     void load()
   }, [])
 
-  const allAssessments = payload?.assessments ?? []
+  const allAssessments = useMemo(() => payload?.assessments ?? [], [payload])
 
   const courseOptions = useMemo(
     () =>
@@ -427,6 +427,7 @@ export function StudentAssessmentsView() {
                             placeholder="Write your assignment submission details..."
                             className="min-h-24 w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
                             maxLength={4000}
+                            readOnly={assessment.submissionState === "graded"}
                           />
                           <div className="flex items-center justify-between text-xs text-muted-foreground">
                             <span>{submissionLabel(assessment.submissionState)}</span>
@@ -437,7 +438,10 @@ export function StudentAssessmentsView() {
                               size="sm"
                               variant="outline"
                               onClick={() => void submitAssignment(assessment.id, "saveDraft")}
-                              disabled={savingSubmissionId === assessment.id}
+                              disabled={
+                                savingSubmissionId === assessment.id ||
+                                assessment.submissionState === "graded"
+                              }
                               className="w-full sm:w-auto"
                             >
                               Save draft
@@ -454,7 +458,10 @@ export function StudentAssessmentsView() {
                                     : "resubmit",
                                 )
                               }
-                              disabled={savingSubmissionId === assessment.id}
+                              disabled={
+                                savingSubmissionId === assessment.id ||
+                                assessment.submissionState === "graded"
+                              }
                               className="w-full sm:w-auto"
                             >
                               <FileCheck2 className="size-4" />

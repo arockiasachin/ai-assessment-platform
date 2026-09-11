@@ -53,6 +53,11 @@ export async function POST(
           },
         },
       },
+      submissions: {
+        where: { studentId: student.id },
+        select: { status: true },
+        take: 1,
+      },
     },
   })
 
@@ -66,6 +71,20 @@ export async function POST(
 
   if (assessment.offering.enrollments.length === 0) {
     return jsonError("You are not enrolled in this assessment offering.", 403)
+  }
+
+  // Submission state guard. A graded submission is immutable to the student:
+  // without this, `submit`/`saveDraft` silently overwrote a GRADED status (and
+  // cleared `submittedAt`), corrupting the record the teacher had already
+  // graded while the attached grade/feedback remained.
+  const existingSubmission = assessment.submissions[0] ?? null
+
+  if (existingSubmission?.status === "GRADED") {
+    return jsonError("This submission has already been graded and can no longer be changed.", 409)
+  }
+
+  if (action === "saveDraft" && existingSubmission && existingSubmission.status !== "DRAFT") {
+    return jsonError("A submitted assignment can no longer be saved as a draft.", 409)
   }
 
   const now = new Date()
