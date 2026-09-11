@@ -81,7 +81,7 @@ export function StudentCoursesView() {
     })
   }, [payload, search])
 
-  const enrolled = payload?.enrolledCourses ?? []
+  const enrolled = useMemo(() => payload?.enrolledCourses ?? [], [payload])
 
   const summary = useMemo(
     () => ({
