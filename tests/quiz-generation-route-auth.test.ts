@@ -20,6 +20,12 @@ vi.mock("next/headers", () => ({
   cookies: () => mocks.getCookies(),
 }))
 
+// These route tests use synthetic sessions that have no User row; the real
+// database re-validation is covered by tests/session-role-revalidation.test.ts.
+vi.mock("@/lib/authz-actor", () => ({
+  revalidateSessionActor: (user: unknown) => Promise.resolve(user),
+}))
+
 import { POST } from "@/app/api/teacher/quiz-generation/route"
 import { signSessionValue } from "@/lib/session"
 

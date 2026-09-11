@@ -24,12 +24,14 @@ features work around it via JSON columns or request-supplied values (team-format
 attributes/availability, analytics alert thresholds, quiz draft/published state in
 `Question.metadata`, the grading suggestion dedupe key ordering, LTI registration and user-mapping
 persistence, and the per-assessment quiz attempt cap); a migration is the clean fix and is not done.
-The legacy `AssessmentGrade` model still coexists with the modern `Grade`. Four security items remain
-decisions rather than defects (no login rate limiting; the signed session carries the role for up to
-7 days without re-validation; in-process `unit` code execution is an arms race; container cleanup
-depends on the Docker daemon). One duplicate, unmerged implementation of quiz generation exists on a
-preserved branch and was intentionally not merged. See [`docs/README.md`](docs/README.md) for the
-full gap list.
+The legacy `AssessmentGrade` model still coexists with the modern `Grade`. Three security items remain
+decisions rather than defects: the legacy/modern grade precedence, container cleanup's
+dependence on a reachable Docker daemon, and the multi-instance follow-up for the now
+per-process login throttle. Phase 4 closed the other three decisions (login rate
+limiting, session role re-validation, and out-of-process `unit` execution); see
+[`docs/security/hardening.md`](docs/security/hardening.md). One duplicate, unmerged
+implementation of quiz generation exists on a preserved branch and was intentionally
+not merged. See [`docs/README.md`](docs/README.md) for the full gap list.
 
 - **LLM quiz generation (Phase 2)** — a teacher describes a topic; the system retrieves their own course material, generates multiple-choice drafts with misconception-targeting distractors tagged by subtopic and difficulty, and keeps them unpublished until an explicit publish action (`lib/quiz-generation/**`, `app/api/teacher/quiz-generation/**`, `components/teacher-quiz-generator.tsx`). See [`docs/features/quiz-generation.md`](docs/features/quiz-generation.md).
 - **Team formation, peer evaluation, contribution tracking and milestones (Phase 2)** — instructor-weighted CATME-style formation that maximises the worst-fitting team and respects schedule availability, confidential five-dimension peer evaluation with adjustment factors computed with and without self-ratings, free-rider detection, contribution events as evidence only, and milestones with timestamped completion (`lib/groups/**`, `app/api/teacher/groups/**`, `app/api/student/peer-evaluation/**`, `components/teacher-groups-manager.tsx`, `components/student-peer-evaluation.tsx`). See [`docs/features/groups-peereval.md`](docs/features/groups-peereval.md).
@@ -84,6 +86,7 @@ full gap list.
   the student's own row plus a server-computed `classAverages` aggregate, so the "vs class average"
   view still works without leaking per-student grades. Teachers keep the full cohort view they are
   authorized to see.
+- **Phase 4 security hardening** ([`docs/security/hardening.md`](docs/security/hardening.md)): closed the three decisions the Phase 3 review left open — `POST /api/auth/login` now enforces a bounded, non-enumerating sliding-window throttle over the normalized identifier and client IP (per-process only; a multi-instance deployment still needs shared state), `requireRole`/`requireUser` re-validate the actor's current database role through a short-lived cache and return `401` on deletion or demotion (≤30 s staleness window), and sandboxed `unit` tests run student code in a separate child interpreter so it cannot forge or suppress the harness's per-test evidence.
 - **Phase 3 security review** (see [`docs/security/security-review.md`](docs/security/security-review.md)). Hardened the code-eval harness so untrusted student code cannot forge per-test evidence, made the code-submission cap and course-enrollment capacity checks atomic under concurrency, and confirmed the published-grade invariant holds across all Phase 2 features.
 
 ### Added

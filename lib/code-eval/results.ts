@@ -115,7 +115,11 @@ export function parseHarnessOutput(stdout: string): HarnessTestResult[] {
   const index = sentinelLineIndexes[0]
   if (lines.slice(index + 1).some((line) => line.trim() !== "")) return []
   const line = lines[index]
-  const at = line.lastIndexOf(HARNESS_RESULT_SENTINEL)
+  // The harness owns fd 1 and writes the sentinel first on its line. Use the
+  // *first* occurrence, not the last: captured student output is embedded in
+  // the JSON payload and may itself contain the sentinel string, which must not
+  // be mistaken for the framing of the harness's own line.
+  const at = line.indexOf(HARNESS_RESULT_SENTINEL)
   const raw = line.slice(at + HARNESS_RESULT_SENTINEL.length)
   try {
     const parsed: unknown = JSON.parse(raw)
