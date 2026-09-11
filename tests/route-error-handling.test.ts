@@ -32,7 +32,7 @@ function request(body: Record<string, unknown>) {
 
 const validBody = {
   title: "Week 4 Quiz",
-  courseId: "course-1",
+  offeringId: "offering-1",
   type: "Quiz",
   date: "2026-12-01",
   maxMarks: 20,
@@ -82,13 +82,13 @@ describe("POST /api/gradebook/assessments error handling", () => {
     expect(JSON.stringify(body)).not.toContain("prisma.assessment.create")
   })
 
-  it("still surfaces a known validation error as a 400", async () => {
-    mocks.createAssessment.mockRejectedValue(new Error("No matching course offering"))
+  it("surfaces a known domain error with its own status and no leaked internals", async () => {
+    mocks.createAssessment.mockRejectedValue(new Error("Offering not found or not owned by you."))
 
     const response = await POST(request(validBody))
     const body = (await response.json()) as { message: string }
 
-    expect(response.status).toBe(400)
-    expect(body.message).toBe("No matching course offering")
+    expect(response.status).toBe(403)
+    expect(body.message).toBe("Offering not found or not owned by you.")
   })
 })

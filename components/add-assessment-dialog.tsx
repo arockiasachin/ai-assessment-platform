@@ -27,29 +27,35 @@ import { type AssessmentType } from "@/lib/gradebook"
 const TYPES: AssessmentType[] = ["Quiz", "Assignment"]
 
 export function AddAssessmentDialog() {
-  const { courses, addAssessment } = useGradebook()
+  const { offerings, addAssessment } = useGradebook()
   const [open, setOpen] = useState(false)
   const [title, setTitle] = useState("")
-  const [courseId, setCourseId] = useState("")
+  const [offeringId, setOfferingId] = useState("")
   const [type, setType] = useState<AssessmentType>("Assignment")
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10))
   const [maxMarks, setMaxMarks] = useState("50")
 
   const reset = () => {
     setTitle("")
-    setCourseId(courses[0]?.id ?? "")
+    setOfferingId(offerings[0]?.id ?? "")
     setType("Assignment")
     setDate(new Date().toISOString().slice(0, 10))
     setMaxMarks("50")
   }
 
-  // Derive the effective course rather than syncing it into state via an effect.
-  const selectedCourseId = courseId || courses[0]?.id || ""
+  // Derive the effective offering rather than syncing it into state via an effect.
+  const selectedOfferingId = offeringId || offerings[0]?.id || ""
 
   const submit = () => {
     const max = Number(maxMarks)
-    if (!title.trim() || !selectedCourseId || !Number.isFinite(max) || max <= 0) return
-    addAssessment({ title: title.trim(), courseId: selectedCourseId, type, date, maxMarks: max })
+    if (!title.trim() || !selectedOfferingId || !Number.isFinite(max) || max <= 0) return
+    addAssessment({
+      title: title.trim(),
+      offeringId: selectedOfferingId,
+      type,
+      date,
+      maxMarks: max,
+    })
     reset()
     setOpen(false)
   }
@@ -84,15 +90,19 @@ export function AddAssessmentDialog() {
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="grid gap-2">
-              <Label htmlFor="assessment-course">Course</Label>
-              <Select value={selectedCourseId} onValueChange={(value) => setCourseId(value ?? "")}>
-                <SelectTrigger id="assessment-course">
-                  <SelectValue />
+              <Label htmlFor="assessment-offering">Class offering</Label>
+              <Select
+                value={selectedOfferingId}
+                onValueChange={(value) => setOfferingId(value ?? "")}
+              >
+                <SelectTrigger id="assessment-offering">
+                  <SelectValue placeholder="Select an offering" />
                 </SelectTrigger>
                 <SelectContent>
-                  {courses.map((c) => (
-                    <SelectItem key={c.id} value={c.id}>
-                      {c.name}
+                  {offerings.map((offering) => (
+                    <SelectItem key={offering.id} value={offering.id}>
+                      {offering.courseName} — {offering.className} ({offering.term}{" "}
+                      {offering.academicYear})
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -135,7 +145,7 @@ export function AddAssessmentDialog() {
           <Button variant="outline" onClick={() => setOpen(false)}>
             Cancel
           </Button>
-          <Button onClick={submit} disabled={!title.trim() || !selectedCourseId}>
+          <Button onClick={submit} disabled={!title.trim() || !selectedOfferingId}>
             Add assessment
           </Button>
         </DialogFooter>

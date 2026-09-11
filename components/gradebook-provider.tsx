@@ -7,6 +7,7 @@ import {
   type AssessmentType,
   type Course,
   type MarksMap,
+  type Offering,
   type UpcomingEvent,
   type Quiz,
   type Student,
@@ -16,7 +17,11 @@ export type Role = "teacher" | "student"
 
 type NewAssessment = {
   title: string
-  courseId: string
+  /**
+   * The specific offering to write into. Never a `courseId`: a teacher can own
+   * several offerings for one course and only the offering identifies the class.
+   */
+  offeringId: string
   type: AssessmentType
   date: string
   maxMarks: number
@@ -31,6 +36,7 @@ type GradebookPayload = {
   upcomingEvents: UpcomingEvent[]
   selectedStudentId: string | null
   classAverages?: Record<string, number | null>
+  offerings?: Offering[]
 }
 
 type GradebookContextValue = {
@@ -51,6 +57,8 @@ type GradebookContextValue = {
   quizzes: Quiz[]
   upcomingEvents: UpcomingEvent[]
   marks: MarksMap
+  /** Teacher-owned offerings available to the assessment authoring dialogs. */
+  offerings: Offering[]
   /** Server-computed average percentage per assessment; empty for teachers. */
   classAverages: Record<string, number | null>
   setMark: (studentId: string, assessmentId: string, score: number | null) => void
@@ -73,6 +81,7 @@ export function GradebookProvider({ children }: { children: ReactNode }) {
   const [upcomingEvents, setUpcomingEvents] = useState<UpcomingEvent[]>([])
   const [marks, setMarks] = useState<MarksMap>({})
   const [classAverages, setClassAverages] = useState<Record<string, number | null>>({})
+  const [offerings, setOfferings] = useState<Offering[]>([])
 
   const applyPayload = (payload: GradebookPayload) => {
     setStudents(payload.students)
@@ -82,6 +91,7 @@ export function GradebookProvider({ children }: { children: ReactNode }) {
     setUpcomingEvents(payload.upcomingEvents)
     setMarks(payload.marks)
     setClassAverages(payload.classAverages ?? {})
+    setOfferings(payload.offerings ?? [])
     setSelectedStudentId(payload.selectedStudentId ?? payload.students[0]?.id ?? "")
     setCourseFilter((current) => {
       if (current === "all") return "all"
@@ -170,6 +180,7 @@ export function GradebookProvider({ children }: { children: ReactNode }) {
       quizzes,
       upcomingEvents,
       marks,
+      offerings,
       classAverages,
       setMark,
       addAssessment,
@@ -187,6 +198,7 @@ export function GradebookProvider({ children }: { children: ReactNode }) {
       quizzes,
       upcomingEvents,
       marks,
+      offerings,
       classAverages,
     ],
   )

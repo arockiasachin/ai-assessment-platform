@@ -7,6 +7,7 @@ import {
   type Assessment,
   type Course,
   type MarksMap,
+  type Offering,
   type Quiz,
   type Student,
   type UpcomingEvent,
@@ -26,6 +27,8 @@ type GradebookPayload = {
    * per-student rows they are derived from.
    */
   classAverages: Record<string, number | null>
+  /** Teacher-owned offerings the create-assessment flow can target. */
+  offerings: Offering[]
 }
 
 type DbAssessmentType = "QUIZ" | "ASSIGNMENT"
@@ -68,6 +71,7 @@ function emptyPayload(): GradebookPayload {
     upcomingEvents: [],
     selectedStudentId: null,
     classAverages: {},
+    offerings: [],
   }
 }
 
@@ -98,6 +102,7 @@ export async function getGradebookPayloadForSessionUser(
       where: { teacherId: staff.id },
       include: {
         course: true,
+        classRoom: { select: { name: true, section: true } },
         enrollments: {
           include: {
             student: {
@@ -125,6 +130,18 @@ export async function getGradebookPayloadForSessionUser(
     const coursePool: Course[] = uniqById(
       offerings.map((o) => ({ id: o.course.id, code: o.course.code, name: o.course.name })),
     )
+
+    // The create-assessment picker must show every offering (same course can be
+    // taught in several classes/terms); the class label is what disambiguates.
+    const offeringPool: Offering[] = offerings.map((o) => ({
+      id: o.id,
+      courseId: o.courseId,
+      courseCode: o.course.code,
+      courseName: o.course.name,
+      className: `${o.classRoom.name}${o.classRoom.section ? ` ${o.classRoom.section}` : ""}`,
+      term: o.term,
+      academicYear: o.academicYear,
+    }))
 
     const studentPool: Student[] = uniqById(
       offerings.flatMap((offering) =>
@@ -244,6 +261,7 @@ export async function getGradebookPayloadForSessionUser(
       // Teachers already receive the full cohort marks they are entitled to,
       // so they compute averages client-side; no server aggregate is needed.
       classAverages: {},
+      offerings: offeringPool,
     }
   }
 
@@ -408,6 +426,8 @@ export async function getGradebookPayloadForSessionUser(
     upcomingEvents,
     selectedStudentId: studentProfile.id,
     classAverages,
+    // Authoring an assessment is a teacher action; students never see it.
+    offerings: [],
   }
 }
 
@@ -499,7 +519,7 @@ export async function upsertAssessmentGrade(
 export async function createAssessmentForSessionUser(
   input: {
     title: string
-    courseId: string
+    offeringId: string
     type: "Quiz" | "Assignment"
     date: string
     maxMarks: number
@@ -513,12 +533,18 @@ export async function createAssessmentForSessionUser(
   const staff = await prisma.staffProfile.findUnique({ where: { userId: sessionUser.id } })
   if (!staff) throw new Error("Staff profile missing")
 
+  // The offering is the single source of truth for course/class. Filtering by
+  // `teacherId` makes a missing offering and another teacher's offering the same
+  // 403, so the endpoint never confirms that someone else's offering exists —
+  // and a teacher who teaches the same course twice can no longer land in the
+  // wrong class because the client never sends a bare `courseId`.
   const offering = await prisma.courseOffering.findFirst({
-    where: { courseId: input.courseId, teacherId: staff.id },
-    orderBy: [{ academicYear: "desc" }, { term: "asc" }],
+    where: { id: input.offeringId, teacherId: staff.id },
+    select: { id: true, courseId: true, classId: true },
   })
-
-  if (!offering) throw new Error("No matching course offering")
+  if (!offering) {
+    throw new Error("Offering not found or not owned by you.")
+  }
 
   const created = await prisma.$transaction(async (tx) => {
     const assessment = await tx.assessment.create({

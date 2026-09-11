@@ -8,6 +8,7 @@ import {
   type GradeReviewStatusValue,
   type ReviewDecision,
 } from "@/lib/contracts/grading"
+import { QUIZ_ATTEMPT_CRITERION_LABEL } from "@/lib/contracts/quiz-attempts"
 import type { AIGradeSuggestion, Grade, GradeReview } from "@/lib/generated/prisma/client"
 import type { Prisma } from "@/lib/generated/prisma/client"
 import { prisma } from "@/lib/prisma"
@@ -97,17 +98,65 @@ async function resolveMaxPoints(
 }
 
 /**
+ * The granularity of a suggestion's bucket. A score is either rubric-derived
+ * (per criterion) or quiz-derived (per response or the whole-quiz auto-score),
+ * never both, and a coarse whole-assessment bucket never adds to the finer
+ * buckets that produced it. `legacy` covers a whole-submission / arbitrary-label
+ * draft that carries no structured identifier.
+ *
+ * Why this exists: `latestSuggestionTotals` dedupes by bucket *within* a kind,
+ * but before this classification a rubric criterion (`criterion:<id>`) and the
+ * quiz auto-score (`label:Quiz score`) were separate buckets that were summed
+ * together. A 10-point criterion plus a 20/20 attempt clamped to the rubric
+ * ceiling of 20 and silently corrupted the grade. The kinds are now mutually
+ * exclusive by explicit precedence.
+ */
+export type SuggestionBucketKind = "rubric" | "quizResponse" | "quizOverall" | "legacy"
+
+/**
+ * Highest precedence (most specific) first. Rubric criteria win because
+ * product-spec §3 makes the rubric "the binding contract"; per-response quiz
+ * grading is more specific than the deterministic whole-quiz auto-score; a
+ * coarse whole-assessment score never adds to structured buckets. The illegal
+ * rubric+quiz combination is also blocked at its source (a quiz cannot gain a
+ * rubric), so this only decides what a legacy/rogue row can do to a total.
+ */
+export const SUGGESTION_KIND_PRECEDENCE = [
+  "rubric",
+  "quizResponse",
+  "quizOverall",
+  "legacy",
+] as const
+
+type SuggestionBucketShape = {
+  rubricCriterionId: string | null
+  quizResponseId: string | null
+  submissionId: string | null
+  criterionLabel: string | null
+}
+
+export function suggestionBucketKind(suggestion: SuggestionBucketShape): SuggestionBucketKind {
+  if (suggestion.rubricCriterionId) return "rubric"
+  if (suggestion.quizResponseId) return "quizResponse"
+  if (suggestion.criterionLabel === QUIZ_ATTEMPT_CRITERION_LABEL) return "quizOverall"
+  return "legacy"
+}
+
+/** The one kind whose buckets may count, or `null` when there are no buckets. */
+export function activeSuggestionKind(
+  kinds: Iterable<SuggestionBucketKind>,
+): SuggestionBucketKind | null {
+  const present = new Set(kinds)
+  return SUGGESTION_KIND_PRECEDENCE.find((kind) => present.has(kind)) ?? null
+}
+
+/**
  * The logical bucket a suggestion scores, so re-running the model for the same
  * criterion/response supersedes the previous score instead of adding to it.
  * Without this, every model re-run silently inflates the draft (and then the
  * published) grade.
  */
-function suggestionGroupKey(suggestion: {
-  rubricCriterionId: string | null
-  quizResponseId: string | null
-  submissionId: string | null
-  criterionLabel: string | null
-}): string {
+export function suggestionGroupKey(suggestion: SuggestionBucketShape): string {
   if (suggestion.rubricCriterionId) return `criterion:${suggestion.rubricCriterionId}`
   if (suggestion.quizResponseId) return `quizResponse:${suggestion.quizResponseId}`
   if (suggestion.submissionId) return `submission:${suggestion.submissionId}`
@@ -116,9 +165,10 @@ function suggestionGroupKey(suggestion: {
 }
 
 /**
- * Sum the *latest* suggestion per logical bucket. `count` is the number of
- * suggestion rows seen, which callers use to distinguish "no AI input" from
- * "all suggestions scored zero".
+ * Sum the *latest* suggestion per logical bucket, but only for buckets of the
+ * single active kind, so rubric- and quiz-derived scores can never be added
+ * together. `count` is the number of suggestion rows seen, which callers use to
+ * distinguish "no AI input" from "all suggestions scored zero".
  */
 async function latestSuggestionTotals(
   tx: Prisma.TransactionClient,
@@ -138,16 +188,23 @@ async function latestSuggestionTotals(
     orderBy: { createdAt: "desc" },
   })
 
-  const latestPointsByGroup = new Map<string, number>()
+  const latestByGroup = new Map<string, { kind: SuggestionBucketKind; points: number }>()
   for (const suggestion of suggestions) {
     const key = suggestionGroupKey(suggestion)
-    if (!latestPointsByGroup.has(key)) {
-      latestPointsByGroup.set(key, Number(suggestion.suggestedPoints))
+    if (!latestByGroup.has(key)) {
+      latestByGroup.set(key, {
+        kind: suggestionBucketKind(suggestion),
+        points: Number(suggestion.suggestedPoints),
+      })
     }
   }
 
+  const activeKind = activeSuggestionKind([...latestByGroup.values()].map((bucket) => bucket.kind))
+
   let total = 0
-  for (const points of latestPointsByGroup.values()) total += points
+  for (const bucket of latestByGroup.values()) {
+    if (bucket.kind === activeKind) total += bucket.points
+  }
 
   return { total: Math.max(0, total), count: suggestions.length }
 }

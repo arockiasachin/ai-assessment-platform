@@ -6,6 +6,21 @@ export type Course = {
   name: string
 }
 
+/**
+ * A teacher-owned class offering (course + class/section + term). The create-
+ * assessment flow keys on `id`, never on `courseId`: the same course can be
+ * taught in several offerings and only the offering identifies the class.
+ */
+export type Offering = {
+  id: string
+  courseId: string
+  courseCode: string
+  courseName: string
+  className: string
+  term: string
+  academicYear: number
+}
+
 export type Student = {
   id: string
   name: string

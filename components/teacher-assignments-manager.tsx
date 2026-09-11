@@ -38,9 +38,9 @@ function todayIsoDate() {
 }
 
 export function TeacherAssignmentsManager() {
-  const { courses, refresh } = useGradebook()
+  const { offerings, refresh } = useGradebook()
 
-  const [courseId, setCourseId] = useState("")
+  const [offeringId, setOfferingId] = useState("")
   const [assignmentTitle, setAssignmentTitle] = useState("")
   const [assignmentDate, setAssignmentDate] = useState(todayIsoDate())
   const [assignmentMaxMarks, setAssignmentMaxMarks] = useState("50")
@@ -53,18 +53,18 @@ export function TeacherAssignmentsManager() {
   const [message, setMessage] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
-  // Derive the effective course rather than syncing it into state via an effect.
-  const selectedCourseId = courseId || courses[0]?.id || ""
+  // Derive the effective offering rather than syncing it into state via an effect.
+  const selectedOfferingId = offeringId || offerings[0]?.id || ""
 
   const canCreateAssignment = useMemo(() => {
     const max = Number(assignmentMaxMarks)
     return (
       Boolean(assignmentTitle.trim()) &&
-      Boolean(selectedCourseId) &&
+      Boolean(selectedOfferingId) &&
       Number.isFinite(max) &&
       max > 0
     )
-  }, [assignmentMaxMarks, assignmentTitle, selectedCourseId])
+  }, [assignmentMaxMarks, assignmentTitle, selectedOfferingId])
 
   const importedQuestionCount = useMemo(() => {
     if (!quizPayload?.questions) return 0
@@ -84,7 +84,7 @@ export function TeacherAssignmentsManager() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           title: assignmentTitle.trim(),
-          courseId: selectedCourseId,
+          offeringId: selectedOfferingId,
           type: "Assignment",
           date: assignmentDate,
           maxMarks: Number(assignmentMaxMarks),
@@ -184,7 +184,7 @@ export function TeacherAssignmentsManager() {
             </p>
           </div>
           <Badge variant="secondary" className="w-fit">
-            {courses.length} available courses
+            {offerings.length} class offerings
           </Badge>
         </CardContent>
       </Card>
@@ -229,15 +229,19 @@ export function TeacherAssignmentsManager() {
             </div>
 
             <div className="grid gap-2">
-              <Label htmlFor="assignment-course">Course</Label>
-              <Select value={selectedCourseId} onValueChange={(value) => setCourseId(value ?? "")}>
-                <SelectTrigger id="assignment-course">
-                  <SelectValue placeholder="Select course" />
+              <Label htmlFor="assignment-offering">Class offering</Label>
+              <Select
+                value={selectedOfferingId}
+                onValueChange={(value) => setOfferingId(value ?? "")}
+              >
+                <SelectTrigger id="assignment-offering">
+                  <SelectValue placeholder="Select an offering" />
                 </SelectTrigger>
                 <SelectContent>
-                  {courses.map((course) => (
-                    <SelectItem key={course.id} value={course.id}>
-                      {course.name}
+                  {offerings.map((offering) => (
+                    <SelectItem key={offering.id} value={offering.id}>
+                      {offering.courseName} — {offering.className} ({offering.term}{" "}
+                      {offering.academicYear})
                     </SelectItem>
                   ))}
                 </SelectContent>

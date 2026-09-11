@@ -13,7 +13,14 @@ export type MarksRequest = z.infer<typeof marksRequestSchema>
 /** `POST /api/gradebook/assessments` request body. */
 export const createAssessmentRequestSchema = z.object({
   title: nonEmptyString,
-  courseId: nonEmptyString,
+  /**
+   * The offering the assessment belongs to. Required on purpose: a teacher can
+   * teach the same course in several offerings (different class/section/term),
+   * and resolving by `courseId` alone silently wrote the assessment into the
+   * wrong class. `courseId`/`classId` are derived server-side from this offering
+   * and are deliberately not accepted from the client.
+   */
+  offeringId: nonEmptyString,
   type: z.enum(["Quiz", "Assignment"]),
   date: parseableDateString,
   // 32-bit Postgres `Int` column: an unbounded value is a Prisma validation

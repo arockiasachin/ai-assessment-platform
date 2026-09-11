@@ -61,6 +61,7 @@ function toScorable(questions: readonly QuestionWithOptions[]): GeneratedQuestio
     options: [...question.options]
       .sort((a, b) => a.order - b.order)
       .map((option) => ({ text: option.text, isCorrect: option.isCorrect })),
+    points: Number(question.points),
   }))
 }
 

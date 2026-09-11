@@ -126,6 +126,10 @@ export async function gradeQuizSubmission(
   const studentId = await resolveStudentId(data.studentId, requester)
   await assertCanGradeForStudent(assessment, studentId, requester)
 
+  // The legacy `QuizQuestion` model has no per-question weight, so every
+  // question keeps the kernel's default weight of 1. That is the same default a
+  // Phase-2 `Question` uses when `points` is absent, so both paths score a quiz
+  // the same way.
   const questions: ScorableQuizQuestion[] = assessment.quiz.questions.map((question) => ({
     id: question.id,
     prompt: question.prompt,

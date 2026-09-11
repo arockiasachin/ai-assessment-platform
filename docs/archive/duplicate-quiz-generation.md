@@ -8,12 +8,12 @@ A second, independent implementation of LLM quiz generation, built in parallel w
 implementation that shipped. Both were produced by separate agents working from the same brief
 during the Phase 2 pod fan-out; neither knew about the other.
 
-| | Shipped | Archived |
-| --- | --- | --- |
-| Library | `lib/quiz-generation/**` (12 files) | `lib/quiz-generation/**` (11 files, overlapping) |
-| Teacher API | `app/api/teacher/quiz-generation/**` | `app/api/teacher/quiz/**` |
-| UI | `components/teacher-quiz-generator.tsx` | `components/teacher-quiz-generator.tsx` (conflicting) |
-| Merged in | `25e47ed` | never merged |
+|             | Shipped                                 | Archived                                              |
+| ----------- | --------------------------------------- | ----------------------------------------------------- |
+| Library     | `lib/quiz-generation/**` (12 files)     | `lib/quiz-generation/**` (11 files, overlapping)      |
+| Teacher API | `app/api/teacher/quiz-generation/**`    | `app/api/teacher/quiz/**`                             |
+| UI          | `components/teacher-quiz-generator.tsx` | `components/teacher-quiz-generator.tsx` (conflicting) |
+| Merged in   | `25e47ed`                               | never merged                                          |
 
 ## Why it was not merged
 

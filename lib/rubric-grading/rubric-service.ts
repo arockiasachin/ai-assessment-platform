@@ -40,12 +40,13 @@ export function teacherOwnsAssessment(
 async function loadOwnedAssessment(
   user: AuthUser,
   assessmentId: string,
-): Promise<{ id: string; maxMarks: number; title: string; staffId: string }> {
+): Promise<{ id: string; type: string; maxMarks: number; title: string; staffId: string }> {
   const staffId = await resolveTeacherStaffId(user)
   const assessment = await prisma.assessment.findUnique({
     where: { id: assessmentId },
     select: {
       id: true,
+      type: true,
       title: true,
       maxMarks: true,
       createdById: true,
@@ -56,7 +57,13 @@ async function loadOwnedAssessment(
   if (!teacherOwnsAssessment(assessment, staffId)) {
     throw new RubricGradingError(403, "Forbidden")
   }
-  return { id: assessment.id, title: assessment.title, maxMarks: assessment.maxMarks, staffId }
+  return {
+    id: assessment.id,
+    type: assessment.type,
+    title: assessment.title,
+    maxMarks: assessment.maxMarks,
+    staffId,
+  }
 }
 
 function toSummary(assessment: {
@@ -159,6 +166,17 @@ export async function upsertRubricForTeacher(
 ): Promise<UpsertRubricResult> {
   const request = rubricUpsertRequestSchema.parse(input)
   const owned = await loadOwnedAssessment(user, request.assessmentId)
+
+  // A quiz is auto-scored by the deterministic scorer, which records its own
+  // whole-quiz bucket. A rubric on the same assessment would be a second,
+  // independent grading kind and the two would silently contaminate the same
+  // grade total (bug-fix run 3, S-2). Refuse the illegal combination at the
+  // point the rubric is added; an automatic multiple-choice quiz has no
+  // descriptive criteria to author against.
+  if (owned.type === "QUIZ") {
+    throw new RubricGradingError(409, "A quiz is auto-scored and cannot have a rubric.")
+  }
+
   const coherence = validateRubricCoherence(request, { assessmentMaxMarks: owned.maxMarks })
 
   // A published grade was produced against a specific rubric, so that rubric is

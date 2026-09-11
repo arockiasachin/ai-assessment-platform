@@ -27,6 +27,8 @@ export type GeneratedQuestionForScoring = {
   prompt: string
   explanation: string | null
   options: ReadonlyArray<{ text: string; isCorrect: boolean }>
+  /** Optional per-question weight; the kernel falls back to 1 when absent. */
+  points?: number
 }
 
 export function gradeGeneratedQuiz(
@@ -48,6 +50,7 @@ export function gradeGeneratedQuiz(
       options: question.options.map((option) => option.text),
       correctIndex,
       explanation: question.explanation,
+      points: question.points,
     }
   })
 

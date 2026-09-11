@@ -19,11 +19,12 @@ export async function POST(request: Request) {
     const message = error instanceof Error ? error.message : ""
     if (message === "Forbidden") return jsonError(message, 403)
     if (message === "Unauthorized") return jsonError(message, 401)
-    if (
-      message === "No matching course offering" ||
-      message === "Staff profile missing" ||
-      message === "Assessment not found"
-    ) {
+    // A missing offering and a non-owned offering are deliberately the same
+    // 403 so the route never confirms another teacher's offering exists.
+    if (message === "Offering not found or not owned by you.") {
+      return jsonError(message, 403)
+    }
+    if (message === "Staff profile missing" || message === "Assessment not found") {
       return jsonError(message, 400)
     }
     console.error("Create assessment error:", error)

@@ -4,6 +4,7 @@ import type {
   StudentQuizQuestion,
   TeacherQuizResponse,
 } from "@/lib/contracts/quiz-attempts"
+import { normalizeQuestionPoints } from "@/lib/quiz-scoring"
 
 /**
  * Serializers for the quiz-attempt pod.
@@ -94,7 +95,9 @@ export function serializeTeacherResponse(input: {
     selectedText: selected?.text ?? null,
     isCorrect: input.isCorrect,
     pointsAwarded: input.pointsAwarded,
-    maxPoints: 1,
+    // The same weight the scorer used, so the teacher view cannot disagree with
+    // the persisted `QuizResponse.pointsAwarded` about the question's ceiling.
+    maxPoints: normalizeQuestionPoints(toNumberOrNull(input.question.points)),
     correctOptionId: correct?.id ?? "",
     correctText: correct?.text ?? "",
     explanation: input.question.explanation ?? null,

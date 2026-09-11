@@ -11,7 +11,7 @@ import { createAssessmentRequestSchema, updateOfferingRequestSchema } from "@/li
 describe("assessment creation input validation", () => {
   const valid = {
     title: "Week 4 Quiz",
-    courseId: "course-1",
+    offeringId: "offering-1",
     type: "Quiz" as const,
     date: "2026-12-01",
     maxMarks: 20,
@@ -19,6 +19,17 @@ describe("assessment creation input validation", () => {
 
   it("accepts a well-formed body", () => {
     expect(createAssessmentRequestSchema.safeParse(valid).success).toBe(true)
+  })
+
+  it("requires the offering id instead of an ambiguous course id", () => {
+    const withoutOffering = { ...valid } as Partial<typeof valid>
+    delete withoutOffering.offeringId
+    expect(createAssessmentRequestSchema.safeParse(withoutOffering).success).toBe(false)
+    // A bare course id is no longer accepted: it cannot identify the class.
+    expect(
+      createAssessmentRequestSchema.safeParse({ ...valid, offeringId: undefined, courseId: "c1" })
+        .success,
+    ).toBe(false)
   })
 
   it("rejects an unparseable date before it reaches Prisma", () => {
