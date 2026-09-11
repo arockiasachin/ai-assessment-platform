@@ -2,6 +2,9 @@ import { RoleGuard } from "@/components/role-guard"
 import { AdminPageShell } from "@/components/admin-page-shell"
 import { getAdminOfferingsList } from "@/lib/admin-db"
 
+// Authenticated, database-backed dashboard: never statically prerender.
+export const dynamic = "force-dynamic"
+
 export default async function AdminOfferingsPage() {
   const offerings = await getAdminOfferingsList()
 

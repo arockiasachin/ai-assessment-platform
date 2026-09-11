@@ -4,6 +4,9 @@ import { AdminPageShell } from "@/components/admin-page-shell"
 import { prisma } from "@/lib/prisma"
 import { toPlainRows } from "@/lib/admin-db"
 
+// Authenticated, database-backed dashboard: never statically prerender.
+export const dynamic = "force-dynamic"
+
 export default async function AdminDataPage() {
   const [
     users,

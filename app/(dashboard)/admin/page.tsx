@@ -13,6 +13,9 @@ import { AdminPageShell } from "@/components/admin-page-shell"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { getAdminOverview } from "@/lib/admin-db"
 
+// Authenticated, database-backed dashboard: never statically prerender.
+export const dynamic = "force-dynamic"
+
 export default async function AdminPage() {
   const overview = await getAdminOverview()
 
