@@ -1,38 +1,12 @@
 import { NextResponse } from "next/server"
 import type { NextRequest } from "next/server"
 
-const SESSION_COOKIE_NAME = "auth-user"
+import { SESSION_COOKIE_NAME, verifySessionValue, type AuthRole } from "@/lib/session"
 
-type SessionRole = "teacher" | "student" | "admin"
-
-type SessionState = {
-  role: SessionRole | null
-  isValid: boolean
-}
-
-function getSessionState(cookieValue: string | undefined): SessionState {
-  if (!cookieValue) return { role: null, isValid: false }
-
-  try {
-    const parsed = JSON.parse(cookieValue) as {
-      role?: string
-      user?: { role?: string }
-      expiresAt?: number
-    }
-    const role = parsed.user?.role ?? parsed.role
-    const expiresAt = parsed.expiresAt
-
-    if (typeof expiresAt !== "number" || Date.now() > expiresAt) {
-      return { role: null, isValid: false }
-    }
-
-    return {
-      role: role === "teacher" || role === "student" || role === "admin" ? role : null,
-      isValid: true,
-    }
-  } catch {
-    return { role: null, isValid: false }
-  }
+function homeForRole(role: AuthRole) {
+  if (role === "admin") return "/admin"
+  if (role === "teacher") return "/teacher"
+  return "/student"
 }
 
 function clearSessionCookie(response: NextResponse) {
@@ -44,12 +18,21 @@ function clearSessionCookie(response: NextResponse) {
   return response
 }
 
+/**
+ * Optimistic, signature-verified routing gate.
+ *
+ * This is deliberately *not* the authorization boundary: it only redirects
+ * unauthenticated or wrong-role browsers before rendering. Every route handler
+ * re-verifies the session with `requireRole` from `lib/authz`. The cookie value
+ * is verified with HMAC-SHA256, so an unsigned or tampered `auth-user` value is
+ * treated as no session at all.
+ */
 export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl
   const sessionCookie = request.cookies.get(SESSION_COOKIE_NAME)?.value
-  const { role, isValid } = getSessionState(sessionCookie)
-  const hasSessionCookie = Boolean(sessionCookie)
-  const hasStaleSession = hasSessionCookie && !isValid
+  const user = verifySessionValue(sessionCookie)
+  const role = user?.role ?? null
+  const hasStaleSession = Boolean(sessionCookie) && !user
 
   const loginRedirect = () => {
     const response = NextResponse.redirect(new URL("/login", request.url))
@@ -57,42 +40,29 @@ export function proxy(request: NextRequest) {
   }
 
   if (pathname.startsWith("/admin")) {
-    if (!role || role !== "admin") {
-      return loginRedirect()
-    }
+    if (!role) return loginRedirect()
+    if (role !== "admin") return NextResponse.redirect(new URL(homeForRole(role), request.url))
   }
 
   if (pathname.startsWith("/teacher")) {
-    if (!role) {
-      return loginRedirect()
-    }
-
-    if (role === "admin") {
-      return NextResponse.redirect(new URL("/admin", request.url))
-    }
-
-    if (role !== "teacher") {
-      return NextResponse.redirect(new URL("/student", request.url))
-    }
+    if (!role) return loginRedirect()
+    if (role !== "teacher") return NextResponse.redirect(new URL(homeForRole(role), request.url))
   }
 
   if (pathname.startsWith("/student")) {
-    if (!role) {
-      return loginRedirect()
-    }
+    if (!role) return loginRedirect()
+    if (role !== "student") return NextResponse.redirect(new URL(homeForRole(role), request.url))
+  }
 
-    if (role === "admin") {
-      return NextResponse.redirect(new URL("/admin", request.url))
-    }
-
-    if (role !== "student") {
-      return NextResponse.redirect(new URL("/teacher", request.url))
-    }
+  // The quiz surface takes an assessment, so it is never public. Any signed-in
+  // role may open it; the answer-key handling is server-authoritative work that
+  // lands with the Phase 2 grading pipeline.
+  if (pathname === "/quiz" || pathname.startsWith("/quiz/")) {
+    if (!role) return loginRedirect()
   }
 
   if ((pathname === "/login" || pathname === "/register") && role) {
-    const destination = role === "admin" ? "/admin" : role === "teacher" ? "/teacher" : "/student"
-    return NextResponse.redirect(new URL(destination, request.url))
+    return NextResponse.redirect(new URL(homeForRole(role), request.url))
   }
 
   if (hasStaleSession) {
@@ -103,5 +73,14 @@ export function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/", "/login", "/register", "/admin/:path*", "/teacher/:path*", "/student/:path*"],
+  matcher: [
+    "/",
+    "/login",
+    "/register",
+    "/quiz",
+    "/quiz/:path*",
+    "/admin/:path*",
+    "/teacher/:path*",
+    "/student/:path*",
+  ],
 }

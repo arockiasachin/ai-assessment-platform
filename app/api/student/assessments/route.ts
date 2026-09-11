@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { getSessionUser } from "@/lib/auth"
+import { requireRole } from "@/lib/authz"
 import { prisma } from "@/lib/prisma"
 import type { StudentAssessmentsPayload, SubmissionState } from "@/lib/student-assessments"
 
@@ -13,10 +13,9 @@ function submissionStateFromDbStatus(status: string | null): SubmissionState {
 }
 
 export async function GET() {
-  const user = await getSessionUser()
-  if (!user || user.role !== "student") {
-    return NextResponse.json({ message: "Unauthorized" }, { status: 401 })
-  }
+  const auth = await requireRole("student")
+  if (!auth.authorized) return auth.response
+  const user = auth.user
 
   const student = await prisma.studentProfile.findUnique({
     where: { userId: user.id },

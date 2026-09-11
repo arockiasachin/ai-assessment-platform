@@ -1,7 +1,9 @@
-import { NextResponse } from "next/server"
 import bcrypt from "bcryptjs"
-import { prisma } from "@/lib/prisma"
+
+import { jsonError, parseJsonBody } from "@/lib/api"
 import { createSessionResponse } from "@/lib/auth"
+import { registerRequestSchema } from "@/lib/contracts"
+import { prisma } from "@/lib/prisma"
 
 function toAuthRole(dbRole: "ADMIN" | "TEACHER" | "STUDENT") {
   if (dbRole === "ADMIN") return "admin" as const
@@ -20,32 +22,22 @@ function nameFromEmail(email: string) {
 
 export async function POST(request: Request) {
   try {
-    const { email, password, role } = await request.json()
+    const parsed = await parseJsonBody(request, registerRequestSchema)
+    if (!parsed.ok) return parsed.response
 
-    if (!email || !password) {
-      return NextResponse.json(
-        { success: false, message: "Email and password are required." },
-        { status: 400 },
-      )
-    }
+    const normalizedEmail = parsed.data.email.trim().toLowerCase()
+    const role = parsed.data.role
 
-    const normalizedEmail = String(email).trim().toLowerCase()
-
-    if (normalizedEmail === "admin" || role === "admin") {
-      return NextResponse.json(
-        { success: false, message: "The admin account is reserved." },
-        { status: 403 },
-      )
+    if (normalizedEmail === "admin") {
+      return jsonError("The admin account is reserved.", 403)
     }
 
     const existingUser = await prisma.user.findUnique({ where: { email: normalizedEmail } })
-
     if (existingUser) {
-      return NextResponse.json({ success: false, message: "User already exists." }, { status: 409 })
+      return jsonError("User already exists.", 409)
     }
 
-    const hashedPassword = await bcrypt.hash(password, 10)
-
+    const hashedPassword = await bcrypt.hash(parsed.data.password, 10)
     const normalizedRole = role === "teacher" ? "TEACHER" : "STUDENT"
 
     const user = await prisma.user.create({
@@ -81,6 +73,6 @@ export async function POST(request: Request) {
     })
   } catch (error) {
     console.error("Registration error:", error)
-    return NextResponse.json({ success: false, message: "Server error." }, { status: 500 })
+    return jsonError("Server error.", 500)
   }
 }

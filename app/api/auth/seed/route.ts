@@ -1,12 +1,48 @@
 import { NextResponse } from "next/server"
 import bcrypt from "bcryptjs"
+import { jsonError, parseJsonBody } from "@/lib/api"
+import { requireRole } from "@/lib/authz"
+import { seedRequestSchema } from "@/lib/contracts"
 import { prisma } from "@/lib/prisma"
-import { getSessionUser } from "@/lib/auth"
 
-export async function POST() {
-  const sessionUser = await getSessionUser()
-  if (!sessionUser || sessionUser.role !== "admin") {
-    return NextResponse.json({ success: false, message: "Forbidden" }, { status: 403 })
+export const dynamic = "force-dynamic"
+
+/**
+ * Destructive development seed. Locked down on three independent axes:
+ *
+ * 1. A real, signature-verified admin session (`requireRole`), re-checked
+ *    against the database so a demoted or deleted admin cannot use an old
+ *    cookie.
+ * 2. An explicit `{ "confirm": "RESET-SEED" }` body — the endpoint cannot be
+ *    triggered by a stray request, a prefetch, or a replayed form post.
+ * 3. A production kill switch: even an admin must set
+ *    `ALLOW_DESTRUCTIVE_SEED=true` to reseed in production.
+ *
+ * Credentials are never echoed back; the response lists only which accounts
+ * were touched.
+ */
+export async function POST(request: Request) {
+  const auth = await requireRole("admin")
+  if (!auth.authorized) return auth.response
+
+  const admin = await prisma.user.findUnique({
+    where: { id: auth.user.id },
+    select: { id: true, role: true },
+  })
+  if (!admin || admin.role !== "ADMIN") {
+    return jsonError("Forbidden", 403)
+  }
+
+  if (process.env.NODE_ENV === "production" && process.env.ALLOW_DESTRUCTIVE_SEED !== "true") {
+    return jsonError("Destructive seeding is disabled in production.", 403)
+  }
+
+  const parsed = await parseJsonBody(request, seedRequestSchema)
+  if (!parsed.ok) {
+    return jsonError(
+      'Destructive reseed requires an explicit body: { "confirm": "RESET-SEED" }.',
+      400,
+    )
   }
 
   const adminPassword = await bcrypt.hash("admin", 10)
@@ -747,29 +783,19 @@ export async function POST() {
     },
   })
 
+  const seededEmails = [
+    "admin",
+    "olivia.hayes@school.edu",
+    "teacher.math@school.edu",
+    "samuel.brooks@school.edu",
+    "aisha.collins@school.edu",
+    "ava.t@school.edu",
+    "nolan.rivera@school.edu",
+  ]
+
   return NextResponse.json({
     success: true,
     message: "Dummy users and dataset seeded.",
-    credentials: {
-      admin: { email: "admin", password: "admin", empId: "EMP-ADMIN-001" },
-      devAdmin: { email: "olivia.hayes@school.edu", password: "dev12345", empId: "EMP-A-3001" },
-      coreTeacher: {
-        email: "teacher.math@school.edu",
-        password: "teacher123",
-        empId: "EMP-T-1001",
-      },
-      teacher: { email: "samuel.brooks@school.edu", password: "dev12345", empId: "EMP-T-3002" },
-      teacherTwo: { email: "aisha.collins@school.edu", password: "dev12345", empId: "EMP-T-3003" },
-      coreStudent: {
-        email: "ava.t@school.edu",
-        password: "student123",
-        registerNumber: "REG-1001",
-      },
-      student: {
-        email: "nolan.rivera@school.edu",
-        password: "dev12345",
-        registerNumber: "REG-3001",
-      },
-    },
+    seededEmails,
   })
 }

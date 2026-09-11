@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server"
-import { getSessionUser } from "@/lib/auth"
+import { jsonError, parseJsonBody } from "@/lib/api"
+import { requireRole } from "@/lib/authz"
+import { updateOfferingRequestSchema } from "@/lib/contracts"
 import { prisma } from "@/lib/prisma"
 
 function parseDateOrNull(value: string | null | undefined) {
@@ -13,44 +15,27 @@ export async function PUT(
   request: Request,
   { params }: { params: Promise<{ offeringId: string }> },
 ) {
-  const user = await getSessionUser()
-  if (!user || user.role !== "teacher") {
-    return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 })
-  }
+  const auth = await requireRole("teacher")
+  if (!auth.authorized) return auth.response
 
   const staff = await prisma.staffProfile.findUnique({
-    where: { userId: user.id },
+    where: { userId: auth.user.id },
     select: { id: true },
   })
   if (!staff) {
-    return NextResponse.json(
-      { success: false, message: "Teacher profile not found" },
-      { status: 404 },
-    )
+    return jsonError("Teacher profile not found", 404)
   }
+
+  const parsed = await parseJsonBody(request, updateOfferingRequestSchema)
+  if (!parsed.ok) return parsed.response
 
   const { offeringId } = await params
 
-  const body = (await request.json()) as {
-    studentLimit?: number
-    registrationOpenAt?: string | null
-    registrationCloseAt?: string | null
-    startsOn?: string | null
-    endsOn?: string | null
-  }
-
-  const studentLimit = Number(body.studentLimit)
-  if (!Number.isInteger(studentLimit) || studentLimit < 1 || studentLimit > 500) {
-    return NextResponse.json(
-      { success: false, message: "Student limit must be between 1 and 500." },
-      { status: 400 },
-    )
-  }
-
-  const registrationOpenAt = parseDateOrNull(body.registrationOpenAt)
-  const registrationCloseAt = parseDateOrNull(body.registrationCloseAt)
-  const startsOn = parseDateOrNull(body.startsOn)
-  const endsOn = parseDateOrNull(body.endsOn)
+  const studentLimit = parsed.data.studentLimit
+  const registrationOpenAt = parseDateOrNull(parsed.data.registrationOpenAt)
+  const registrationCloseAt = parseDateOrNull(parsed.data.registrationCloseAt)
+  const startsOn = parseDateOrNull(parsed.data.startsOn)
+  const endsOn = parseDateOrNull(parsed.data.endsOn)
 
   if (registrationOpenAt && registrationCloseAt && registrationOpenAt > registrationCloseAt) {
     return NextResponse.json(

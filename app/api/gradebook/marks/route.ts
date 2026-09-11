@@ -1,45 +1,34 @@
 import { NextResponse } from "next/server"
 
-import { getSessionUser } from "@/lib/auth"
+import { jsonError, parseJsonBody } from "@/lib/api"
+import { requireRole } from "@/lib/authz"
+import { marksRequestSchema } from "@/lib/contracts"
 import { upsertAssessmentGrade } from "@/lib/gradebook-db"
 
+/**
+ * Write a mark. Only teachers and admins may reach this handler: the student
+ * self-grading path is closed. A teacher is additionally limited to assessments
+ * in their own offerings by `upsertAssessmentGrade`.
+ */
 export async function POST(request: Request) {
-  const user = await getSessionUser()
-  if (!user) {
-    return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 })
-  }
+  const auth = await requireRole("teacher", "admin")
+  if (!auth.authorized) return auth.response
 
-  if (user.role !== "teacher" && user.role !== "student") {
-    return NextResponse.json({ success: false, message: "Forbidden" }, { status: 403 })
+  const parsed = await parseJsonBody(request, marksRequestSchema)
+  if (!parsed.ok) return parsed.response
+
+  const { studentId, assessmentId, score: scoreRaw } = parsed.data
+  const score = scoreRaw === null ? null : Number(scoreRaw)
+  if (score !== null && !Number.isFinite(score)) {
+    return jsonError("Invalid score.", 400)
   }
 
   try {
-    const body = await request.json()
-    const studentId = String(body.studentId ?? "")
-    const assessmentId = String(body.assessmentId ?? "")
-    const scoreRaw = body.score
-
-    if (!studentId || !assessmentId) {
-      return NextResponse.json({ success: false, message: "Missing identifiers." }, { status: 400 })
-    }
-
-    const score = scoreRaw === null ? null : Number(scoreRaw)
-    if (score !== null && !Number.isFinite(score)) {
-      return NextResponse.json({ success: false, message: "Invalid score." }, { status: 400 })
-    }
-
-    await upsertAssessmentGrade({ studentId, assessmentId, score })
+    await upsertAssessmentGrade({ studentId, assessmentId, score }, auth.user)
     return NextResponse.json({ success: true })
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unable to save mark."
-    const status =
-      message === "Forbidden"
-        ? 403
-        : message === "Unauthorized"
-          ? 401
-          : message === "Assessment not found"
-            ? 404
-            : 400
-    return NextResponse.json({ success: false, message }, { status })
+    const status = message === "Forbidden" ? 403 : message === "Assessment not found" ? 404 : 400
+    return jsonError(message, status)
   }
 }

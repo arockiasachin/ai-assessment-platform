@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { getSessionUser } from "@/lib/auth"
+import { requireRole } from "@/lib/authz"
 import { prisma } from "@/lib/prisma"
 
 async function getTeacherStaffId(userId: string) {
@@ -8,10 +8,9 @@ async function getTeacherStaffId(userId: string) {
 }
 
 export async function GET() {
-  const user = await getSessionUser()
-  if (!user || user.role !== "teacher") {
-    return NextResponse.json({ message: "Unauthorized" }, { status: 401 })
-  }
+  const auth = await requireRole("teacher")
+  if (!auth.authorized) return auth.response
+  const user = auth.user
 
   const staffId = await getTeacherStaffId(user.id)
   if (!staffId) {
@@ -97,10 +96,9 @@ export async function GET() {
 }
 
 export async function PUT(request: Request) {
-  const user = await getSessionUser()
-  if (!user || user.role !== "teacher") {
-    return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 })
-  }
+  const auth = await requireRole("teacher")
+  if (!auth.authorized) return auth.response
+  const user = auth.user
 
   const staffId = await getTeacherStaffId(user.id)
   if (!staffId) {

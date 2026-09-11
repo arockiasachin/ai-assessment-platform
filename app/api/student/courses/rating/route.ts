@@ -1,39 +1,28 @@
 import { NextResponse } from "next/server"
-import { getSessionUser } from "@/lib/auth"
+
+import { jsonError, parseJsonBody } from "@/lib/api"
+import { requireRole } from "@/lib/authz"
+import { courseRatingRequestSchema } from "@/lib/contracts"
 import { prisma } from "@/lib/prisma"
 
 export async function POST(request: Request) {
-  const user = await getSessionUser()
-  if (!user || user.role !== "student") {
-    return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 })
-  }
+  const auth = await requireRole("student")
+  if (!auth.authorized) return auth.response
+
+  const parsed = await parseJsonBody(request, courseRatingRequestSchema)
+  if (!parsed.ok) return parsed.response
 
   const student = await prisma.studentProfile.findUnique({
-    where: { userId: user.id },
+    where: { userId: auth.user.id },
     select: { id: true },
   })
 
   if (!student) {
-    return NextResponse.json(
-      { success: false, message: "Student profile not found" },
-      { status: 404 },
-    )
+    return jsonError("Student profile not found", 404)
   }
 
-  const body = (await request.json()) as { offeringId?: string; rating?: number; comment?: string }
-  const offeringId = body.offeringId?.trim()
-  const rating = Number(body.rating)
-  const comment = (body.comment ?? "").trim()
-
-  if (!offeringId) {
-    return NextResponse.json({ success: false, message: "Offering is required." }, { status: 400 })
-  }
-  if (!Number.isInteger(rating) || rating < 1 || rating > 5) {
-    return NextResponse.json(
-      { success: false, message: "Rating must be an integer between 1 and 5." },
-      { status: 400 },
-    )
-  }
+  const { offeringId, rating } = parsed.data
+  const comment = (parsed.data.comment ?? "").trim()
 
   const enrollment = await prisma.enrollment.findUnique({
     where: {
@@ -50,18 +39,12 @@ export async function POST(request: Request) {
   })
 
   if (!enrollment) {
-    return NextResponse.json(
-      { success: false, message: "You must be enrolled to rate this course." },
-      { status: 403 },
-    )
+    return jsonError("You must be enrolled to rate this course.", 403)
   }
 
   const isCompleted = Boolean(enrollment.offering.endsOn && enrollment.offering.endsOn < new Date())
   if (!isCompleted) {
-    return NextResponse.json(
-      { success: false, message: "You can rate this course only after completion." },
-      { status: 409 },
-    )
+    return jsonError("You can rate this course only after completion.", 409)
   }
 
   await prisma.courseRating.upsert({

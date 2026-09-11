@@ -1,55 +1,40 @@
 import { NextResponse } from "next/server"
-import { getSessionUser } from "@/lib/auth"
-import { prisma } from "@/lib/prisma"
 
-type SubmitAction = "saveDraft" | "submit" | "resubmit"
+import { jsonError, parseJsonBody } from "@/lib/api"
+import { requireRole } from "@/lib/authz"
+import { submissionRequestSchema } from "@/lib/contracts"
+import { prisma } from "@/lib/prisma"
 
 export async function POST(
   request: Request,
   { params }: { params: Promise<{ assessmentId: string }> },
 ) {
-  const user = await getSessionUser()
-  if (!user || user.role !== "student") {
-    return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 })
-  }
+  const auth = await requireRole("student")
+  if (!auth.authorized) return auth.response
 
   const student = await prisma.studentProfile.findUnique({
-    where: { userId: user.id },
+    where: { userId: auth.user.id },
     select: { id: true },
   })
 
   if (!student) {
-    return NextResponse.json(
-      { success: false, message: "Student profile not found" },
-      { status: 404 },
-    )
+    return jsonError("Student profile not found", 404)
   }
+
+  const parsed = await parseJsonBody(request, submissionRequestSchema)
+  if (!parsed.ok) return parsed.response
+
+  const contentText = String(parsed.data.contentText ?? "").trim()
+  const action = parsed.data.action
 
   const { assessmentId } = await params
 
-  const body = (await request.json()) as { contentText?: string; action?: SubmitAction }
-  const contentText = String(body.contentText ?? "").trim()
-  const action = body.action ?? "submit"
-
   if (!assessmentId) {
-    return NextResponse.json(
-      { success: false, message: "Assessment is required." },
-      { status: 400 },
-    )
-  }
-
-  if (contentText.length > 4000) {
-    return NextResponse.json(
-      { success: false, message: "Submission content must be 4000 characters or fewer." },
-      { status: 400 },
-    )
+    return jsonError("Assessment is required.", 400)
   }
 
   if (action !== "saveDraft" && !contentText.length) {
-    return NextResponse.json(
-      { success: false, message: "Add submission content before submitting." },
-      { status: 400 },
-    )
+    return jsonError("Add submission content before submitting.", 400)
   }
 
   const assessment = await prisma.assessment.findUnique({
@@ -72,21 +57,15 @@ export async function POST(
   })
 
   if (!assessment) {
-    return NextResponse.json({ success: false, message: "Assessment not found." }, { status: 404 })
+    return jsonError("Assessment not found.", 404)
   }
 
   if (assessment.type !== "ASSIGNMENT") {
-    return NextResponse.json(
-      { success: false, message: "Only assignments support submissions." },
-      { status: 409 },
-    )
+    return jsonError("Only assignments support submissions.", 409)
   }
 
   if (assessment.offering.enrollments.length === 0) {
-    return NextResponse.json(
-      { success: false, message: "You are not enrolled in this assessment offering." },
-      { status: 403 },
-    )
+    return jsonError("You are not enrolled in this assessment offering.", 403)
   }
 
   const now = new Date()

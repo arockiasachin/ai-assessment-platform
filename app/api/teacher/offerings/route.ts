@@ -1,12 +1,11 @@
 import { NextResponse } from "next/server"
-import { getSessionUser } from "@/lib/auth"
+import { requireRole } from "@/lib/authz"
 import { prisma } from "@/lib/prisma"
 
 export async function GET() {
-  const user = await getSessionUser()
-  if (!user || user.role !== "teacher") {
-    return NextResponse.json({ message: "Unauthorized" }, { status: 401 })
-  }
+  const auth = await requireRole("teacher")
+  if (!auth.authorized) return auth.response
+  const user = auth.user
 
   const staff = await prisma.staffProfile.findUnique({
     where: { userId: user.id },

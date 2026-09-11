@@ -1,18 +1,12 @@
 import { NextResponse } from "next/server"
 
-import { getSessionUser } from "@/lib/auth"
+import { requireRole } from "@/lib/authz"
 import { getGradebookPayloadForSessionUser } from "@/lib/gradebook-db"
 
 export async function GET() {
-  const user = await getSessionUser()
-  if (!user) {
-    return NextResponse.json({ message: "Unauthorized" }, { status: 401 })
-  }
+  const auth = await requireRole("teacher", "student")
+  if (!auth.authorized) return auth.response
 
-  if (user.role === "admin") {
-    return NextResponse.json({ message: "Forbidden" }, { status: 403 })
-  }
-
-  const payload = await getGradebookPayloadForSessionUser()
+  const payload = await getGradebookPayloadForSessionUser(auth.user)
   return NextResponse.json(payload)
 }

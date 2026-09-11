@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 
-import { getSessionUser } from "@/lib/auth"
+import { requireRole } from "@/lib/authz"
 import { prisma } from "@/lib/prisma"
 
 type RebalanceResult = {
@@ -14,10 +14,8 @@ type RebalanceResult = {
 }
 
 export async function POST() {
-  const sessionUser = await getSessionUser()
-  if (!sessionUser || sessionUser.role !== "admin") {
-    return NextResponse.json({ success: false, message: "Forbidden" }, { status: 403 })
-  }
+  const auth = await requireRole("admin")
+  if (!auth.authorized) return auth.response
 
   const [samuel, aisha] = await Promise.all([
     prisma.staffProfile.findUnique({ where: { empId: "EMP-T-3002" }, select: { id: true } }),

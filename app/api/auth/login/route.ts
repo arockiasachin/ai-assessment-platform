@@ -1,7 +1,10 @@
 import { NextResponse } from "next/server"
 import bcrypt from "bcryptjs"
-import { prisma } from "@/lib/prisma"
+
+import { jsonError, parseJsonBody } from "@/lib/api"
 import { createSessionResponse } from "@/lib/auth"
+import { loginRequestSchema } from "@/lib/contracts"
+import { prisma } from "@/lib/prisma"
 
 function toAuthRole(dbRole: "ADMIN" | "TEACHER" | "STUDENT") {
   if (dbRole === "ADMIN") return "admin" as const
@@ -9,46 +12,33 @@ function toAuthRole(dbRole: "ADMIN" | "TEACHER" | "STUDENT") {
   return "student" as const
 }
 
+/**
+ * Every login is checked against the database and a bcrypt password hash. There
+ * is no hardcoded credential path: a client cannot obtain a session by asserting
+ * a role in the request body.
+ */
 export async function POST(request: Request) {
   try {
-    const { email, password } = await request.json()
+    const parsed = await parseJsonBody(request, loginRequestSchema)
+    if (!parsed.ok) return parsed.response
 
-    if (!email || !password) {
-      return NextResponse.json(
-        { success: false, message: "Username/email and password are required." },
-        { status: 400 },
-      )
-    }
-
-    const normalizedIdentifier = String(email).trim().toLowerCase()
-
-    if (normalizedIdentifier === "admin" && String(password) === "admin") {
-      return createSessionResponse({
-        id: "admin",
-        email: "admin",
-        role: "admin",
-      })
-    }
+    const normalizedIdentifier = parsed.data.email.trim().toLowerCase()
 
     const user = await prisma.user.findUnique({ where: { email: normalizedIdentifier } })
-
     if (!user) {
-      return NextResponse.json({ success: false, message: "Invalid credentials." }, { status: 401 })
+      return jsonError("Invalid credentials.", 401)
     }
 
-    const validPassword = await bcrypt.compare(password, user.passwordHash)
-
+    const validPassword = await bcrypt.compare(parsed.data.password, user.passwordHash)
     if (!validPassword) {
-      return NextResponse.json({ success: false, message: "Invalid credentials." }, { status: 401 })
+      return jsonError("Invalid credentials.", 401)
     }
 
-    const authUser = {
+    return createSessionResponse({
       id: user.id,
       email: user.email,
       role: toAuthRole(user.role),
-    }
-
-    return createSessionResponse(authUser)
+    })
   } catch (error) {
     console.error("Login error:", error)
     return NextResponse.json({ success: false, message: "Server error." }, { status: 500 })

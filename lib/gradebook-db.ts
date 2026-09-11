@@ -1,7 +1,7 @@
 import "server-only"
 
 import { prisma } from "@/lib/prisma"
-import { getSessionUser } from "@/lib/auth"
+import type { AuthUser } from "@/lib/session"
 import {
   markKey,
   type Assessment,
@@ -75,10 +75,9 @@ function uniqById<T extends { id: string }>(items: T[]) {
   return result
 }
 
-export async function getGradebookPayloadForSessionUser(): Promise<GradebookPayload> {
-  const sessionUser = await getSessionUser()
-  if (!sessionUser) return emptyPayload()
-
+export async function getGradebookPayloadForSessionUser(
+  sessionUser: AuthUser,
+): Promise<GradebookPayload> {
   if (sessionUser.role === "admin") {
     // Admin has a separate workspace and should not consume teacher gradebook payloads.
     return emptyPayload()
@@ -399,14 +398,18 @@ export async function getGradebookPayloadForSessionUser(): Promise<GradebookPayl
   }
 }
 
-export async function upsertAssessmentGrade(input: {
-  studentId: string
-  assessmentId: string
-  score: number | null
-}) {
-  const sessionUser = await getSessionUser()
-  if (!sessionUser) throw new Error("Unauthorized")
-  if (sessionUser.role === "admin") throw new Error("Forbidden")
+export async function upsertAssessmentGrade(
+  input: {
+    studentId: string
+    assessmentId: string
+    score: number | null
+  },
+  actor: AuthUser,
+) {
+  // Only staff may write marks; a student can never grade their own work.
+  if (actor.role !== "teacher" && actor.role !== "admin") {
+    throw new Error("Forbidden")
+  }
 
   const assessment = await prisma.assessment.findUnique({
     where: { id: input.assessmentId },
@@ -435,15 +438,10 @@ export async function upsertAssessmentGrade(input: {
     throw new Error("Student not enrolled in assessment offering")
   }
 
-  if (sessionUser.role === "student") {
-    const student = await prisma.studentProfile.findUnique({ where: { userId: sessionUser.id } })
-    if (!student || student.id !== input.studentId) {
-      throw new Error("Forbidden")
-    }
-  }
-
-  if (sessionUser.role === "teacher") {
-    const staff = await prisma.staffProfile.findUnique({ where: { userId: sessionUser.id } })
+  // Object-level authorization: a teacher may only write marks for assessments
+  // in their own offerings. Admins may write any.
+  if (actor.role === "teacher") {
+    const staff = await prisma.staffProfile.findUnique({ where: { userId: actor.id } })
     if (!staff || assessment.offering.teacherId !== staff.id) {
       throw new Error("Forbidden")
     }
@@ -480,15 +478,16 @@ export async function upsertAssessmentGrade(input: {
   })
 }
 
-export async function createAssessmentForSessionUser(input: {
-  title: string
-  courseId: string
-  type: "Quiz" | "Assignment"
-  date: string
-  maxMarks: number
-}) {
-  const sessionUser = await getSessionUser()
-  if (!sessionUser) throw new Error("Unauthorized")
+export async function createAssessmentForSessionUser(
+  input: {
+    title: string
+    courseId: string
+    type: "Quiz" | "Assignment"
+    date: string
+    maxMarks: number
+  },
+  sessionUser: AuthUser,
+) {
   if (sessionUser.role !== "teacher") {
     throw new Error("Forbidden")
   }
@@ -633,9 +632,7 @@ function parseImportedQuestions(input: unknown): ParsedQuizQuestion[] {
   })
 }
 
-export async function createQuizFromImportForSessionUser(payload: unknown) {
-  const sessionUser = await getSessionUser()
-  if (!sessionUser) throw new Error("Unauthorized")
+export async function createQuizFromImportForSessionUser(payload: unknown, sessionUser: AuthUser) {
   if (sessionUser.role !== "teacher") throw new Error("Forbidden")
 
   const body = asRecord(payload)
