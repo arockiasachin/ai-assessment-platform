@@ -16,15 +16,15 @@ anything they fixed.
 
 ## Environment
 
-| Item                | Value                                                                                  |
-| ------------------- | -------------------------------------------------------------------------------------- |
-| OS / shell          | macOS 27 (aarch64), zsh                                                                |
-| Runtime             | Node v25.9.0, Next.js 16.3.0, Prisma 7.9.1                                             |
-| Postgres            | 18.4 (Homebrew), `localhost:5432`                                                      |
-| Test database       | `assessment_security_test` (name contains `test`, created and owned by this pass)      |
-| Docker              | 29.7.2, with `python:3.12-slim` and `node:22-slim` pre-pulled                         |
-| LLM provider        | `mock` (offline; no network calls)                                                     |
-| Developer database  | `assessment_dashboard` — **never** read, reset, migrated, or written by this pass      |
+| Item               | Value                                                                             |
+| ------------------ | --------------------------------------------------------------------------------- |
+| OS / shell         | macOS 27 (aarch64), zsh                                                           |
+| Runtime            | Node v25.9.0, Next.js 16.3.0, Prisma 7.9.1                                        |
+| Postgres           | 18.4 (Homebrew), `localhost:5432`                                                 |
+| Test database      | `assessment_security_test` (name contains `test`, created and owned by this pass) |
+| Docker             | 29.7.2, with `python:3.12-slim` and `node:22-slim` pre-pulled                     |
+| LLM provider       | `mock` (offline; no network calls)                                                |
+| Developer database | `assessment_dashboard` — **never** read, reset, migrated, or written by this pass |
 
 `prisma/schema.prisma` and `prisma/migrations/**` are unchanged.
 `package.json`/`package-lock.json` are unchanged; no dependency was added.
@@ -32,15 +32,15 @@ anything they fixed.
 
 ## Commands and outcomes
 
-| Command                                                                            | Result                                                       |
-| ---------------------------------------------------------------------------------- | ------------------------------------------------------------ |
-| `npm test` with `TEST_DATABASE_URL=…assessment_security_test`, before fixes        | **exit 0** — 51 files, 321 passed, 5 skipped                 |
-| `npm test` after fixes                                                             | **exit 0** — 54 files, **332 passed**, 5 skipped (+11 new)   |
-| `npx tsc --noEmit` (after `prisma generate`)                                       | **exit 0**                                                   |
-| `npm run verify` (typecheck + lint + format:check)                                 | **exit 0** — 0 errors, 9 warnings (unchanged from baseline)  |
-| `DATABASE_URL=…:59999/ci SESSION_SECRET=x LLM_PROVIDER=mock npm run build`         | **exit 0** — compiled, all routes emitted                    |
-| `npx vitest run tests/code-eval-docker.test.ts` (real containers)                  | **exit 0** — 5 passed (network denied, timeout kill, memory kill, per-test isolation) |
-| `docker ps -a --filter name=code-eval-` after the sandbox runs                     | **0 containers** — no cleanup leak                           |
+| Command                                                                     | Result                                                                                |
+| --------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| `npm test` with `TEST_DATABASE_URL=…assessment_security_test`, before fixes | **exit 0** — 51 files, 321 passed, 5 skipped                                          |
+| `npm test` after fixes                                                      | **exit 0** — 54 files, **332 passed**, 5 skipped (+11 new)                            |
+| `npx tsc --noEmit` (after `prisma generate`)                                | **exit 0**                                                                            |
+| `npm run verify` (typecheck + lint + format:check)                          | **exit 0** — 0 errors, 9 warnings (unchanged from baseline)                           |
+| `DATABASE_URL=…:59999/ci SESSION_SECRET=x LLM_PROVIDER=mock npm run build`  | **exit 0** — compiled, all routes emitted                                             |
+| `npx vitest run tests/code-eval-docker.test.ts` (real containers)           | **exit 0** — 5 passed (network denied, timeout kill, memory kill, per-test isolation) |
+| `docker ps -a --filter name=code-eval-` after the sandbox runs              | **0 containers** — no cleanup leak                                                    |
 
 The 9 lint warnings are exactly run 1's residual list (fetch-on-mount effects and
 two deliberate `window.location` assignments); no warning was added or removed, and
@@ -88,11 +88,11 @@ search of every `Grade` write:
 
 ### CONFIRMED (reproduced with a failing-then-passing test)
 
-| #     | Severity | Area      | Summary                                                                                                   | Fix                                                                                   | Test                                              |
-| ----- | -------- | --------- | --------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- | ------------------------------------------------- |
-| SEC-1 | High     | code-eval | Untrusted student code could forge its own per-test pass/fail evidence in the sandbox harness             | Captured writer/serializer/intrinsics + fail-closed parser in `harness.ts`/`results.ts` | `tests/code-eval-harness-integrity.test.ts` (9)   |
-| SEC-2 | High     | code-eval | Submission cap was check-then-act; concurrent requests exceeded `maxSubmissions` and each cost a container | Atomic slot reservation under a `CodeTask` row lock in `submissions.ts`               | `tests/code-eval-submission-race.test.ts` (1)     |
-| SEC-3 | Medium   | legacy    | Course enrollment capacity was check-then-act; two students could both take the last seat                 | Capacity decision under a `CourseOffering` row lock in the enroll route               | `tests/course-enroll-race.test.ts` (1)            |
+| #     | Severity | Area      | Summary                                                                                                    | Fix                                                                                     | Test                                            |
+| ----- | -------- | --------- | ---------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- | ----------------------------------------------- |
+| SEC-1 | High     | code-eval | Untrusted student code could forge its own per-test pass/fail evidence in the sandbox harness              | Captured writer/serializer/intrinsics + fail-closed parser in `harness.ts`/`results.ts` | `tests/code-eval-harness-integrity.test.ts` (9) |
+| SEC-2 | High     | code-eval | Submission cap was check-then-act; concurrent requests exceeded `maxSubmissions` and each cost a container | Atomic slot reservation under a `CodeTask` row lock in `submissions.ts`                 | `tests/code-eval-submission-race.test.ts` (1)   |
+| SEC-3 | Medium   | legacy    | Course enrollment capacity was check-then-act; two students could both take the last seat                  | Capacity decision under a `CourseOffering` row lock in the enroll route                 | `tests/course-enroll-race.test.ts` (1)          |
 
 #### SEC-1 — Student code can forge sandbox test results (High)
 
@@ -194,13 +194,13 @@ active and one waitlisted enrollment.
 
 ### SUSPECTED (code-visible, not reproduced end-to-end; deliberately not changed)
 
-| #   | Severity | Area      | Suspicion                                                                                                                                                                                    | Why it is only suspected / why it was not fixed                                                                                                       |
-| --- | -------- | --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
-| S-1 | Medium   | auth      | `POST /api/auth/login` has no rate limiting or lockout. An attacker can make unlimited bcrypt attempts against a known email.                                                                | Needs shared state (Redis/DB) or edge middleware to be meaningful; adding an in-process throttle would be a false guarantee and touches shared tooling. |
-| S-2 | Medium   | session   | A signed session carries the role for up to 7 days and is not re-validated against the DB, so a demoted or deleted user keeps their old role until expiry (`/api/auth/seed` re-checks; other admin routes do not). | Session invalidation needs a token-version column or per-request lookup — a schema/product decision. `proxy.ts`/`requireRole` are otherwise correct.    |
-| S-3 | Low      | lms-export | An unpublished modern `Grade` deliberately pre-empts the legacy `AssessmentGrade` fallback, so an AI draft can exclude a human-entered legacy mark from the final-grade export.               | Documented product precedence in `final-grade.ts`; resolving it is a product decision, not a code defect.                                             |
-| S-4 | Low      | code-eval | In-process `unit` execution can still be tampered with through intrinsics the harness does not restore (e.g. descriptor-level tricks).                                                        | See SEC-1 residual. Fully closing it requires moving execution out-of-process, which changes a documented behaviour and its Docker test.              |
-| S-5 | Low      | code-eval | Container cleanup depends on the Docker daemon being reachable for the final `docker rm -f`; if the daemon dies mid-request, a container can leak.                                             | Not reproducible locally (0 leaked after the suite); an orphan reaper needs operational tooling.                                                       |
+| #   | Severity | Area       | Suspicion                                                                                                                                                                                                          | Why it is only suspected / why it was not fixed                                                                                                         |
+| --- | -------- | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| S-1 | Medium   | auth       | `POST /api/auth/login` has no rate limiting or lockout. An attacker can make unlimited bcrypt attempts against a known email.                                                                                      | Needs shared state (Redis/DB) or edge middleware to be meaningful; adding an in-process throttle would be a false guarantee and touches shared tooling. |
+| S-2 | Medium   | session    | A signed session carries the role for up to 7 days and is not re-validated against the DB, so a demoted or deleted user keeps their old role until expiry (`/api/auth/seed` re-checks; other admin routes do not). | Session invalidation needs a token-version column or per-request lookup — a schema/product decision. `proxy.ts`/`requireRole` are otherwise correct.    |
+| S-3 | Low      | lms-export | An unpublished modern `Grade` deliberately pre-empts the legacy `AssessmentGrade` fallback, so an AI draft can exclude a human-entered legacy mark from the final-grade export.                                    | Documented product precedence in `final-grade.ts`; resolving it is a product decision, not a code defect.                                               |
+| S-4 | Low      | code-eval  | In-process `unit` execution can still be tampered with through intrinsics the harness does not restore (e.g. descriptor-level tricks).                                                                             | See SEC-1 residual. Fully closing it requires moving execution out-of-process, which changes a documented behaviour and its Docker test.                |
+| S-5 | Low      | code-eval  | Container cleanup depends on the Docker daemon being reachable for the final `docker rm -f`; if the daemon dies mid-request, a container can leak.                                                                 | Not reproducible locally (0 leaked after the suite); an orphan reaper needs operational tooling.                                                        |
 
 ## Could not verify
 
