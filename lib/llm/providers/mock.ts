@@ -61,6 +61,74 @@ export function deterministicEmbedding(text: string, dimensions: number): number
 }
 
 /**
+ * Synthesize a deterministic, schema-valid quiz response for the
+ * `quiz-generation` task. This is what lets the full retrieval -> generation ->
+ * draft pipeline run end to end offline under `LLM_PROVIDER=mock`; the shape
+ * matches the `quiz-generation-v1` prompt contract (4 options, exactly one
+ * correct, a subtopic tag, and a difficulty in [0, 1]).
+ */
+function mockQuizResponse(prompt: string): string {
+  const countMatch = prompt.match(/Number of questions to generate:\s*(\d+)/i)
+  const requested = countMatch ? Number(countMatch[1]) : 3
+  const count = Math.min(20, Math.max(1, Number.isFinite(requested) ? requested : 3))
+
+  const topicMatch = prompt.match(/^Topic:\s*(.+)$/im)
+  const topic = topicMatch?.[1]?.trim() || "the course topic"
+
+  const difficultyMatch = prompt.match(/^Difficulty target:\s*(\w+)/im)
+  const target = (difficultyMatch?.[1] ?? "mixed").toLowerCase()
+
+  const subtopics = prompt
+    .split(/Subtopic tags to use:\s*\n/i)[1]
+    ?.split("\n")
+    .map((line) => line.replace(/^-\s*/, "").trim())
+    .filter((line) => line.length > 0)
+    .slice(0, 20)
+  const subtopicTags = subtopics && subtopics.length > 0 ? subtopics : [`${topic} fundamentals`]
+
+  const difficultyFor = (index: number): number => {
+    if (target === "easy") return 0.3
+    if (target === "medium") return 0.55
+    if (target === "hard") return 0.8
+    return Math.round((0.2 + (index % 3) * 0.3) * 1000) / 1000
+  }
+
+  const questions = Array.from({ length: count }, (_, index) => {
+    const item = index + 1
+    return {
+      prompt: `${topic} — which statement is correct? (item ${item})`,
+      options: [
+        {
+          text: `A correct restatement of ${topic} (item ${item}).`,
+          isCorrect: true,
+          rationale: `Matches the retrieved material on ${topic}.`,
+        },
+        {
+          text: `A plausible misconception about ${topic} (item ${item}).`,
+          isCorrect: false,
+          rationale: "Confuses the cause with the effect.",
+        },
+        {
+          text: `A common but incomplete idea about ${topic} (item ${item}).`,
+          isCorrect: false,
+          rationale: "Stops at the surface feature instead of the mechanism.",
+        },
+        {
+          text: `An overgeneralization about ${topic} (item ${item}).`,
+          isCorrect: false,
+          rationale: "Ignores the exception stated in the material.",
+        },
+      ],
+      explanation: `The correct statement follows the retrieved material on ${topic}.`,
+      subtopic: subtopicTags[index % subtopicTags.length],
+      difficulty: difficultyFor(index),
+    }
+  })
+
+  return JSON.stringify({ questions })
+}
+
+/**
  * Offline provider for CI and tests. It performs no network I/O, needs no API
  * key, and returns byte-identical output for identical input. Tests can pin an
  * exact response with `providerOptions.mockResponse`.
@@ -94,6 +162,8 @@ export function createMockProvider(config: MockProviderConfig = {}): LlmProvider
       let text: string
       if (typeof override === "string") {
         text = override
+      } else if (task === "quiz-generation") {
+        text = mockQuizResponse(lastUserMessage || promptText)
       } else if (request.json) {
         text = JSON.stringify({
           mock: true,

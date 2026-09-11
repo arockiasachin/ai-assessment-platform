@@ -17,6 +17,8 @@ harness, auth hardening, the `zod` API contract, and the grade review state mach
 `dev`. The legacy quiz path is now also server-authoritative: answer keys no longer reach the
 client, and quiz results are graded by `POST /api/quiz/grade`. Nothing below is released.
 
+- **LLM quiz generation (Phase 2)** — a teacher describes a topic; the system retrieves their own course material, generates multiple-choice drafts with misconception-targeting distractors tagged by subtopic and difficulty, and keeps them unpublished until an explicit publish action (`lib/quiz-generation/**`, `app/api/teacher/quiz-generation/**`, `components/teacher-quiz-generator.tsx`). See [`docs/features/quiz-generation.md`](docs/features/quiz-generation.md).
+
 ### Security
 
 - **Signed, expiring sessions replace the unsigned plaintext cookie** (`lib/session.ts`,

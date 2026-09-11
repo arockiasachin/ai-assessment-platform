@@ -7,6 +7,7 @@ export * from "./auth"
 export * from "./gradebook"
 export * from "./grading"
 export * from "./quiz"
+export * from "./quiz-generation"
 
 /** `GET /api/auth/me` response. */
 export const meResponseSchema = z.union([
