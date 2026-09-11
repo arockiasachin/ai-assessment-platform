@@ -13,6 +13,7 @@ export * from "./groups"
 export * from "./analytics"
 export * from "./lms-export"
 export * from "./code-eval"
+export * from "./observability"
 
 /** `GET /api/auth/me` response. */
 export const meResponseSchema = z.union([

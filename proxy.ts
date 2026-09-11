@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server"
 import type { NextRequest } from "next/server"
 
+import { newRequestId } from "@/lib/observability/ids"
+import { getProcessLogger } from "@/lib/observability/logger"
 import { SESSION_COOKIE_NAME, verifySessionValue, type AuthRole } from "@/lib/session"
 
 function homeForRole(role: AuthRole) {
@@ -19,6 +21,35 @@ function clearSessionCookie(response: NextResponse) {
 }
 
 /**
+ * Emit one structured `http.request` line for every `/api/**` request and
+ * forward the correlation id to the route handler.
+ *
+ * This is the universal half of request logging: it covers every API route,
+ * including ones that have not adopted `withApiRoute`. The actor is read from
+ * the signature-verified session cookie, never from a request header. No body,
+ * query string, or header value is logged.
+ */
+function observeApiRequest(request: NextRequest): NextResponse {
+  const route = request.nextUrl.pathname
+  const requestId = request.headers.get("x-request-id")?.trim() || newRequestId()
+  const user = verifySessionValue(request.cookies.get(SESSION_COOKIE_NAME)?.value)
+
+  getProcessLogger().info("http.request", {
+    requestId,
+    route,
+    method: request.method,
+    userId: user?.id,
+    userRole: user?.role,
+  })
+
+  const requestHeaders = new Headers(request.headers)
+  requestHeaders.set("x-request-id", requestId)
+  const response = NextResponse.next({ request: { headers: requestHeaders } })
+  response.headers.set("x-request-id", requestId)
+  return response
+}
+
+/**
  * Optimistic, signature-verified routing gate.
  *
  * This is deliberately *not* the authorization boundary: it only redirects
@@ -29,6 +60,14 @@ function clearSessionCookie(response: NextResponse) {
  */
 export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl
+
+  // API routes are instrumented, not authorized, here: every handler still
+  // re-verifies the session with `requireRole`. This branch only logs the
+  // request and passes the correlation id downstream.
+  if (pathname.startsWith("/api/")) {
+    return observeApiRequest(request)
+  }
+
   const sessionCookie = request.cookies.get(SESSION_COOKIE_NAME)?.value
   const user = verifySessionValue(sessionCookie)
   const role = user?.role ?? null
@@ -82,5 +121,6 @@ export const config = {
     "/admin/:path*",
     "/teacher/:path*",
     "/student/:path*",
+    "/api/:path*",
   ],
 }
