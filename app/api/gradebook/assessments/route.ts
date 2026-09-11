@@ -16,8 +16,17 @@ export async function POST(request: Request) {
     const assessment = await createAssessmentForSessionUser(parsed.data, auth.user)
     return NextResponse.json({ success: true, assessment })
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Unable to create assessment."
-    const status = message === "Forbidden" ? 403 : message === "Unauthorized" ? 401 : 400
-    return jsonError(message, status)
+    const message = error instanceof Error ? error.message : ""
+    if (message === "Forbidden") return jsonError(message, 403)
+    if (message === "Unauthorized") return jsonError(message, 401)
+    if (
+      message === "No matching course offering" ||
+      message === "Staff profile missing" ||
+      message === "Assessment not found"
+    ) {
+      return jsonError(message, 400)
+    }
+    console.error("Create assessment error:", error)
+    return jsonError("Unable to create assessment.", 500)
   }
 }

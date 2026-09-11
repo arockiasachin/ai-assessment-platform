@@ -470,7 +470,12 @@ export async function upsertAssessmentGrade(
     return
   }
 
-  const normalized = Math.max(0, Math.min(assessment.maxMarks, input.score))
+  // Reject out-of-range marks instead of silently clamping: a client that sends
+  // 9999 used to receive `200 success` while a different value (maxMarks) was
+  // stored, so the response could not be trusted.
+  if (!Number.isFinite(input.score) || input.score < 0 || input.score > assessment.maxMarks) {
+    throw new Error(`Score must be between 0 and ${assessment.maxMarks}.`)
+  }
 
   await prisma.assessmentGrade.upsert({
     where: {
@@ -482,10 +487,10 @@ export async function upsertAssessmentGrade(
     create: {
       assessmentId: input.assessmentId,
       studentId: input.studentId,
-      marksObtained: normalized,
+      marksObtained: input.score,
     },
     update: {
-      marksObtained: normalized,
+      marksObtained: input.score,
       gradedAt: new Date(),
     },
   })

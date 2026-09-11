@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 
-import { jsonError, parseJsonBody } from "@/lib/api"
+import { isDatabaseError, jsonError, parseJsonBody } from "@/lib/api"
 import { requireRole } from "@/lib/authz"
 import { quizImportRequestSchema } from "@/lib/contracts"
 import { createQuizFromImportForSessionUser } from "@/lib/gradebook-db"
@@ -20,8 +20,13 @@ export async function POST(request: Request) {
       assessment,
     })
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Unable to create quiz."
-    const status = message === "Unauthorized" ? 401 : message === "Forbidden" ? 403 : 400
-    return jsonError(message, status)
+    const message = error instanceof Error ? error.message : ""
+    if (message === "Forbidden") return jsonError(message, 403)
+    if (message === "Unauthorized") return jsonError(message, 401)
+    // The importer throws descriptive validation errors; surface those, but
+    // never a raw database error (which can embed internal paths and schema).
+    if (message && !isDatabaseError(error)) return jsonError(message, 400)
+    console.error("Create quiz error:", error)
+    return jsonError("Unable to create quiz.", 500)
   }
 }

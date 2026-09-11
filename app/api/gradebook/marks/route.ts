@@ -27,8 +27,16 @@ export async function POST(request: Request) {
     await upsertAssessmentGrade({ studentId, assessmentId, score }, auth.user)
     return NextResponse.json({ success: true })
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Unable to save mark."
-    const status = message === "Forbidden" ? 403 : message === "Assessment not found" ? 404 : 400
-    return jsonError(message, status)
+    const message = error instanceof Error ? error.message : ""
+    if (message === "Forbidden") return jsonError(message, 403)
+    if (message === "Assessment not found") return jsonError(message, 404)
+    if (
+      message === "Student not enrolled in assessment offering" ||
+      message.startsWith("Score must be between")
+    ) {
+      return jsonError(message, 400)
+    }
+    console.error("Save mark error:", error)
+    return jsonError("Unable to save mark.", 500)
   }
 }

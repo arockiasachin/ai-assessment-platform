@@ -8,6 +8,20 @@ import { z } from "zod"
 
 export const nonEmptyString = z.string().trim().min(1)
 
+/**
+ * A string JavaScript can parse into a real `Date`. Rejecting invalid dates at
+ * the contract boundary keeps them from reaching Prisma, where an `Invalid Date`
+ * surfaces as a raw `PrismaClientValidationError` (with internal file paths) that
+ * routes used to echo back to the caller.
+ */
+export const parseableDateString = z
+  .string()
+  .trim()
+  .min(1, "A date is required.")
+  .refine((value) => !Number.isNaN(new Date(value).getTime()), {
+    message: "Invalid date.",
+  })
+
 /** Turn a failed `safeParse` into a single human-readable message. */
 export function firstIssueMessage(error: z.ZodError): string {
   const issue = error.issues[0]

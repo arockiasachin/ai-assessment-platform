@@ -1,6 +1,6 @@
 import { z } from "zod"
 
-import { nonEmptyString } from "./common"
+import { nonEmptyString, parseableDateString } from "./common"
 
 /** `POST /api/gradebook/marks` request body (teacher/admin only). */
 export const marksRequestSchema = z.object({
@@ -15,18 +15,20 @@ export const createAssessmentRequestSchema = z.object({
   title: nonEmptyString,
   courseId: nonEmptyString,
   type: z.enum(["Quiz", "Assignment"]),
-  date: nonEmptyString,
-  maxMarks: z.coerce.number().positive(),
+  date: parseableDateString,
+  // 32-bit Postgres `Int` column: an unbounded value is a Prisma validation
+  // error, not a clean client error.
+  maxMarks: z.coerce.number().int().positive().max(1_000_000, "Max marks is too large."),
 })
 export type CreateAssessmentRequest = z.infer<typeof createAssessmentRequestSchema>
 
 /** `PUT /api/teacher/offerings/[offeringId]` request body. */
 export const updateOfferingRequestSchema = z.object({
   studentLimit: z.coerce.number().int().min(1).max(500),
-  registrationOpenAt: z.string().nullable().optional(),
-  registrationCloseAt: z.string().nullable().optional(),
-  startsOn: z.string().nullable().optional(),
-  endsOn: z.string().nullable().optional(),
+  registrationOpenAt: parseableDateString.nullable().optional(),
+  registrationCloseAt: parseableDateString.nullable().optional(),
+  startsOn: parseableDateString.nullable().optional(),
+  endsOn: parseableDateString.nullable().optional(),
 })
 export type UpdateOfferingRequest = z.infer<typeof updateOfferingRequestSchema>
 

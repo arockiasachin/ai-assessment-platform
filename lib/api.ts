@@ -13,6 +13,20 @@ export function jsonSuccess(body: Record<string, unknown> = {}): NextResponse {
   return NextResponse.json({ success: true, ...body })
 }
 
+/**
+ * True when an error originated inside Prisma. Route handlers must never echo a
+ * database error's `message` to a client: Prisma validation errors embed the
+ * generated schema, internal file paths, and query fragments. Duck-typed rather
+ * than importing the generated client so this helper stays cheap.
+ */
+export function isDatabaseError(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false
+  const name = (error as { name?: unknown }).name
+  if (typeof name === "string" && name.startsWith("PrismaClient")) return true
+  const code = (error as { code?: unknown }).code
+  return typeof code === "string" && /^P\d{4}$/.test(code)
+}
+
 export type ParsedBody<T> = { ok: true; data: T } | { ok: false; response: NextResponse }
 
 /**
