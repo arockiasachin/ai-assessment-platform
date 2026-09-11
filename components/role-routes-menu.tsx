@@ -17,6 +17,7 @@ import {
   ListChecks,
   RefreshCw,
   Route,
+  Share2,
   Sparkles,
   Users,
 } from "lucide-react"
@@ -49,6 +50,7 @@ const teacherRoutes: RouteItem[] = [
   { label: "Reviews", href: "/teacher/reviews", icon: ClipboardCheck },
   { label: "Groups", href: "/teacher/groups", icon: Users },
   { label: "Analytics", href: "/teacher/analytics", icon: BarChart3 },
+  { label: "Export", href: "/teacher/export", icon: Share2 },
   { label: "Classes", href: "/teacher/classes", icon: Layers },
   { label: "Planner", href: "/teacher/planner", icon: CalendarDays },
   { label: "Reports", href: "/teacher/reports", icon: ClipboardList },

@@ -10,3 +10,5 @@ next-env.d.ts
 .docx-extract
 public
 package-lock.json
+# Nested git worktrees are separate checkouts; the parent gate must not format them.
+.worktrees
