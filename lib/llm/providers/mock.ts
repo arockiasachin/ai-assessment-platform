@@ -129,6 +129,56 @@ function mockQuizResponse(prompt: string): string {
 }
 
 /**
+ * Synthesize a deterministic, schema-valid set of code-evaluation test-case
+ * drafts for the `code-eval` task. This is what lets the full
+ * prompt -> generation -> draft pipeline run end to end offline under
+ * `LLM_PROVIDER=mock`; the shape matches the `code-eval-v1` prompt contract and
+ * the strict parser in `lib/code-eval/parsing.ts`.
+ */
+function mockCodeEvalResponse(prompt: string): string {
+  const countMatch = prompt.match(/Number of draft test cases to generate:\s*(\d+)/i)
+  const requested = countMatch ? Number(countMatch[1]) : 3
+  const count = Math.min(20, Math.max(1, Number.isFinite(requested) ? requested : 3))
+  const isPython = /Python 3\.12/i.test(prompt)
+  const definition = isPython ? "def " : "function"
+
+  const testCases = Array.from({ length: count }, (_, index) => {
+    const item = index + 1
+    if (index % 3 === 1) {
+      return {
+        name: `Function result check ${item}`,
+        description: "Calls the student's `solve` function with sample arguments.",
+        category: "unit",
+        input: JSON.stringify({ function: "solve", args: [item, item + 1] }),
+        expectedOutput: JSON.stringify(2 * item + 1),
+        points: 1,
+      }
+    }
+    if (index % 3 === 2) {
+      return {
+        name: `Source structure check ${item}`,
+        description:
+          "Checks that the submission defines a function and stays within a line budget.",
+        category: "structure",
+        input: JSON.stringify({ mustContain: [definition], maxLines: 200 }),
+        expectedOutput: null,
+        points: 1,
+      }
+    }
+    return {
+      name: `Program output check ${item}`,
+      description: "Runs the program with sample input and compares stdout.",
+      category: "input-output",
+      input: `${item}\n`,
+      expectedOutput: `${item}\n`,
+      points: 1,
+    }
+  })
+
+  return JSON.stringify({ testCases })
+}
+
+/**
  * Offline provider for CI and tests. It performs no network I/O, needs no API
  * key, and returns byte-identical output for identical input. Tests can pin an
  * exact response with `providerOptions.mockResponse`.
@@ -164,6 +214,8 @@ export function createMockProvider(config: MockProviderConfig = {}): LlmProvider
         text = override
       } else if (task === "quiz-generation") {
         text = mockQuizResponse(lastUserMessage || promptText)
+      } else if (task === "code-eval") {
+        text = mockCodeEvalResponse(promptText)
       } else if (request.json) {
         text = JSON.stringify({
           mock: true,

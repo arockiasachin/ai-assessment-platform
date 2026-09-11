@@ -31,7 +31,13 @@ export type LlmMessage = {
  * sent to a provider. They let callers and the mock provider branch on intent.
  */
 export type LlmTask =
-  "quiz-generation" | "quiz-grading" | "rubric-grading" | "code-grading" | "embedding" | "general"
+  | "quiz-generation"
+  | "quiz-grading"
+  | "rubric-grading"
+  | "code-grading"
+  | "code-eval"
+  | "embedding"
+  | "general"
 
 /**
  * Provider escape hatch. The mock provider reads `mockResponse` and
