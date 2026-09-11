@@ -39,6 +39,7 @@ const studentRoutes: RouteItem[] = [
 const teacherRoutes: RouteItem[] = [
   { label: "Dashboard", href: "/teacher", icon: Home },
   { label: "Assignments", href: "/teacher/assignments", icon: FilePlus2 },
+  { label: "Quiz Generator", href: "/teacher/quiz-generator", icon: Sparkles },
   { label: "Rubrics", href: "/teacher/rubrics", icon: ListChecks },
   { label: "Reviews", href: "/teacher/reviews", icon: ClipboardCheck },
   { label: "Classes", href: "/teacher/classes", icon: Layers },

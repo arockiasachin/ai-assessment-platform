@@ -54,6 +54,15 @@ client, and quiz results are graded by `POST /api/quiz/grade`. Nothing below is 
 
 ### Added
 
+- **Quiz generation (Phase 2, pod 1)** (`lib/quiz-generation/**`, `lib/contracts/quiz-generation.ts`,
+  `app/api/teacher/quiz/**`, `app/api/quiz/[assessmentId]/**`). A teacher supplies a topic; the
+  system retrieves their course material through `lib/vector` and drafts multiple-choice questions
+  (4-5 options, exactly one correct, a subtopic, a 1-5 difficulty, and misconception-targeting
+  distractors) via the versioned `quiz-generation-v1` prompt over `lib/llm`. Drafts persist to
+  `Question`/`QuestionOption` with a fail-closed `DRAFT` state in `Question.metadata` and stay
+  invisible to students until an explicit, audited publish; the owner view carries the key while the
+  learner delivery view omits it entirely, and grading reuses the server-side `scoreQuiz` kernel so
+  the key appears only in the post-submission result.
 - **`zod` API contract** (`lib/contracts/`). Request/response schemas for auth, gradebook, and the
   grading pipeline, plus `lib/api.ts` body parsing. Route handlers touched in this change validate
   input against these schemas instead of hand-rolling checks.
