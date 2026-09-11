@@ -19,6 +19,7 @@ import {
   Route,
   Share2,
   Sparkles,
+  Terminal,
   Users,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -38,6 +39,7 @@ const studentRoutes: RouteItem[] = [
   { label: "Courses", href: "/student/courses", icon: BookOpen },
   { label: "Events", href: "/student/events", icon: CalendarDays },
   { label: "Peer eval", href: "/student/peer-evaluation", icon: Users },
+  { label: "Code", href: "/student/code-submissions", icon: Terminal },
   { label: "Retake", href: "/student/retake", icon: RefreshCw },
   { label: "Resources", href: "/student/resources", icon: Sparkles },
 ]
@@ -48,6 +50,7 @@ const teacherRoutes: RouteItem[] = [
   { label: "Quiz AI", href: "/teacher/quiz-generation", icon: Sparkles },
   { label: "Rubrics", href: "/teacher/rubrics", icon: ListChecks },
   { label: "Reviews", href: "/teacher/reviews", icon: ClipboardCheck },
+  { label: "Code tasks", href: "/teacher/code-tasks", icon: Terminal },
   { label: "Groups", href: "/teacher/groups", icon: Users },
   { label: "Analytics", href: "/teacher/analytics", icon: BarChart3 },
   { label: "Export", href: "/teacher/export", icon: Share2 },
