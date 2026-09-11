@@ -14,11 +14,30 @@ jobs:
     name: Verify
     runs-on: ubuntu-latest
     env:
-      # Placeholder values so Prisma and the build can run without secrets.
-      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/ci
+      # Test database provided by the pgvector service below. The database
+      # name contains "test" so the harness accepts it as a test database.
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/assessment_test
+      TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/assessment_test
       SESSION_SECRET: ci-only-not-a-real-secret
       # Deterministic, offline provider so CI never needs an API key.
       LLM_PROVIDER: mock
+    services:
+      postgres:
+        # Official pgvector image. The test database is provisioned from
+        # prisma/schema.prisma and needs the `vector` extension + HNSW index,
+        # so plain Postgres is not enough.
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: assessment_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d assessment_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     steps:
       - uses: actions/checkout@v4
 
@@ -44,6 +63,12 @@ jobs:
 
       - name: Check formatting
         run: npm run format:check
+
+      # `npm test` provisions the test database from prisma/schema.prisma
+      # (pgvector extension + HNSW index included) in its global setup, then
+      # runs the Vitest suite against it.
+      - name: Provision test database and run tests
+        run: npm test
 
       - name: Build
         run: npm run build
