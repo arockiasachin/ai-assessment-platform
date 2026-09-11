@@ -8,10 +8,12 @@ import {
   CalendarDays,
   ChevronLeft,
   ChevronRight,
+  ClipboardCheck,
   ClipboardList,
   FilePlus2,
   Home,
   Layers,
+  ListChecks,
   Route,
   Sparkles,
 } from "lucide-react"
@@ -37,6 +39,8 @@ const studentRoutes: RouteItem[] = [
 const teacherRoutes: RouteItem[] = [
   { label: "Dashboard", href: "/teacher", icon: Home },
   { label: "Assignments", href: "/teacher/assignments", icon: FilePlus2 },
+  { label: "Rubrics", href: "/teacher/rubrics", icon: ListChecks },
+  { label: "Reviews", href: "/teacher/reviews", icon: ClipboardCheck },
   { label: "Classes", href: "/teacher/classes", icon: Layers },
   { label: "Planner", href: "/teacher/planner", icon: CalendarDays },
   { label: "Reports", href: "/teacher/reports", icon: ClipboardList },
