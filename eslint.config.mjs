@@ -26,5 +26,9 @@ export default defineConfig([
     "lib/generated/**",
     ".pdf-extract/**",
     ".docx-extract/**",
+    // Nested git worktrees are separate checkouts owned by other pods (and may
+    // contain their own `.next` build output); the parent gate must not lint
+    // them, mirroring `.prettierignore`.
+    ".worktrees/**",
   ]),
 ])

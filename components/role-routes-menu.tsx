@@ -36,6 +36,7 @@ type RouteItem = {
 const studentRoutes: RouteItem[] = [
   { label: "Dashboard", href: "/student", icon: Home },
   { label: "Assessments", href: "/student/assessments", icon: ClipboardList },
+  { label: "Quizzes", href: "/student/quizzes", icon: ClipboardCheck },
   { label: "Courses", href: "/student/courses", icon: BookOpen },
   { label: "Events", href: "/student/events", icon: CalendarDays },
   { label: "Peer eval", href: "/student/peer-evaluation", icon: Users },
