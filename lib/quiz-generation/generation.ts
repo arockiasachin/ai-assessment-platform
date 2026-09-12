@@ -6,8 +6,8 @@ import {
   type QuizGenerationRetrievalSummary,
 } from "@/lib/contracts/quiz-generation"
 import { writeAuditLog } from "@/lib/grading/audit"
-import type { LlmGenerateResult, LlmProvider } from "@/lib/llm"
-import { getLlmProvider } from "@/lib/llm"
+import type { LlmEmbeddingProvider, LlmGenerateResult, LlmProvider } from "@/lib/llm"
+import { getEmbeddingsProvider, getLlmProvider } from "@/lib/llm"
 import { prisma } from "@/lib/prisma"
 import type { AuthUser } from "@/lib/session"
 
@@ -33,8 +33,18 @@ import { serializeQuestionForTeacher } from "./serialize"
  */
 
 export type GenerationDeps = {
-  /** Injected for tests; defaults to the process-wide provider from env. */
+  /**
+   * Injected generation/grading provider (tests). Defaults to the
+   * process-wide `LLM_PROVIDER` singleton.
+   */
   provider?: LlmProvider
+  /**
+   * Injected embeddings provider (tests). Defaults to the process-wide
+   * `EMBEDDINGS_PROVIDER` singleton, so retrieval no longer depends on the chat
+   * provider. A full injected `provider` is reused for retrieval only when it
+   * supports embeddings, preserving existing single-provider test setups.
+   */
+  embeddingProvider?: LlmEmbeddingProvider
 }
 
 export type GenerationOutcome = {
@@ -135,11 +145,15 @@ export async function generateQuizDraftsForTeacher(
   const request = quizGenerationRequestSchema.parse(input)
   const owned = await loadOwnedAssessment(user, request.assessmentId)
   const provider = deps.provider ?? getLlmProvider()
+  const embeddingProvider =
+    deps.embeddingProvider ??
+    (deps.provider?.supportsEmbeddings ? deps.provider : undefined) ??
+    getEmbeddingsProvider()
 
   const retrieval = await retrieveTopicMaterial(
     { courseId: owned.courseId, offeringId: owned.offeringId },
     request.topic,
-    { provider, limit: request.retrievalLimit },
+    { provider: embeddingProvider, limit: request.retrievalLimit },
   )
 
   const messages = buildQuizGenerationPrompt({

@@ -8,9 +8,12 @@ import { prisma } from "@/lib/prisma"
 /**
  * `GET /api/health` — a dependency-free service probe. No auth.
  *
- * Reports app liveness, database reachability, and the configured LLM provider
- * mode. It deliberately never returns the connection string, the raw provider
- * value, a database error message, or any filesystem path. The database check
+ * Reports app liveness, database reachability, and the configured LLM modes.
+ * Generation/grading (`LLM_PROVIDER`) and embeddings (`EMBEDDINGS_PROVIDER`,
+ * defaulting to `LLM_PROVIDER`) are reported separately because they can now
+ * differ — e.g. DeepSeek for chat plus OpenAI for retrieval. It deliberately
+ * never returns the connection string, the raw provider value, a database
+ * error message, or any filesystem path. The database check
  * is bounded by `HEALTH_DB_TIMEOUT_MS` (default 1s, clamped 50ms–10s) and is
  * skipped when no `DATABASE_URL` is configured, so a slow or absent database
  * degrades the response instead of hanging the endpoint.
@@ -33,6 +36,12 @@ type DatabaseCheck = {
 type LlmCheck = {
   provider: string
   mode: "offline" | "live" | "unknown"
+}
+
+/** Generation and embeddings are resolved independently and may differ. */
+type LlmChecks = {
+  generation: LlmCheck
+  embeddings: LlmCheck
 }
 
 class DatabaseTimeoutError extends Error {}
@@ -73,15 +82,29 @@ async function checkDatabase(timeoutMs: number): Promise<DatabaseCheck> {
   }
 }
 
-function resolveLlmCheck(env: NodeJS.ProcessEnv = process.env): LlmCheck {
-  const raw = (env.LLM_PROVIDER ?? "").trim().toLowerCase()
-  if (!raw) return { provider: "mock", mode: "offline" }
+function normalizeProviderName(raw: string): LlmProviderName | "unknown" {
+  if (!raw) return "mock"
   const normalized = raw === "openai-compatible" || raw === "openai_compatible" ? "openai" : raw
-  if (!(LLM_PROVIDER_NAMES as readonly string[]).includes(normalized)) {
-    return { provider: "unknown", mode: "unknown" }
-  }
-  const provider = normalized as LlmProviderName
-  return { provider, mode: isLiveProvider(provider) ? "live" : "offline" }
+  return (LLM_PROVIDER_NAMES as readonly string[]).includes(normalized)
+    ? (normalized as LlmProviderName)
+    : "unknown"
+}
+
+function toLlmCheck(name: LlmProviderName | "unknown"): LlmCheck {
+  if (name === "unknown") return { provider: "unknown", mode: "unknown" }
+  return { provider: name, mode: isLiveProvider(name) ? "live" : "offline" }
+}
+
+/**
+ * Never throws: an unrecognized value degrades to `unknown` rather than turning
+ * the health probe into a 500. `EMBEDDINGS_PROVIDER` inherits `LLM_PROVIDER`
+ * when unset/blank, matching runtime resolution.
+ */
+function resolveLlmChecks(env: NodeJS.ProcessEnv = process.env): LlmChecks {
+  const generation = normalizeProviderName((env.LLM_PROVIDER ?? "").trim().toLowerCase())
+  const embeddingsRaw = (env.EMBEDDINGS_PROVIDER ?? "").trim().toLowerCase()
+  const embeddings = embeddingsRaw ? normalizeProviderName(embeddingsRaw) : generation
+  return { generation: toLlmCheck(generation), embeddings: toLlmCheck(embeddings) }
 }
 
 function firstNonEmpty(...values: (string | undefined)[]): string | null {
@@ -104,7 +127,7 @@ function resolveBuildInfo(env: NodeJS.ProcessEnv = process.env): {
 
 async function health(): Promise<NextResponse> {
   const database = await checkDatabase(resolveDbTimeoutMs())
-  const llm = resolveLlmCheck()
+  const llm = resolveLlmChecks()
   const build = resolveBuildInfo()
   const degraded = database.status === "error" || database.status === "timeout"
 

@@ -7,6 +7,13 @@ import { DEFAULT_TIMEOUT_MS, LLM_PROVIDER_NAMES, type LlmProviderName } from "./
  */
 export type LlmEnv = {
   LLM_PROVIDER?: string
+  /**
+   * Provider used for embeddings (material indexing + retrieval). Defaults to
+   * `LLM_PROVIDER` when unset/blank, so existing single-provider deployments
+   * behave exactly as before. Set it when the chat provider cannot embed —
+   * e.g. `LLM_PROVIDER=deepseek` + `EMBEDDINGS_PROVIDER=openai`.
+   */
+  EMBEDDINGS_PROVIDER?: string
   LLM_TIMEOUT_MS?: string
   OPENAI_API_KEY?: string
   OPENAI_BASE_URL?: string
@@ -57,8 +64,7 @@ export const DEFAULT_OLLAMA_EMBEDDING_MODEL = "nomic-embed-text"
 
 export const DEFAULT_MOCK_MODEL = "mock-llm"
 
-export function resolveProviderName(env: LlmEnv = process.env): LlmProviderName {
-  const raw = (env.LLM_PROVIDER ?? "").trim().toLowerCase()
+function parseProviderName(raw: string, envVarName: string): LlmProviderName {
   if (!raw) return DEFAULT_PROVIDER
 
   // Accept the common spelling variants for OpenAI-compatible endpoints.
@@ -69,8 +75,23 @@ export function resolveProviderName(env: LlmEnv = process.env): LlmProviderName 
   }
 
   throw new LlmConfigError(
-    `Unknown LLM_PROVIDER "${raw}". Expected one of: ${LLM_PROVIDER_NAMES.join(", ")}.`,
+    `Unknown ${envVarName} "${raw}". Expected one of: ${LLM_PROVIDER_NAMES.join(", ")}.`,
   )
+}
+
+export function resolveProviderName(env: LlmEnv = process.env): LlmProviderName {
+  return parseProviderName((env.LLM_PROVIDER ?? "").trim().toLowerCase(), "LLM_PROVIDER")
+}
+
+/**
+ * The provider that serves embeddings. Unset/blank `EMBEDDINGS_PROVIDER`
+ * inherits `LLM_PROVIDER` (and therefore `mock` when that is unset too), so the
+ * decoupling is purely opt-in and no existing configuration changes behaviour.
+ */
+export function resolveEmbeddingsProviderName(env: LlmEnv = process.env): LlmProviderName {
+  const raw = (env.EMBEDDINGS_PROVIDER ?? "").trim().toLowerCase()
+  if (!raw) return resolveProviderName(env)
+  return parseProviderName(raw, "EMBEDDINGS_PROVIDER")
 }
 
 export function resolveTimeoutMs(

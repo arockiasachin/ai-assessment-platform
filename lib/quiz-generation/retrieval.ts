@@ -1,4 +1,4 @@
-import type { LlmProvider } from "@/lib/llm"
+import type { LlmEmbeddingProvider } from "@/lib/llm"
 import { searchMaterialChunks, type ChunkSearchHit } from "@/lib/vector"
 
 /**
@@ -21,7 +21,8 @@ export type TopicRetrieval = {
 }
 
 export type RetrieveTopicOptions = {
-  provider?: LlmProvider
+  /** Embeddings provider for the query vector; defaults to `EMBEDDINGS_PROVIDER`. */
+  provider?: LlmEmbeddingProvider
   /** Maximum merged hits (default 8, capped at 20). */
   limit?: number
 }

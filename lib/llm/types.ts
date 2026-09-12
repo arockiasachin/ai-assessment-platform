@@ -20,6 +20,20 @@ export const LLM_PROVIDER_NAMES: readonly LlmProviderName[] = [
   "ollama",
 ] as const
 
+/**
+ * Providers that expose an embeddings endpoint. Kept in sync with each
+ * provider factory's `supportsEmbeddings`; used only to build an actionable
+ * misconfiguration error, never to gate provider construction.
+ *
+ * `mock` is intentionally omitted: it embeds, but it is not a real
+ * recommendation for production retrieval. `deepseek` and `anthropic` have no
+ * embeddings route.
+ */
+export const SUGGESTED_EMBEDDING_PROVIDERS: readonly LlmProviderName[] = [
+  "openai",
+  "ollama",
+] as const
+
 export type LlmRole = "system" | "user" | "assistant"
 
 export type LlmMessage = {
@@ -111,6 +125,26 @@ export interface LlmProvider {
   generate(request: LlmGenerateRequest): Promise<LlmGenerateResult>
   embed(request: LlmEmbedRequest): Promise<LlmEmbedResult>
 }
+
+/**
+ * Capability views of `LlmProvider`.
+ *
+ * Generation/grading and embeddings can be served by *different* providers
+ * (`LLM_PROVIDER` vs `EMBEDDINGS_PROVIDER`), so the process-wide getters return
+ * the narrow half a caller actually needs:
+ *
+ * - `getLlmProvider()` -> `LlmGenerationProvider` — no `embed()` at all, so a
+ *   generation caller cannot accidentally ask the chat provider for embeddings
+ *   and hit a confusing `LlmUnsupportedError` deep in retrieval.
+ * - `getEmbeddingsProvider()` -> `LlmEmbeddingProvider` — no `generate()`.
+ *
+ * A full `LlmProvider` satisfies both, so injected test doubles keep working.
+ */
+export type LlmGenerationProvider = Pick<LlmProvider, "name" | "defaultModel" | "generate">
+export type LlmEmbeddingProvider = Pick<
+  LlmProvider,
+  "name" | "defaultEmbeddingModel" | "supportsEmbeddings" | "embed"
+>
 
 export function emptyUsage(): LlmUsage {
   return { promptTokens: 0, completionTokens: 0, totalTokens: 0 }

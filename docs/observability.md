@@ -86,7 +86,10 @@ Example:
 4. **`instrumentation.ts` `onRequestError` — `http.unhandled_error`** for errors
    that escape a route handler entirely (routes without their own try/catch).
 5. **`lib/llm/observability.ts` — `llm.generate` / `llm.embed`** for every call
-   through `createLlmProvider`/`getLlmProvider`, including failures.
+   through `createLlmProvider`/`getLlmProvider` (generation) and
+   `createEmbeddingsProvider`/`getEmbeddingsProvider` (embeddings), including
+   failures. Each line carries `capability: "generation" | "embeddings"` beside
+   `provider`, so a split chat/embeddings configuration is visible per call.
 
 ### Honest coverage note
 
@@ -135,7 +138,10 @@ them appear in the serialized line.
 - The database probe is a `SELECT 1` bounded by `HEALTH_DB_TIMEOUT_MS`
   (default `1000`, clamped to `50`–`10000`). It is skipped when `DATABASE_URL`
   is unset, so the endpoint never hangs on a slow or absent database.
-- The LLM mode is reported from config without constructing a provider:
+- The LLM modes are reported from config without constructing a provider. The
+  generation/grading provider comes from `LLM_PROVIDER`; the embeddings provider
+  from `EMBEDDINGS_PROVIDER` (inheriting `LLM_PROVIDER` when unset), so the two
+  can differ. Each is
   `{ provider: "mock" | "openai" | "deepseek" | "anthropic" | "ollama" | "unknown",
 mode: "offline" | "live" | "unknown" }`.
 - Response shape (`HealthResponse` in `lib/contracts/observability.ts`):
@@ -152,7 +158,10 @@ mode: "offline" | "live" | "unknown" }`.
   "checks": {
     "app": "ok",
     "database": { "status": "ok", "latencyMs": 3 },
-    "llm": { "provider": "mock", "mode": "offline" }
+    "llm": {
+      "generation": { "provider": "deepseek", "mode": "live" },
+      "embeddings": { "provider": "openai", "mode": "live" }
+    }
   }
 }
 ```

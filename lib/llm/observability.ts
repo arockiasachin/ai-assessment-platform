@@ -58,6 +58,7 @@ export function observeLlmProvider(
         const result = await provider.generate(request)
         logger.info("llm.generate", {
           provider: result.provider,
+          capability: "generation",
           model: result.model,
           task,
           promptVersion: request.promptVersion ?? null,
@@ -76,6 +77,7 @@ export function observeLlmProvider(
       } catch (error) {
         logger.error("llm.generate", {
           provider: provider.name,
+          capability: "generation",
           model: request.model ?? provider.defaultModel,
           task,
           promptVersion: request.promptVersion ?? null,
@@ -94,6 +96,7 @@ export function observeLlmProvider(
         const result = await provider.embed(request)
         logger.info("llm.embed", {
           provider: result.provider,
+          capability: "embeddings",
           model: result.model,
           textCount: request.texts.length,
           dimensions: request.dimensions ?? null,
@@ -106,6 +109,7 @@ export function observeLlmProvider(
       } catch (error) {
         logger.error("llm.embed", {
           provider: provider.name,
+          capability: "embeddings",
           model,
           textCount: request.texts.length,
           durationMs: Date.now() - startedAt,
