@@ -29,9 +29,12 @@ export async function POST(
   const { attemptId } = await params
   try {
     const attempt = await submitQuizAttempt(auth.user, attemptId, parsed.data)
+    const needsManualScoring = (attempt.results ?? []).some((result) => result.needsManualReview)
     return NextResponse.json({
       success: true,
-      message: "Quiz submitted. Your score is a suggestion pending teacher approval.",
+      message: needsManualScoring
+        ? "Quiz submitted. Some written answers need a teacher to score them manually; nothing is final until your teacher approves the grade."
+        : "Quiz submitted. Your score is a suggestion pending teacher approval.",
       attempt,
     })
   } catch (error) {

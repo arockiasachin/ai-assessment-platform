@@ -1,3 +1,5 @@
+import { isTextQuestionType } from "@/lib/quiz-scoring"
+
 import { resolveGenerationStatus } from "@/lib/quiz-generation/metadata"
 
 /**
@@ -15,15 +17,17 @@ import { resolveGenerationStatus } from "@/lib/quiz-generation/metadata"
  * - A question without that envelope is a hand-authored question and is treated
  *   as published (the generation pod's own rule: "a question without this
  *   metadata marker is never treated as a generated draft").
- * - Every question must have at least two options and exactly one correct
+ * - A choice question must have at least two options and exactly one correct
  *   option, because server-side scoring (`lib/quiz-scoring.ts`) needs a single
- *   unambiguous `correctIndex`.
+ *   unambiguous `correctIndex`. A free-text (`SHORT_ANSWER`/`ESSAY`) question
+ *   has no options by design and is exempt from the option checks.
  *
  * The result is computed from server rows only. It never depends on a client
  * payload, and it never exposes which option is correct.
  */
 
 export type QuizQuestionAvailability = {
+  type?: string | null
   status: string | null
   metadata: unknown
   options: readonly { isCorrect: boolean }[]
@@ -53,6 +57,7 @@ export function quizDeliveryStatus(
   }
 
   for (const question of questions) {
+    if (isTextQuestionType(question.type)) continue
     if (question.options.length < 2) {
       return { deliverable: false, reason: "This quiz has a question with too few options." }
     }

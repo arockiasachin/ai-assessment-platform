@@ -45,6 +45,7 @@ export function serializeStudentQuestion(question: QuestionWithOptions): Student
   return {
     id: question.id,
     order: question.order,
+    type: question.type,
     prompt: question.prompt,
     points: Number(question.points),
     options: [...question.options]
@@ -82,8 +83,10 @@ export function serializeAttemptSummary(input: {
 export function serializeTeacherResponse(input: {
   question: QuestionWithOptions
   selectedOptionId: string | null
+  answerText: string | null
   isCorrect: boolean | null
   pointsAwarded: number | null
+  rationale: string | null
 }): TeacherQuizResponse {
   const options = [...input.question.options].sort((a, b) => a.order - b.order)
   const correct = options.find((option) => option.isCorrect) ?? null
@@ -93,11 +96,17 @@ export function serializeTeacherResponse(input: {
     prompt: input.question.prompt,
     selectedOptionId: selected?.id ?? null,
     selectedText: selected?.text ?? null,
+    answerText: input.answerText,
     isCorrect: input.isCorrect,
     pointsAwarded: input.pointsAwarded,
     // The same weight the scorer used, so the teacher view cannot disagree with
     // the persisted `QuizResponse.pointsAwarded` about the question's ceiling.
     maxPoints: normalizeQuestionPoints(toNumberOrNull(input.question.points)),
+    rationale: input.rationale,
+    needsManualReview:
+      input.answerText !== null &&
+      input.answerText.trim().length > 0 &&
+      input.pointsAwarded === null,
     correctOptionId: correct?.id ?? "",
     correctText: correct?.text ?? "",
     explanation: input.question.explanation ?? null,

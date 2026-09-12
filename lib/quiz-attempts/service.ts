@@ -20,6 +20,13 @@ import { recordAiSuggestion, writeAuditLog } from "@/lib/grading"
 import { QuizGenerationError } from "@/lib/quiz-generation/errors"
 import { gradeGeneratedQuiz, type GeneratedQuestionForScoring } from "@/lib/quiz-generation/grading"
 import { prisma } from "@/lib/prisma"
+import {
+  isTextQuestionType,
+  normalizeQuestionPoints,
+  scoreQuiz,
+  type ScorableQuizQuestion,
+} from "@/lib/quiz-scoring"
+import { resolveTextSimilarityThreshold } from "@/lib/quiz-scoring-text"
 import type { AuthUser } from "@/lib/session"
 
 import { loadOwnedAssessment, resolveStudentProfileId } from "./authz"
@@ -34,6 +41,8 @@ import {
   toNumberOrNull,
   type QuestionWithOptions,
 } from "./serialize"
+import { gradeTextAnswer, type TextGradeResult } from "./text-grader"
+import { recordTextQuizSuggestions } from "./text-suggestions"
 
 /**
  * Quiz-attempt persistence and grade-pipeline wiring.
@@ -53,16 +62,50 @@ import {
 const FINALIZED_STATUSES = ["SUBMITTED", "GRADED"] as const
 const COUNTED_STATUSES = ["IN_PROGRESS", "SUBMITTED", "GRADED", "EXPIRED"] as const
 
-function toScorable(questions: readonly QuestionWithOptions[]): GeneratedQuestionForScoring[] {
-  return questions.map((question) => ({
-    id: question.id,
-    prompt: question.prompt,
-    explanation: question.explanation ?? null,
-    options: [...question.options]
-      .sort((a, b) => a.order - b.order)
-      .map((option) => ({ text: option.text, isCorrect: option.isCorrect })),
-    points: Number(question.points),
-  }))
+type TextGradingContext = {
+  answerByQuestion: Map<string, QuizAnswer>
+  grades: Map<string, TextGradeResult>
+  manualQuestionIds: Set<string>
+}
+
+function toScorable(
+  questions: readonly QuestionWithOptions[],
+  context: TextGradingContext,
+): GeneratedQuestionForScoring[] {
+  return questions.map((question) => {
+    if (isTextQuestionType(question.type)) {
+      const answer = context.answerByQuestion.get(question.id)
+      const answerText = answer?.answerText?.trim() ?? ""
+      const grade = context.grades.get(question.id)
+      const manual = context.manualQuestionIds.has(question.id)
+      return {
+        id: question.id,
+        prompt: question.prompt,
+        explanation: question.explanation ?? null,
+        options: [],
+        points: Number(question.points),
+        type: question.type,
+        textSimilarity: grade?.similarity ?? null,
+        textEligible: grade?.eligible,
+        answerText: answerText.length > 0 ? answerText : null,
+        rationale:
+          grade?.rationale ??
+          (manual ? "No reference answer is configured; a teacher must score this answer." : null),
+        confidence: grade?.confidence ?? (manual ? 0 : null),
+        needsManualReview: manual,
+      }
+    }
+    return {
+      id: question.id,
+      prompt: question.prompt,
+      explanation: question.explanation ?? null,
+      options: [...question.options]
+        .sort((a, b) => a.order - b.order)
+        .map((option) => ({ text: option.text, isCorrect: option.isCorrect })),
+      points: Number(question.points),
+      type: question.type,
+    }
+  })
 }
 
 function assertDeliverable(questions: readonly QuestionWithOptions[]): void {
@@ -124,17 +167,40 @@ function toReviewResponse(review: GradeReview): GradeReviewResponse {
 
 /**
  * Rebuild the post-submission per-question results from the persisted
- * `QuizResponse` rows and the server's answer key. The student's selected option
- * is mapped back to its index so the existing kernel produces the same
- * disclosure shape as the legacy quiz path.
+ * `QuizResponse` rows and the server's answer key. Choice questions are
+ * re-derived through the kernel (the same disclosure shape as the legacy quiz
+ * path); free-text questions are read back from their persisted score, rationale
+ * and prose, because their partial credit was computed asynchronously and is
+ * already stored.
  */
 function buildResults(
   questions: readonly QuestionWithOptions[],
-  responses: readonly { questionId: string; selectedOptionIds: unknown }[],
+  responses: readonly {
+    questionId: string
+    selectedOptionIds: unknown
+    answerText: string | null
+    isCorrect: boolean | null
+    pointsAwarded: unknown
+    rationale: string | null
+  }[],
   maxScore: number,
 ) {
   const responseByQuestion = new Map(responses.map((response) => [response.questionId, response]))
-  const answers: QuizAnswer[] = questions.map((question) => {
+
+  const choiceQuestions = questions.filter((question) => !isTextQuestionType(question.type))
+  const scorable: ScorableQuizQuestion[] = choiceQuestions.map((question) => {
+    const sortedOptions = [...question.options].sort((a, b) => a.order - b.order)
+    return {
+      id: question.id,
+      prompt: question.prompt,
+      options: sortedOptions.map((option) => option.text),
+      correctIndex: sortedOptions.findIndex((option) => option.isCorrect),
+      explanation: question.explanation ?? null,
+      points: Number(question.points),
+      type: question.type,
+    }
+  })
+  const choiceAnswers: QuizAnswer[] = choiceQuestions.map((question) => {
     const response = responseByQuestion.get(question.id)
     const selectedOptionId = response
       ? (readOptionIds(response.selectedOptionIds)[0] ?? null)
@@ -147,7 +213,39 @@ function buildResults(
       selectedIndex: selectedIndex !== null && selectedIndex >= 0 ? selectedIndex : null,
     }
   })
-  return gradeGeneratedQuiz(toScorable(questions), answers, maxScore).results
+  const choiceById = new Map(
+    scoreQuiz(scorable, choiceAnswers, maxScore).results.map((result) => [
+      result.questionId,
+      result,
+    ]),
+  )
+
+  return questions.map((question) => {
+    if (!isTextQuestionType(question.type)) {
+      return choiceById.get(question.id)!
+    }
+    const response = responseByQuestion.get(question.id)
+    const answerText = response?.answerText ?? null
+    const pointsAwarded = toNumberOrNull(response?.pointsAwarded ?? null)
+    const hasAnswer = answerText !== null && answerText.trim().length > 0
+    return {
+      questionId: question.id,
+      prompt: question.prompt,
+      selectedIndex: null,
+      selectedText: null,
+      correctIndex: -1,
+      correctText: "",
+      explanation: question.explanation ?? null,
+      isCorrect: response?.isCorrect ?? null,
+      points: pointsAwarded ?? 0,
+      maxPoints: normalizeQuestionPoints(toNumberOrNull(question.points)),
+      answerText,
+      rationale: response?.rationale ?? null,
+      confidence: null,
+      similarity: null,
+      needsManualReview: hasAnswer && pointsAwarded === null,
+    }
+  })
 }
 
 // ---------------------------------------------------------------------------
@@ -175,6 +273,7 @@ export async function listStudentQuizzes(user: AuthUser): Promise<StudentQuizSum
         orderBy: { order: "asc" },
         select: {
           id: true,
+          type: true,
           status: true,
           metadata: true,
           options: { select: { isCorrect: true } },
@@ -282,7 +381,14 @@ export async function getStudentAttempt(
     }),
     prisma.quizResponse.findMany({
       where: { attemptId },
-      select: { questionId: true, selectedOptionIds: true },
+      select: {
+        questionId: true,
+        selectedOptionIds: true,
+        answerText: true,
+        isCorrect: true,
+        pointsAwarded: true,
+        rationale: true,
+      },
     }),
     attemptSettings(studentId, attempt.assessmentId, attempt.assessment.maxAttempts),
   ])
@@ -531,20 +637,88 @@ export async function submitQuizAttempt(
     if (!question) {
       throw new QuizAttemptError(400, `Answer references unknown question ${answer.questionId}.`)
     }
-    if (
-      answer.selectedIndex !== null &&
-      (answer.selectedIndex < 0 || answer.selectedIndex >= question.options.length)
-    ) {
+    const isText = isTextQuestionType(question.type)
+    const hasText = answer.answerText !== undefined
+    const hasChoice = answer.selectedIndex !== null
+    if (hasText && hasChoice) {
       throw new QuizAttemptError(
         400,
-        `Selected option is out of range for question ${question.id}.`,
+        `Question ${question.id} accepts either a selected option or a text answer, not both.`,
       )
     }
+    if (isText) {
+      if (hasChoice) {
+        throw new QuizAttemptError(
+          400,
+          `Question ${question.id} is a free-text question and does not accept a selected option.`,
+        )
+      }
+      if (hasText && answer.answerText!.length === 0) {
+        throw new QuizAttemptError(
+          400,
+          `The text answer for question ${question.id} cannot be empty.`,
+        )
+      }
+    } else {
+      if (hasText) {
+        throw new QuizAttemptError(
+          400,
+          `Question ${question.id} is multiple choice and does not accept a text answer.`,
+        )
+      }
+      if (
+        hasChoice &&
+        (answer.selectedIndex! < 0 || answer.selectedIndex! >= question.options.length)
+      ) {
+        throw new QuizAttemptError(
+          400,
+          `Selected option is out of range for question ${question.id}.`,
+        )
+      }
+    }
+  }
+
+  const answerByQuestion = new Map(request.answers.map((answer) => [answer.questionId, answer]))
+  const threshold = resolveTextSimilarityThreshold()
+  const textGrades = new Map<string, TextGradeResult>()
+  const manualQuestionIds = new Set<string>()
+
+  for (const question of questions) {
+    if (!isTextQuestionType(question.type)) continue
+    const answerText = answerByQuestion.get(question.id)?.answerText?.trim() ?? ""
+    if (answerText.length === 0) continue
+    const referenceAnswer = question.explanation?.trim() ?? ""
+    if (referenceAnswer.length === 0) {
+      // There is no reference answer to compare against. Never invent one: the
+      // answer is routed to a teacher for manual scoring instead.
+      manualQuestionIds.add(question.id)
+      continue
+    }
+    textGrades.set(
+      question.id,
+      await gradeTextAnswer({
+        questionPrompt: question.prompt,
+        referenceAnswer,
+        answerText,
+        maxPoints: normalizeQuestionPoints(Number(question.points)),
+        threshold,
+      }),
+    )
+  }
+
+  const gradingContext: TextGradingContext = {
+    answerByQuestion,
+    grades: textGrades,
+    manualQuestionIds,
   }
 
   let scored
   try {
-    scored = gradeGeneratedQuiz(toScorable(questions), request.answers, rows.assessment.maxMarks)
+    scored = gradeGeneratedQuiz(
+      toScorable(questions, gradingContext),
+      request.answers,
+      rows.assessment.maxMarks,
+    )
   } catch (error) {
     if (error instanceof QuizGenerationError) {
       throw new QuizAttemptError(error.status === 409 ? 409 : 400, error.message)
@@ -556,23 +730,42 @@ export async function submitQuizAttempt(
   const late = isLateSubmission(now, rows.assessment.dueDate)
   const responseRows = questions.map((question, index) => {
     const result = scored.results[index]
+    const isText = isTextQuestionType(question.type)
+    const answer = answerByQuestion.get(question.id)
+    const submittedText = isText ? (answer?.answerText?.trim() ?? "") : ""
+    const answerText = submittedText.length > 0 ? submittedText : null
     const selectedOptionId =
       result.selectedIndex === null ? null : (question.options[result.selectedIndex]?.id ?? null)
+    const manual = manualQuestionIds.has(question.id)
     return {
       attemptId,
       questionId: question.id,
       selectedOptionIds: selectedOptionId ? [selectedOptionId] : [],
+      answerText,
       // An unanswered question is persisted with `isCorrect: null`, not `false`.
       // The analytics item-analysis and adaptive-retake paths distinguish "wrong"
       // (`false`) from "unanswered" (`null`); collapsing them would report every
-      // skipped question as failed.
-      isCorrect: result.selectedIndex === null ? null : result.isCorrect,
-      pointsAwarded: result.points,
-      rationale: result.explanation ?? null,
+      // skipped question as failed. A partially correct free-text answer is also
+      // `null` — the schema's representation of "partially correct".
+      isCorrect: isText
+        ? answerText === null
+          ? null
+          : result.isCorrect
+        : result.selectedIndex === null
+          ? null
+          : result.isCorrect,
+      // A manual-review answer is deliberately left unscored (`null`) rather
+      // than recorded as a guessed zero.
+      pointsAwarded: manual ? null : result.points,
+      // For a text answer `rationale` is the grader's justification; for a
+      // choice answer it keeps the legacy explanation echo.
+      rationale: isText ? (result.rationale ?? null) : (result.explanation ?? null),
     }
   })
 
-  await prisma.$transaction(async (tx) => {
+  const hasTextQuestions = questions.some((question) => isTextQuestionType(question.type))
+
+  const createdResponses = await prisma.$transaction(async (tx) => {
     // Guard on the status so two concurrent submits cannot both persist answers.
     const updated = await tx.quizAttempt.updateMany({
       where: { id: attemptId, status: "IN_PROGRESS" },
@@ -586,7 +779,10 @@ export async function submitQuizAttempt(
     if (updated.count === 0) {
       throw new QuizAttemptError(409, "This attempt has already been submitted.")
     }
-    await tx.quizResponse.createMany({ data: responseRows })
+    const created = await tx.quizResponse.createManyAndReturn({
+      data: responseRows,
+      select: { id: true, questionId: true },
+    })
     await writeAuditLog(tx, {
       entityType: "QuizAttempt",
       entityId: attemptId,
@@ -599,40 +795,60 @@ export async function submitQuizAttempt(
         maxScore: scored.maxScore,
         correctCount: scored.correctCount,
         totalQuestions: scored.totalQuestions,
+        textQuestionCount: scored.results.filter((result) => result.similarity !== null).length,
+        manualReviewQuestionIds: [...manualQuestionIds],
         late,
       },
     })
+    return created
   })
 
-  // Deterministic auto-scoring is persisted as a *suggestion*, never a grade.
-  // The constant `criterionLabel` is the stable dedupe bucket: a later attempt
-  // supersedes the previous draft score instead of adding to it, and a published
-  // grade is never rewritten (lib/grading guarantees both).
-  await recordAiSuggestion(
-    {
+  if (hasTextQuestions) {
+    await recordTextQuizSuggestions({
       assessmentId: rows.assessment.id,
       studentId,
-      criterionLabel: QUIZ_ATTEMPT_CRITERION_LABEL,
-      suggestedPoints: scored.score,
-      maxPoints: scored.maxScore,
-      rationale: `Deterministic auto-scoring: ${scored.correctCount} of ${scored.totalQuestions} questions correct${late ? " (submitted after the deadline)" : ""}.`,
-      evidence: "Per-question outcomes are persisted on this attempt's QuizResponse rows.",
-      confidence: 1,
-      model: QUIZ_AUTO_SCORER_MODEL,
-      promptVersion: QUIZ_SCORING_PROMPT_VERSION,
-      latencyMs: 0,
-      rawResponse: {
-        attemptId,
-        attemptNumber: attempt.attemptNumber,
-        correctCount: scored.correctCount,
-        totalQuestions: scored.totalQuestions,
-        score: scored.score,
-        maxScore: scored.maxScore,
-        late,
+      attemptId,
+      attemptNumber: attempt.attemptNumber,
+      questions,
+      results: scored.results,
+      responseIdByQuestion: new Map(createdResponses.map((row) => [row.questionId, row.id])),
+      textGrades,
+      manualQuestionIds,
+      targetScore: scored.score,
+      maxScore: scored.maxScore,
+      late,
+    })
+  } else {
+    // Choice-only quizzes keep the original single, deterministic whole-quiz
+    // suggestion. Its constant `criterionLabel` is the stable dedupe bucket: a
+    // later attempt supersedes the previous draft score instead of adding to it,
+    // and a published grade is never rewritten (lib/grading guarantees both).
+    await recordAiSuggestion(
+      {
+        assessmentId: rows.assessment.id,
+        studentId,
+        criterionLabel: QUIZ_ATTEMPT_CRITERION_LABEL,
+        suggestedPoints: scored.score,
+        maxPoints: scored.maxScore,
+        rationale: `Deterministic auto-scoring: ${scored.correctCount} of ${scored.totalQuestions} questions correct${late ? " (submitted after the deadline)" : ""}.`,
+        evidence: "Per-question outcomes are persisted on this attempt's QuizResponse rows.",
+        confidence: 1,
+        model: QUIZ_AUTO_SCORER_MODEL,
+        promptVersion: QUIZ_SCORING_PROMPT_VERSION,
+        latencyMs: 0,
+        rawResponse: {
+          attemptId,
+          attemptNumber: attempt.attemptNumber,
+          correctCount: scored.correctCount,
+          totalQuestions: scored.totalQuestions,
+          score: scored.score,
+          maxScore: scored.maxScore,
+          late,
+        },
       },
-    },
-    { role: "system" },
-  )
+      { role: "system" },
+    )
+  }
 
   return getStudentAttempt(user, attemptId)
 }
@@ -727,8 +943,10 @@ export async function getTeacherAttempt(
       select: {
         questionId: true,
         selectedOptionIds: true,
+        answerText: true,
         isCorrect: true,
         pointsAwarded: true,
+        rationale: true,
       },
     }),
     prisma.gradeReview.findUnique({
@@ -749,8 +967,10 @@ export async function getTeacherAttempt(
     return serializeTeacherResponse({
       question,
       selectedOptionId: response ? (readOptionIds(response.selectedOptionIds)[0] ?? null) : null,
+      answerText: response?.answerText ?? null,
       isCorrect: response?.isCorrect ?? null,
       pointsAwarded: toNumberOrNull(response?.pointsAwarded ?? null),
+      rationale: response?.rationale ?? null,
     })
   })
 
