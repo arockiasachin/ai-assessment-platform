@@ -251,6 +251,24 @@ function appendDecision(
 }
 
 /**
+ * Serialize the read-then-write of a `Grade` for one assessment.
+ *
+ * `Grade` has `@@unique([assessmentId, studentId])`, which prevents two rows for
+ * one pair, but a unique key cannot stop a *lost update*: `recordAiSuggestion`
+ * reads `publishedAt`, then writes, and a human mark that commits between the
+ * two is invisible to the read and silently clobbered by the write (the write's
+ * `update` never sets `publishedAt`, so the row keeps the human timestamp while
+ * its score and source are replaced). Taking the `Assessment` row lock — the
+ * same pattern used by `lib/quiz-attempts/service.ts` and the enrollment route —
+ * makes every grade writer share one ordered critical section, so a manual mark
+ * can never be overwritten by a model run that started before it. The lock is
+ * transaction-scoped and released on commit or rollback.
+ */
+async function lockGradeWrites(tx: Prisma.TransactionClient, assessmentId: string): Promise<void> {
+  await tx.$queryRaw`SELECT "id" FROM "Assessment" WHERE "id" = ${assessmentId} FOR UPDATE`
+}
+
+/**
  * Record one AI suggestion and keep the review/grade in sync.
  *
  * A new suggestion puts the review in `PENDING` (or reopens a `REJECTED` one)
@@ -274,6 +292,9 @@ export async function recordAiSuggestion(
       },
     })
     if (!assessment) throw new GradePipelineError(404, "Assessment not found.")
+
+    // Serialize with the other grade writers before reading `publishedAt`.
+    await lockGradeWrites(tx, assessment.id)
 
     const student = await tx.studentProfile.findUnique({
       where: { id: data.studentId },
@@ -441,6 +462,9 @@ export async function submitReviewDecision(input: SubmitReviewDecisionInput) {
     })
     if (!assessment) throw new GradePipelineError(404, "Assessment not found.")
 
+    // Serialize with the other grade writers before reading the grade.
+    await lockGradeWrites(tx, assessment.id)
+
     const reviewerStaffId = await assertCanManageAssessment(tx, assessment, input.reviewer)
 
     const review = await tx.gradeReview.findUnique({
@@ -473,6 +497,28 @@ export async function submitReviewDecision(input: SubmitReviewDecisionInput) {
       throw new GradePipelineError(409, "No AI suggestions to accept.")
     }
 
+    const existingGrade = await tx.grade.findUnique({
+      where: {
+        assessmentId_studentId: {
+          assessmentId: input.assessmentId,
+          studentId: input.studentId,
+        },
+      },
+    })
+    const existingPublished = existingGrade?.publishedAt != null
+
+    // A published grade *is* a human approval, and `accept` publishes a model
+    // suggestion on top of it — so it may never replace one. The review state
+    // machine already blocks accept once a review is published, but a manual
+    // gradebook mark leaves the review `PENDING`, so the guard is required here
+    // too. A human who wants to change a published mark must `override`.
+    if (decision.action === "accept" && existingPublished) {
+      throw new GradePipelineError(
+        409,
+        "A published grade already exists for this student; use an override to change it.",
+      )
+    }
+
     const maxPoints = await resolveMaxPoints(tx, assessment.id, assessment.maxMarks)
     let publishedAt: Date | null = null
     let points = Math.min(suggestedTotal, maxPoints)
@@ -502,36 +548,47 @@ export async function submitReviewDecision(input: SubmitReviewDecisionInput) {
       decidedAt = new Date()
     }
 
-    const grade = await tx.grade.upsert({
-      where: {
-        assessmentId_studentId: {
+    const isPublishing = publishedAt !== null
+
+    // A non-publishing decision (`flag`/`reject`/`reopen`) concerns the model's
+    // suggestion, not the teacher's own mark: it must never un-publish or
+    // rewrite a grade a human already approved. Only a publishing decision, or
+    // a pair that has no published grade yet, writes (or refreshes) the draft.
+    let grade: Grade
+    if (!isPublishing && existingPublished && existingGrade) {
+      grade = existingGrade
+    } else {
+      grade = await tx.grade.upsert({
+        where: {
+          assessmentId_studentId: {
+            assessmentId: input.assessmentId,
+            studentId: input.studentId,
+          },
+        },
+        create: {
           assessmentId: input.assessmentId,
           studentId: input.studentId,
+          reviewId: review.id,
+          points,
+          maxPoints,
+          percentage: maxPoints > 0 ? (points / maxPoints) * 100 : null,
+          source,
+          approvedById,
+          overrideReason,
+          publishedAt,
         },
-      },
-      create: {
-        assessmentId: input.assessmentId,
-        studentId: input.studentId,
-        reviewId: review.id,
-        points,
-        maxPoints,
-        percentage: maxPoints > 0 ? (points / maxPoints) * 100 : null,
-        source,
-        approvedById,
-        overrideReason,
-        publishedAt,
-      },
-      update: {
-        reviewId: review.id,
-        points,
-        maxPoints,
-        percentage: maxPoints > 0 ? (points / maxPoints) * 100 : null,
-        source,
-        approvedById,
-        overrideReason,
-        publishedAt,
-      },
-    })
+        update: {
+          reviewId: review.id,
+          points,
+          maxPoints,
+          percentage: maxPoints > 0 ? (points / maxPoints) * 100 : null,
+          source,
+          approvedById,
+          overrideReason,
+          publishedAt,
+        },
+      })
+    }
 
     const notes =
       decision.action === "flag"
@@ -556,7 +613,6 @@ export async function submitReviewDecision(input: SubmitReviewDecisionInput) {
     })
 
     const actor: AuditActor = { id: input.reviewer.id, role: input.reviewer.role }
-    const isPublishing = publishedAt !== null
 
     await writeAuditLog(tx, {
       entityType: "GradeReview",
@@ -650,6 +706,10 @@ export async function applyManualMark(
   tx: Prisma.TransactionClient,
   input: ManualMarkInput,
 ): Promise<GradeResponse | null> {
+  // Serialize with the AI writers before reading the current grade, so a model
+  // re-run cannot clobber a mark that is committing concurrently.
+  await lockGradeWrites(tx, input.assessmentId)
+
   const existing = await tx.grade.findUnique({
     where: {
       assessmentId_studentId: { assessmentId: input.assessmentId, studentId: input.studentId },
