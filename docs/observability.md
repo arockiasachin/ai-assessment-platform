@@ -136,7 +136,7 @@ them appear in the serialized line.
   (default `1000`, clamped to `50`–`10000`). It is skipped when `DATABASE_URL`
   is unset, so the endpoint never hangs on a slow or absent database.
 - The LLM mode is reported from config without constructing a provider:
-  `{ provider: "mock" | "openai" | "anthropic" | "ollama" | "unknown",
+  `{ provider: "mock" | "openai" | "deepseek" | "anthropic" | "ollama" | "unknown",
 mode: "offline" | "live" | "unknown" }`.
 - Response shape (`HealthResponse` in `lib/contracts/observability.ts`):
 

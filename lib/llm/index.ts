@@ -3,6 +3,7 @@ import { resolveProviderName, resolveTimeoutMs, type LlmEnv } from "./env"
 import type { FetchLike } from "./http"
 import { observeLlmProvider } from "./observability"
 import { createAnthropicProviderFromEnv } from "./providers/anthropic"
+import { createDeepSeekProviderFromEnv } from "./providers/deepseek"
 import { createMockProvider } from "./providers/mock"
 import { createOllamaProviderFromEnv } from "./providers/ollama"
 import { createOpenAiProviderFromEnv } from "./providers/openai-compatible"
@@ -16,6 +17,7 @@ export type { FetchLike } from "./http"
 export { deterministicEmbedding, createMockProvider } from "./providers/mock"
 export { createOpenAiCompatibleProvider } from "./providers/openai-compatible"
 export { createAnthropicProvider } from "./providers/anthropic"
+export { createDeepSeekProvider } from "./providers/deepseek"
 export { createOllamaProvider } from "./providers/ollama"
 
 export type CreateLlmProviderOptions = {
@@ -38,6 +40,8 @@ function createBaseProvider(
       return createMockProvider({ model: env.MOCK_MODEL?.trim() || undefined })
     case "openai":
       return createOpenAiProviderFromEnv(env, timeoutMs, fetchImpl)
+    case "deepseek":
+      return createDeepSeekProviderFromEnv(env, timeoutMs, fetchImpl)
     case "anthropic":
       return createAnthropicProviderFromEnv(env, timeoutMs, fetchImpl)
     case "ollama":

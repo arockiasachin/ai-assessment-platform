@@ -13,6 +13,8 @@ runtime`), where all of Phases 0–3 have landed.
   is not in the spec, it is not in the product.
 - [`development-workflow.md`](./development-workflow.md) — the branch model, the phase-gated merge
   flow, the Definition of Done, CI gates, commit conventions, and the local verification commands.
+- [`llm-providers.md`](./llm-providers.md) — how to select a provider, the DeepSeek
+  configuration, the cost/latency trade-off, and how model provenance is recorded on AI grades.
 
 ## Phase documents
 

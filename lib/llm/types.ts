@@ -10,11 +10,12 @@
 export const DEFAULT_EMBEDDING_DIMENSIONS = 1536
 export const DEFAULT_TIMEOUT_MS = 60_000
 
-export type LlmProviderName = "openai" | "anthropic" | "ollama" | "mock"
+export type LlmProviderName = "openai" | "deepseek" | "anthropic" | "ollama" | "mock"
 
 export const LLM_PROVIDER_NAMES: readonly LlmProviderName[] = [
   "mock",
   "openai",
+  "deepseek",
   "anthropic",
   "ollama",
 ] as const

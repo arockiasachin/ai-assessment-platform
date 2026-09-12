@@ -12,6 +12,9 @@ export type LlmEnv = {
   OPENAI_BASE_URL?: string
   OPENAI_MODEL?: string
   OPENAI_EMBEDDING_MODEL?: string
+  DEEPSEEK_API_KEY?: string
+  DEEPSEEK_BASE_URL?: string
+  DEEPSEEK_MODEL?: string
   ANTHROPIC_API_KEY?: string
   ANTHROPIC_BASE_URL?: string
   ANTHROPIC_MODEL?: string
@@ -34,6 +37,16 @@ export const DEFAULT_PROVIDER: LlmProviderName = "mock"
 export const DEFAULT_OPENAI_BASE_URL = "https://api.openai.com/v1"
 export const DEFAULT_OPENAI_MODEL = "gpt-4o-mini"
 export const DEFAULT_OPENAI_EMBEDDING_MODEL = "text-embedding-3-small"
+
+/**
+ * DeepSeek is OpenAI-compatible: the base URL has no `/v1` suffix and the chat
+ * route is `/chat/completions`. `deepseek-flash` is the canonical V4.1-Flash id
+ * and, importantly, a *moving target* — DeepSeek publishes no immutable
+ * snapshot, so callers should log the response `system_fingerprint` (already
+ * retained in `LlmGenerateResult.raw`) when provenance matters.
+ */
+export const DEFAULT_DEEPSEEK_BASE_URL = "https://api.deepseek.com"
+export const DEFAULT_DEEPSEEK_MODEL = "deepseek-flash"
 
 export const DEFAULT_ANTHROPIC_BASE_URL = "https://api.anthropic.com"
 export const DEFAULT_ANTHROPIC_MODEL = "claude-3-5-sonnet-latest"

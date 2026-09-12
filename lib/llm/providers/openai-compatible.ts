@@ -1,4 +1,4 @@
-import { LlmConfigError, LlmError } from "../errors"
+import { LlmConfigError, LlmError, LlmUnsupportedError } from "../errors"
 import { measureLatency, postJson, type FetchLike } from "../http"
 import {
   DEFAULT_OPENAI_BASE_URL,
@@ -12,6 +12,15 @@ import { DEFAULT_TIMEOUT_MS, type LlmProvider, type LlmUsage } from "../types"
 
 type ChatCompletionResponse = {
   model?: string
+  /**
+   * Response id and model-build fingerprint. Both are retained verbatim in
+   * `LlmGenerateResult.raw` (and therefore in the `AIGradeSuggestion.rawResponse`
+   * JSON column) so a contestable grade can be traced to the exact serving
+   * build. This matters most for `deepseek-flash`, which has no immutable
+   * snapshot id.
+   */
+  id?: string
+  system_fingerprint?: string
   choices?: Array<{
     message?: { content?: string | null }
     finish_reason?: string | null
@@ -35,6 +44,18 @@ export type OpenAiCompatibleConfig = {
   embeddingModel?: string
   timeoutMs?: number
   fetchImpl?: FetchLike
+  /**
+   * Reported provider identity used on results, errors, observability lines and
+   * `/api/health`. Defaults to `"openai"`; DeepSeek reuses this transport but
+   * must not masquerade as OpenAI in the audit trail.
+   */
+  name?: "openai" | "deepseek"
+  /**
+   * Some OpenAI-compatible vendors expose chat completions only. When false,
+   * `embed()` throws `LlmUnsupportedError` so retrieval fails fast and loudly
+   * instead of POSTing to a route that does not exist.
+   */
+  supportsEmbeddings?: boolean
 }
 
 function toUsage(usage: ChatCompletionResponse["usage"]): LlmUsage {
@@ -52,6 +73,8 @@ function toUsage(usage: ChatCompletionResponse["usage"]): LlmUsage {
  * OpenRouter, vLLM, LM Studio, etc. Auth and both routes are configurable.
  */
 export function createOpenAiCompatibleProvider(config: OpenAiCompatibleConfig): LlmProvider {
+  const name = config.name ?? "openai"
+  const supportsEmbeddings = config.supportsEmbeddings ?? true
   const baseUrl = config.baseUrl ?? DEFAULT_OPENAI_BASE_URL
   const model = config.model ?? DEFAULT_OPENAI_MODEL
   const embeddingModel = config.embeddingModel ?? DEFAULT_OPENAI_EMBEDDING_MODEL
@@ -59,18 +82,18 @@ export function createOpenAiCompatibleProvider(config: OpenAiCompatibleConfig): 
   const fetchImpl = config.fetchImpl
 
   return {
-    name: "openai",
+    name,
     defaultModel: model,
     defaultEmbeddingModel: embeddingModel,
-    supportsEmbeddings: true,
+    supportsEmbeddings,
 
     async generate(request) {
       if (!request.messages.length) {
-        throw new LlmError("openai requires at least one message", { provider: "openai" })
+        throw new LlmError(`${name} requires at least one message`, { provider: name })
       }
       const startedAt = Date.now()
       const data = await postJson<ChatCompletionResponse>(`${baseUrl}/chat/completions`, {
-        provider: "openai",
+        provider: name,
         fetchImpl,
         timeoutMs,
         signal: request.signal,
@@ -88,7 +111,7 @@ export function createOpenAiCompatibleProvider(config: OpenAiCompatibleConfig): 
       return {
         text,
         model: data.model ?? request.model ?? model,
-        provider: "openai",
+        provider: name,
         usage: toUsage(data.usage),
         latencyMs: measureLatency(startedAt),
         finishReason: data.choices?.[0]?.finish_reason ?? null,
@@ -97,12 +120,15 @@ export function createOpenAiCompatibleProvider(config: OpenAiCompatibleConfig): 
     },
 
     async embed(request) {
+      if (!supportsEmbeddings) {
+        throw new LlmUnsupportedError(name, "embeddings")
+      }
       if (!request.texts.length) {
-        throw new LlmError("openai embeddings require at least one text", { provider: "openai" })
+        throw new LlmError(`${name} embeddings require at least one text`, { provider: name })
       }
       const startedAt = Date.now()
       const data = await postJson<EmbeddingsResponse>(`${baseUrl}/embeddings`, {
-        provider: "openai",
+        provider: name,
         fetchImpl,
         timeoutMs,
         signal: request.signal,
@@ -117,15 +143,15 @@ export function createOpenAiCompatibleProvider(config: OpenAiCompatibleConfig): 
       const rows = [...(data.data ?? [])].sort((a, b) => (a.index ?? 0) - (b.index ?? 0))
       if (rows.length !== request.texts.length) {
         throw new LlmError(
-          `openai returned ${rows.length} embeddings for ${request.texts.length} inputs`,
-          { provider: "openai" },
+          `${name} returned ${rows.length} embeddings for ${request.texts.length} inputs`,
+          { provider: name },
         )
       }
 
       return {
         embeddings: rows.map((row) => row.embedding ?? []),
         model: data.model ?? request.model ?? embeddingModel,
-        provider: "openai",
+        provider: name,
         latencyMs: measureLatency(startedAt),
       }
     },

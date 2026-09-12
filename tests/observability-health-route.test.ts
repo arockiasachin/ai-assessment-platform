@@ -121,6 +121,12 @@ describe("GET /api/health", () => {
     }
     expect(live.checks.llm).toEqual({ provider: "openai", mode: "live" })
 
+    process.env.LLM_PROVIDER = "deepseek"
+    const deepseek = (await (await call()).json()) as {
+      checks: { llm: { provider: string; mode: string } }
+    }
+    expect(deepseek.checks.llm).toEqual({ provider: "deepseek", mode: "live" })
+
     process.env.LLM_PROVIDER = "not-a-provider"
     const unknown = (await (await call()).json()) as {
       checks: { llm: { provider: string; mode: string } }
