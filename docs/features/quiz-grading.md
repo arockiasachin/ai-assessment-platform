@@ -137,12 +137,18 @@ counts.
   `correctOptionId`, and it is reachable only behind `requireRole("teacher")`
   plus an ownership check.
 
-## Legacy `Quiz` / `QuizQuestion` path
+## Single quiz store
 
-This pod persists against the Phase-1 `Question` / `QuestionOption` spine (the
-same rows the quiz-generation pod creates). The legacy `Quiz` / `QuizQuestion`
-model and `POST /api/quiz/grade` are untouched; they remain server-authoritative
-and are not used by the new delivery routes.
+The legacy `Quiz` / `QuizQuestion` models were retired in Phase 4
+(`20260912030000_retire_quiz`). The JSON importer
+(`createQuizFromImportForSessionUser`, `POST /api/teacher/quiz`) now writes
+**published** `Question` / `QuestionOption` rows attributed to the importing
+teacher, so an imported quiz is delivered and scored by the same pipeline as a
+generated one. The import requires an explicit, ownership-checked `offeringId`
+(a non-owner is a `403`) instead of resolving an offering by course id/name.
+`lib/quiz-grading.ts` (`POST /api/quiz/grade`) also reads the modern store, so
+there is no second, separately-graded quiz representation. See
+[`docs/verification/legacy-quiz-retirement.md`](../verification/legacy-quiz-retirement.md).
 
 ## Deferred items and limits
 

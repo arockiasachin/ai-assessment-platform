@@ -19,8 +19,8 @@ export default async function AdminDataPage() {
     assessments,
     grades,
     submissions,
-    quizzes,
-    quizQuestions,
+    questions,
+    questionOptions,
     calendarEvents,
     totals,
   ] = await Promise.all([
@@ -97,10 +97,23 @@ export default async function AdminDataPage() {
         gradedAt: true,
       },
     }),
-    prisma.quiz.findMany({ take: 25, select: { id: true, assessmentId: true } }),
-    prisma.quizQuestion.findMany({
+    prisma.question.findMany({
+      orderBy: { createdAt: "desc" },
       take: 25,
-      select: { id: true, quizId: true, order: true, correctIndex: true, prompt: true },
+      select: {
+        id: true,
+        assessmentId: true,
+        type: true,
+        order: true,
+        prompt: true,
+        status: true,
+        publishedAt: true,
+        publishedById: true,
+      },
+    }),
+    prisma.questionOption.findMany({
+      take: 25,
+      select: { id: true, questionId: true, order: true, text: true, isCorrect: true },
     }),
     prisma.calendarEvent.findMany({
       orderBy: { createdAt: "desc" },
@@ -126,8 +139,8 @@ export default async function AdminDataPage() {
       prisma.assessment.count(),
       prisma.grade.count(),
       prisma.submission.count(),
-      prisma.quiz.count(),
-      prisma.quizQuestion.count(),
+      prisma.question.count(),
+      prisma.questionOption.count(),
       prisma.calendarEvent.count(),
     ]),
   ])
@@ -143,8 +156,8 @@ export default async function AdminDataPage() {
     { name: "assessments", count: totals[7], rows: toPlainRows(assessments) },
     { name: "grades", count: totals[8], rows: toPlainRows(grades) },
     { name: "submissions", count: totals[9], rows: toPlainRows(submissions) },
-    { name: "quizzes", count: totals[10], rows: toPlainRows(quizzes) },
-    { name: "quiz_questions", count: totals[11], rows: toPlainRows(quizQuestions) },
+    { name: "questions", count: totals[10], rows: toPlainRows(questions) },
+    { name: "question_options", count: totals[11], rows: toPlainRows(questionOptions) },
     { name: "calendar_events", count: totals[12], rows: toPlainRows(calendarEvents) },
   ]
 

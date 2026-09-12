@@ -23,6 +23,11 @@ export async function POST(request: Request) {
     const message = error instanceof Error ? error.message : ""
     if (message === "Forbidden") return jsonError(message, 403)
     if (message === "Unauthorized") return jsonError(message, 401)
+    // A missing offering and a non-owned offering are deliberately the same 403
+    // so the route never confirms that another teacher's offering exists.
+    if (message === "Offering not found or not owned by you.") {
+      return jsonError(message, 403)
+    }
     // The importer throws descriptive validation errors; surface those, but
     // never a raw database error (which can embed internal paths and schema).
     if (message && !isDatabaseError(error)) return jsonError(message, 400)

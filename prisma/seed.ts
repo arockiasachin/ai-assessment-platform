@@ -30,9 +30,9 @@ function shiftDays(iso: string, days: number) {
 async function main() {
   await prisma.calendarEvent.deleteMany()
   await prisma.submission.deleteMany()
-  await prisma.quizQuestion.deleteMany()
-  await prisma.quiz.deleteMany()
   await prisma.grade.deleteMany()
+  // `question` / `questionOption` rows cascade from `assessment`, which is
+  // deleted below.
   await prisma.assessment.deleteMany()
   await prisma.enrollment.deleteMany()
   await prisma.courseOffering.deleteMany()
@@ -631,20 +631,29 @@ async function main() {
   })
 
   for (const qa of quizAssessments) {
-    const quiz = await prisma.quiz.create({
-      data: {
-        assessmentId: qa.id,
-      },
-    })
-
+    // Hand-authored dev questions land published, attributed to the assessment
+    // creator, so the modern quiz pipeline works against seeded data.
+    const publishedAt = new Date()
     for (let i = 0; i < 5; i++) {
-      await prisma.quizQuestion.create({
+      const correctIndex = i % 4
+      await prisma.question.create({
         data: {
-          quizId: quiz.id,
-          order: i + 1,
+          assessmentId: qa.id,
+          type: "MULTIPLE_CHOICE",
+          order: i,
           prompt: `Question ${i + 1} for ${qa.title}`,
-          optionsJson: ["Option A", "Option B", "Option C", "Option D"],
-          correctIndex: i % 4,
+          explanation: null,
+          points: 1,
+          status: "published",
+          publishedAt,
+          publishedById: qa.createdById,
+          options: {
+            create: ["Option A", "Option B", "Option C", "Option D"].map((text, optionIndex) => ({
+              order: optionIndex,
+              text,
+              isCorrect: optionIndex === correctIndex,
+            })),
+          },
         },
       })
     }

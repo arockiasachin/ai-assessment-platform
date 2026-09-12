@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { requireRole } from "@/lib/authz"
 import { prisma } from "@/lib/prisma"
 import { toAssessmentScale } from "@/lib/gradebook"
+import { quizDeliveryStatus } from "@/lib/quiz-attempts/metadata"
 import type { StudentAssessmentsPayload, SubmissionState } from "@/lib/student-assessments"
 
 function submissionStateFromDbStatus(status: string | null): SubmissionState {
@@ -71,9 +72,11 @@ export async function GET() {
         },
         take: 1,
       },
-      quiz: {
+      questions: {
         select: {
-          questions: { select: { id: true } },
+          status: true,
+          metadata: true,
+          options: { select: { isCorrect: true } },
         },
       },
     },
@@ -112,6 +115,14 @@ export async function GET() {
       const submission = assessment.submissions[0] ?? null
       const state = submissionStateFromDbStatus(submission?.status ?? null)
 
+      // Count only a deliverable question set: a generated draft quiz shows 0
+      // questions until its questions are published, exactly as it did before
+      // the legacy `Quiz` store was retired.
+      const quizQuestionCount =
+        assessment.questions.length > 0 && quizDeliveryStatus(assessment.questions).deliverable
+          ? assessment.questions.length
+          : 0
+
       const dueTime = assessment.dueDate.getTime()
       const dayMs = 1000 * 60 * 60 * 24
       const daysUntilDue = Math.ceil((dueTime - now.getTime()) / dayMs)
@@ -132,7 +143,7 @@ export async function GET() {
         score,
         percentage,
         classAveragePercentage,
-        quizQuestionCount: assessment.quiz?.questions.length ?? 0,
+        quizQuestionCount,
         submissionState: state,
         submittedAt: submission?.submittedAt?.toISOString() ?? null,
         gradedAt: submission?.gradedAt?.toISOString() ?? null,

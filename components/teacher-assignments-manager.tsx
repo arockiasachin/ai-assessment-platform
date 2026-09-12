@@ -48,6 +48,7 @@ export function TeacherAssignmentsManager() {
 
   const [quizFileName, setQuizFileName] = useState("")
   const [quizPayload, setQuizPayload] = useState<{ questions?: unknown[] } | null>(null)
+  const [quizOfferingId, setQuizOfferingId] = useState("")
   const [isImportingQuiz, setIsImportingQuiz] = useState(false)
 
   const [message, setMessage] = useState<string | null>(null)
@@ -55,6 +56,9 @@ export function TeacherAssignmentsManager() {
 
   // Derive the effective offering rather than syncing it into state via an effect.
   const selectedOfferingId = offeringId || offerings[0]?.id || ""
+  // The quiz import targets its own offering: a teacher may import a quiz while
+  // the assignment form is pointed at a different class.
+  const quizSelectedOfferingId = quizOfferingId || offerings[0]?.id || ""
 
   const canCreateAssignment = useMemo(() => {
     const max = Number(assignmentMaxMarks)
@@ -132,7 +136,7 @@ export function TeacherAssignmentsManager() {
   }
 
   const importQuizFromJson = async () => {
-    if (!quizPayload) return
+    if (!quizPayload || !quizSelectedOfferingId) return
 
     setError(null)
     setMessage(null)
@@ -142,7 +146,7 @@ export function TeacherAssignmentsManager() {
       const response = await fetch("/api/teacher/quiz", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(quizPayload),
+        body: JSON.stringify({ ...quizPayload, offeringId: quizSelectedOfferingId }),
       })
 
       const data = (await response.json()) as QuizImportResponse
@@ -293,6 +297,30 @@ export function TeacherAssignmentsManager() {
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid gap-2">
+            <Label htmlFor="quiz-offering">Class offering</Label>
+            <Select
+              value={quizSelectedOfferingId}
+              onValueChange={(value) => setQuizOfferingId(value ?? "")}
+            >
+              <SelectTrigger id="quiz-offering">
+                <SelectValue placeholder="Select an offering" />
+              </SelectTrigger>
+              <SelectContent>
+                {offerings.map((offering) => (
+                  <SelectItem key={offering.id} value={offering.id}>
+                    {offering.courseName} — {offering.className} ({offering.term}{" "}
+                    {offering.academicYear})
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              The quiz is imported into this offering. A course taught in two classes is
+              disambiguated by the offering, never by course name.
+            </p>
+          </div>
+
+          <div className="grid gap-2">
             <Label htmlFor="quiz-json-file">Quiz file (.json)</Label>
             <Input
               id="quiz-json-file"
@@ -317,7 +345,7 @@ export function TeacherAssignmentsManager() {
             type="button"
             variant="secondary"
             onClick={importQuizFromJson}
-            disabled={!quizPayload || isImportingQuiz}
+            disabled={!quizPayload || !quizSelectedOfferingId || isImportingQuiz}
           >
             <FileUp className="size-4" />
             {isImportingQuiz ? "Importing..." : "Create quiz from JSON"}

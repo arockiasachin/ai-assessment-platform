@@ -114,13 +114,20 @@ const importedQuizQuestionSchema = z
     },
   )
 
-/** `POST /api/teacher/quiz` request body (legacy import shape). */
+/**
+ * `POST /api/teacher/quiz` request body (JSON quiz import).
+ *
+ * `offeringId` is required for the same reason the create-assessment contract
+ * requires it: a teacher can teach the same course in several offerings, and
+ * resolving by `courseId`/course name silently imported the quiz into the wrong
+ * class. The offering is resolved and ownership-checked server-side; the legacy
+ * `quizMetadata.courseId`/`quizMetadata.course` keys are no longer read.
+ */
 export const quizImportRequestSchema = z.object({
+  offeringId: nonEmptyString,
   quizMetadata: z.object({
     title: nonEmptyString,
     dueDate: z.string().optional(),
-    courseId: z.string().optional(),
-    course: z.string().optional(),
     totalMarks: z.number().positive().optional(),
   }),
   questions: z.array(importedQuizQuestionSchema).min(1, "Quiz must include at least one question."),

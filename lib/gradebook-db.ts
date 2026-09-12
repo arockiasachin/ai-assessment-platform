@@ -2,6 +2,7 @@ import "server-only"
 
 import { prisma } from "@/lib/prisma"
 import { recordManualMark } from "@/lib/grading/review-service"
+import { quizDeliveryStatus } from "@/lib/quiz-attempts/metadata"
 import type { AuthUser } from "@/lib/session"
 import {
   markKey,
@@ -88,6 +89,49 @@ function uniqById<T extends { id: string }>(items: T[]) {
   return result
 }
 
+/** The modern `Question` / `QuestionOption` columns the key-free projection needs. */
+type GradebookQuizQuestionRow = {
+  id: string
+  order: number
+  prompt: string
+  status: string | null
+  metadata: unknown
+  options: Array<{ order: number; text: string; isCorrect: boolean }>
+}
+
+/**
+ * Project modern `Question` / `QuestionOption` rows onto the key-free quiz shape
+ * the gradebook payload exposes.
+ *
+ * Only a *deliverable* question set is included, using the same
+ * `quizDeliveryStatus` rule the attempt pipeline enforces (published, at least
+ * two options, exactly one correct). That keeps a generated draft from ever
+ * reaching the client, and the correct option is deliberately absent from the
+ * projection — `lib/gradebook.ts`'s `QuizQuestion` has no answer-key field.
+ */
+function toUiQuizzes(
+  assessments: Array<{ id: string; questions: GradebookQuizQuestionRow[] }>,
+): Quiz[] {
+  const quizzes: Quiz[] = []
+  for (const assessment of assessments) {
+    if (assessment.questions.length === 0) continue
+    if (!quizDeliveryStatus(assessment.questions).deliverable) continue
+    quizzes.push({
+      assessmentId: assessment.id,
+      questions: [...assessment.questions]
+        .sort((a, b) => a.order - b.order)
+        .map((question) => ({
+          id: question.id,
+          prompt: question.prompt,
+          options: [...question.options]
+            .sort((a, b) => a.order - b.order)
+            .map((option) => option.text),
+        })),
+    })
+  }
+  return quizzes
+}
+
 /**
  * Only a published `Grade` is a real mark: an unpublished row is a pending AI
  * draft that no teacher has approved, so it is neither a gradebook mark nor a
@@ -126,10 +170,9 @@ export async function getGradebookPayloadForSessionUser(
           where: { createdById: staff.id },
           include: {
             course: true,
-            quiz: {
-              include: {
-                questions: { orderBy: { order: "asc" } },
-              },
+            questions: {
+              orderBy: { order: "asc" },
+              include: { options: { orderBy: { order: "asc" } } },
             },
             finalGrades: PUBLISHED_GRADE_SELECT,
           },
@@ -192,16 +235,7 @@ export async function getGradebookPayloadForSessionUser(
       }
     }
 
-    const quizzes: Quiz[] = assessmentPool
-      .filter((a) => a.quiz)
-      .map((a) => ({
-        assessmentId: a.id,
-        questions: (a.quiz?.questions ?? []).map((q) => ({
-          id: q.id,
-          prompt: q.prompt,
-          options: Array.isArray(q.optionsJson) ? (q.optionsJson as string[]) : [],
-        })),
-      }))
+    const quizzes: Quiz[] = toUiQuizzes(assessmentPool)
 
     const offeringIds = offerings.map((o) => o.id)
     const upcomingRows = offeringIds.length
@@ -292,10 +326,9 @@ export async function getGradebookPayloadForSessionUser(
               assessments: {
                 include: {
                   course: true,
-                  quiz: {
-                    include: {
-                      questions: { orderBy: { order: "asc" } },
-                    },
+                  questions: {
+                    orderBy: { order: "asc" },
+                    include: { options: { orderBy: { order: "asc" } } },
                   },
                   finalGrades: PUBLISHED_GRADE_SELECT,
                 },
@@ -362,16 +395,7 @@ export async function getGradebookPayloadForSessionUser(
       : null
   }
 
-  const quizzes: Quiz[] = assessmentPool
-    .filter((a) => a.quiz)
-    .map((a) => ({
-      assessmentId: a.id,
-      questions: (a.quiz?.questions ?? []).map((q) => ({
-        id: q.id,
-        prompt: q.prompt,
-        options: Array.isArray(q.optionsJson) ? (q.optionsJson as string[]) : [],
-      })),
-    }))
+  const quizzes: Quiz[] = toUiQuizzes(assessmentPool)
 
   const offeringIds = offerings.map((o) => o.id)
   const upcomingRows = offeringIds.length
@@ -712,8 +736,12 @@ export async function createQuizFromImportForSessionUser(payload: unknown, sessi
   const dueDate = new Date(dueDateValue)
   if (Number.isNaN(dueDate.getTime())) throw new Error("quizMetadata.dueDate is invalid.")
 
-  const courseId = toStringValue(metadata?.courseId)
-  const courseNameOrCode = toStringValue(metadata?.course)
+  // The offering is the single source of truth for course/class, exactly as in
+  // `createAssessmentForSessionUser`. A teacher who teaches the same course in
+  // two offerings can no longer import into the wrong class: the client sends
+  // the offering id, never a bare course id/name.
+  const offeringId = toStringValue(body.offeringId)
+  if (!offeringId) throw new Error("offeringId is required.")
 
   const staff = await prisma.staffProfile.findUnique({
     where: { userId: sessionUser.id },
@@ -721,31 +749,22 @@ export async function createQuizFromImportForSessionUser(payload: unknown, sessi
   })
   if (!staff) throw new Error("Teacher profile not found")
 
-  const offerings = await prisma.courseOffering.findMany({
-    where: { teacherId: staff.id },
-    include: {
-      course: { select: { id: true, name: true, code: true } },
+  const offering = await prisma.courseOffering.findFirst({
+    where: { id: offeringId, teacherId: staff.id },
+    select: {
+      id: true,
+      courseId: true,
+      classId: true,
+      course: { select: { name: true } },
     },
-    orderBy: [{ academicYear: "desc" }, { term: "asc" }],
   })
-
-  if (!offerings.length) {
-    throw new Error("No course offerings found for this teacher.")
-  }
-
-  let offering = offerings.find((item) => item.courseId === courseId)
-  if (!offering && courseNameOrCode) {
-    const needle = courseNameOrCode.toLowerCase()
-    offering = offerings.find((item) => {
-      return item.course.name.toLowerCase() === needle || item.course.code.toLowerCase() === needle
-    })
-  }
-
+  // A missing offering and another teacher's offering are deliberately the same
+  // error, so the endpoint never confirms that someone else's offering exists.
   if (!offering) {
-    throw new Error(
-      "Unable to match quizMetadata.courseId or quizMetadata.course to one of your courses.",
-    )
+    throw new Error("Offering not found or not owned by you.")
   }
+
+  const publishedAt = new Date()
 
   const created = await prisma.$transaction(async (tx) => {
     const assessment = await tx.assessment.create({
@@ -774,21 +793,32 @@ export async function createQuizFromImportForSessionUser(payload: unknown, sessi
       },
     })
 
-    const quiz = await tx.quiz.create({
-      data: {
-        assessmentId: assessment.id,
-      },
-    })
-
-    await tx.quizQuestion.createMany({
-      data: questions.map((question, index) => ({
-        quizId: quiz.id,
-        prompt: question.prompt,
-        optionsJson: question.options,
-        correctIndex: question.correctIndex,
-        order: index + 1,
-      })),
-    })
+    // Write the modern store: one *published* `Question` per imported question,
+    // attributed to the importing teacher, with its `QuestionOption` rows. The
+    // teacher is explicitly providing the quiz, so it lands published (not a
+    // draft) and is immediately delivered and scored by the modern pipeline.
+    for (const [index, question] of questions.entries()) {
+      await tx.question.create({
+        data: {
+          assessmentId: assessment.id,
+          type: "MULTIPLE_CHOICE",
+          order: index,
+          prompt: question.prompt,
+          explanation: null,
+          points: question.marks,
+          status: "published",
+          publishedAt,
+          publishedById: staff.id,
+          options: {
+            create: question.options.map((text, optionIndex) => ({
+              order: optionIndex,
+              text,
+              isCorrect: optionIndex === question.correctIndex,
+            })),
+          },
+        },
+      })
+    }
 
     return { assessmentId: assessment.id }
   })
@@ -798,6 +828,7 @@ export async function createQuizFromImportForSessionUser(payload: unknown, sessi
     title,
     courseName: offering.course.name,
     courseId: offering.courseId,
+    offeringId: offering.id,
     questionCount: questions.length,
     maxMarks: resolvedMaxMarks,
     dueDate: dueDate.toISOString().slice(0, 10),

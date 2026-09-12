@@ -209,7 +209,6 @@ model Assessment {
   createdBy     StaffProfile      @relation("AssessmentCreator", fields: [createdById], references: [id], onDelete: Restrict)
   submissions   Submission[]
   calendarLinks CalendarEvent[]
-  quiz          Quiz?
 
   // Phase 1 assessment spine
   rubric             Rubric?
@@ -223,25 +222,6 @@ model Assessment {
 
   @@index([offeringId, dueDate])
   @@index([courseId, classId])
-}
-
-model Quiz {
-  id           String         @id @default(cuid())
-  assessmentId String         @unique
-  assessment   Assessment     @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
-  questions    QuizQuestion[]
-}
-
-model QuizQuestion {
-  id           String @id @default(cuid())
-  quizId       String
-  prompt       String
-  optionsJson  Json
-  correctIndex Int
-  order        Int
-  quiz         Quiz   @relation(fields: [quizId], references: [id], onDelete: Cascade)
-
-  @@unique([quizId, order])
 }
 
 model Submission {

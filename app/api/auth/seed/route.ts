@@ -700,21 +700,36 @@ export async function POST(request: Request) {
   }
 
   for (const assessment of assessments.filter((a) => a.type === "QUIZ")) {
-    const quiz =
-      (await prisma.quiz.findUnique({ where: { assessmentId: assessment.id } })) ??
-      (await prisma.quiz.create({ data: { assessmentId: assessment.id } }))
-
-    const questionCount = await prisma.quizQuestion.count({ where: { quizId: quiz.id } })
+    const questionCount = await prisma.question.count({ where: { assessmentId: assessment.id } })
     if (questionCount === 0) {
-      await prisma.quizQuestion.createMany({
-        data: Array.from({ length: 5 }, (_, i) => ({
-          quizId: quiz.id,
-          order: i + 1,
-          prompt: `Question ${i + 1} for ${assessment.title}`,
-          optionsJson: ["Option A", "Option B", "Option C", "Option D"],
-          correctIndex: i % 4,
-        })),
-      })
+      // Hand-authored dev questions land published, attributed to the teacher
+      // who owns the offering, so the whole modern quiz pipeline (delivery,
+      // scoring, attempts) works against seeded data.
+      const publishedAt = new Date()
+      const publishedById = offeringTeacherById.get(assessment.offeringId) ?? assessment.createdById
+      for (let i = 0; i < 5; i++) {
+        const correctIndex = i % 4
+        await prisma.question.create({
+          data: {
+            assessmentId: assessment.id,
+            type: "MULTIPLE_CHOICE",
+            order: i,
+            prompt: `Question ${i + 1} for ${assessment.title}`,
+            explanation: null,
+            points: 1,
+            status: "published",
+            publishedAt,
+            publishedById,
+            options: {
+              create: ["Option A", "Option B", "Option C", "Option D"].map((text, optionIndex) => ({
+                order: optionIndex,
+                text,
+                isCorrect: optionIndex === correctIndex,
+              })),
+            },
+          },
+        })
+      }
     }
   }
 

@@ -24,6 +24,9 @@ vi.mock("@/lib/prisma", () => ({
 import { gradeQuizSubmission } from "@/lib/quiz-grading"
 import type { AuthUser } from "@/lib/session"
 
+// The fixture now mirrors the modern `Question` / `QuestionOption` store the
+// grader reads. `optionsJson` / `correctIndex` belonged to the retired
+// `QuizQuestion` model; correctness is derived from `QuestionOption.isCorrect`.
 const assessment = {
   id: "a1",
   title: "Readiness",
@@ -31,12 +34,30 @@ const assessment = {
   maxMarks: 10,
   createdById: "staff-1",
   offering: { id: "o1", teacherId: "staff-1" },
-  quiz: {
-    questions: [
-      { id: "q1", prompt: "2 + 2?", optionsJson: ["3", "4", "5"], correctIndex: 1 },
-      { id: "q2", prompt: "3 x 3?", optionsJson: ["6", "9", "12"], correctIndex: 1 },
-    ],
-  },
+  questions: [
+    {
+      id: "q1",
+      prompt: "2 + 2?",
+      explanation: null,
+      points: 1,
+      options: [
+        { text: "3", isCorrect: false, order: 0 },
+        { text: "4", isCorrect: true, order: 1 },
+        { text: "5", isCorrect: false, order: 2 },
+      ],
+    },
+    {
+      id: "q2",
+      prompt: "3 x 3?",
+      explanation: null,
+      points: 1,
+      options: [
+        { text: "6", isCorrect: false, order: 0 },
+        { text: "9", isCorrect: true, order: 1 },
+        { text: "12", isCorrect: false, order: 2 },
+      ],
+    },
+  ],
 }
 
 const student: AuthUser = { id: "user-s1", email: "s1@test.local", role: "student" }
@@ -111,5 +132,38 @@ describe("gradeQuizSubmission authorization", () => {
         student,
       ),
     ).rejects.toMatchObject({ status: 400 })
+  })
+
+  it("refuses to grade a question with no correct option", async () => {
+    mocks.assessmentFindUnique.mockResolvedValue({
+      ...assessment,
+      questions: [
+        {
+          ...assessment.questions[0],
+          options: assessment.questions[0].options.map((option) => ({
+            ...option,
+            isCorrect: false,
+          })),
+        },
+      ],
+    })
+
+    await expect(
+      gradeQuizSubmission(
+        { assessmentId: "a1", answers: [{ questionId: "q1", selectedIndex: 0 }] },
+        student,
+      ),
+    ).rejects.toMatchObject({ status: 409 })
+  })
+
+  it("refuses to grade an assessment with no questions", async () => {
+    mocks.assessmentFindUnique.mockResolvedValue({ ...assessment, questions: [] })
+
+    await expect(
+      gradeQuizSubmission(
+        { assessmentId: "a1", answers: [{ questionId: "q1", selectedIndex: 0 }] },
+        student,
+      ),
+    ).rejects.toMatchObject({ status: 409 })
   })
 })

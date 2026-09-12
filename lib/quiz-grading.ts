@@ -3,16 +3,22 @@ import type { QuizGradeRequest, QuizGradeResponse } from "@/lib/contracts/quiz"
 import { quizGradeRequestSchema } from "@/lib/contracts/quiz"
 import { prisma } from "@/lib/prisma"
 
-import { scoreQuiz, QuizScoringError, type ScorableQuizQuestion } from "./quiz-scoring"
+import {
+  normalizeQuestionPoints,
+  scoreQuiz,
+  QuizScoringError,
+  type ScorableQuizQuestion,
+} from "./quiz-scoring"
 
 /**
- * Server-authoritative grading for the legacy quiz path.
+ * Server-authoritative grading for the quiz runner.
  *
- * The gradebook payload no longer carries `correctIndex`; a browser can only
- * learn the answer key by submitting answers to this service, which grades
- * against the server's copy and enforces that the caller may grade for the
- * requested student. Grade persistence and partial credit are Phase 2 work;
- * this closes the answer-key leak without pre-empting that pod.
+ * The gradebook payload never carries `correctIndex`; a browser can only learn
+ * the answer key by submitting answers to this service, which grades against
+ * the server's copy and enforces that the caller may grade for the requested
+ * student. Correctness is read from the modern `Question` / `QuestionOption`
+ * store — the same rows the attempt pipeline scores — so a quiz imported
+ * through `POST /api/teacher/quiz` grades identically to a generated one.
  */
 
 export class QuizGradingError extends Error {
@@ -25,6 +31,14 @@ export class QuizGradingError extends Error {
   }
 }
 
+type GradableQuestion = {
+  id: string
+  prompt: string
+  explanation: string | null
+  points: unknown
+  options: Array<{ text: string; isCorrect: boolean; order: number }>
+}
+
 type GradableAssessment = {
   id: string
   title: string
@@ -32,14 +46,7 @@ type GradableAssessment = {
   maxMarks: number
   createdById: string
   offering: { id: string; teacherId: string } | null
-  quiz: {
-    questions: Array<{
-      id: string
-      prompt: string
-      optionsJson: unknown
-      correctIndex: number
-    }>
-  } | null
+  questions: GradableQuestion[]
 }
 
 async function resolveStudentId(requested: string | undefined, requester: AuthUser) {
@@ -107,11 +114,16 @@ export async function gradeQuizSubmission(
       maxMarks: true,
       createdById: true,
       offering: { select: { id: true, teacherId: true } },
-      quiz: {
+      questions: {
+        orderBy: { order: "asc" },
         select: {
-          questions: {
+          id: true,
+          prompt: true,
+          explanation: true,
+          points: true,
+          options: {
             orderBy: { order: "asc" },
-            select: { id: true, prompt: true, optionsJson: true, correctIndex: true },
+            select: { text: true, isCorrect: true },
           },
         },
       },
@@ -119,23 +131,35 @@ export async function gradeQuizSubmission(
   })) as GradableAssessment | null
 
   if (!assessment) throw new QuizGradingError(404, "Assessment not found.")
-  if (assessment.type !== "QUIZ" || !assessment.quiz) {
+  if (assessment.type !== "QUIZ" || assessment.questions.length === 0) {
     throw new QuizGradingError(409, "Assessment does not have a quiz.")
   }
 
   const studentId = await resolveStudentId(data.studentId, requester)
   await assertCanGradeForStudent(assessment, studentId, requester)
 
-  // The legacy `QuizQuestion` model has no per-question weight, so every
-  // question keeps the kernel's default weight of 1. That is the same default a
-  // Phase-2 `Question` uses when `points` is absent, so both paths score a quiz
-  // the same way.
-  const questions: ScorableQuizQuestion[] = assessment.quiz.questions.map((question) => ({
-    id: question.id,
-    prompt: question.prompt,
-    options: Array.isArray(question.optionsJson) ? (question.optionsJson as string[]) : [],
-    correctIndex: question.correctIndex,
-  }))
+  // The modern `Question`/`QuestionOption` store is the single source of truth.
+  // The correct index is derived from the server-side `isCorrect` flag (never a
+  // client value), and each question carries its `points` weight so an imported
+  // question is scored exactly as a generated one would be.
+  const questions: ScorableQuizQuestion[] = assessment.questions.map((question) => {
+    const options = [...question.options].sort((a, b) => a.order - b.order)
+    const correctIndex = options.findIndex((option) => option.isCorrect)
+    if (correctIndex < 0) {
+      throw new QuizGradingError(
+        409,
+        `Question ${question.id} has no correct option and cannot be graded.`,
+      )
+    }
+    return {
+      id: question.id,
+      prompt: question.prompt,
+      options: options.map((option) => option.text),
+      correctIndex,
+      explanation: question.explanation,
+      points: normalizeQuestionPoints(Number(question.points)),
+    }
+  })
 
   let scored
   try {
