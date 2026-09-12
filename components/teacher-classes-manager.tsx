@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
-import { CalendarClock, Filter, GraduationCap, Save, Users2 } from "lucide-react"
+import { CalendarClock, Filter, GraduationCap, Save, Send, Users2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -20,6 +20,9 @@ type OfferingRow = {
   registrationCloseAt: string | null
   startsOn: string | null
   endsOn: string | null
+  resultsPublishedAt: string | null
+  retentionCutoff: string | null
+  purgeEligible: boolean
   enrolledCount: number
   waitlistedCount: number
 }
@@ -41,6 +44,7 @@ export function TeacherClassesManager() {
   const [error, setError] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
   const [savingId, setSavingId] = useState<string | null>(null)
+  const [publishingId, setPublishingId] = useState<string | null>(null)
   const [search, setSearch] = useState("")
   const [drafts, setDrafts] = useState<
     Record<
@@ -148,6 +152,25 @@ export function TeacherClassesManager() {
       setMessage("Unable to save.")
     } finally {
       setSavingId(null)
+    }
+  }
+
+  const publishResults = async (offeringId: string) => {
+    setMessage(null)
+    setPublishingId(offeringId)
+    try {
+      const response = await fetch(`/api/teacher/offerings/${offeringId}/results`, {
+        method: "POST",
+      })
+      const data = (await response.json()) as { success?: boolean; message?: string }
+      setMessage(data.message ?? (response.ok ? "Results published" : "Unable to publish results"))
+      if (response.ok) {
+        await refresh()
+      }
+    } catch {
+      setMessage("Unable to publish results.")
+    } finally {
+      setPublishingId(null)
     }
   }
 
@@ -361,15 +384,32 @@ export function TeacherClassesManager() {
                   Active: <span className="font-semibold">{row.enrolledCount}</span> · Waitlist:{" "}
                   <span className="font-semibold">{row.waitlistedCount}</span>
                 </p>
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => save(row.id)}
-                  disabled={savingId === row.id}
-                >
-                  <Save className="size-4" />
-                  Save changes
-                </Button>
+                <div className="flex flex-wrap items-center gap-2">
+                  {row.resultsPublishedAt ? (
+                    <Badge variant="outline" className="border-emerald-500/40 text-emerald-700">
+                      Results published {row.resultsPublishedAt.slice(0, 10)}
+                    </Badge>
+                  ) : (
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      onClick={() => publishResults(row.id)}
+                      disabled={publishingId === row.id}
+                    >
+                      <Send className="size-4" />
+                      Publish results
+                    </Button>
+                  )}
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => save(row.id)}
+                    disabled={savingId === row.id}
+                  >
+                    <Save className="size-4" />
+                    Save changes
+                  </Button>
+                </div>
               </div>
             </CardContent>
           </Card>
