@@ -140,6 +140,13 @@ model CourseOffering {
   registrationCloseAt DateTime?
   startsOn           DateTime?
   endsOn             DateTime?
+  // Retention anchor. Null means "results not published", so no student work
+  // for this offering may be purged. Set once, by an explicit teacher action
+  // (`POST /api/teacher/offerings/[offeringId]/results`); the purge clock is
+  // `resultsPublishedAt + 15 days`, enforced server-side. Offering-level rather
+  // than per-enrollment because results are published for a whole course
+  // cohort at one moment, and the policy speaks of the whole course.
+  resultsPublishedAt DateTime?
   // Per-offering analytics settings. JSON so the intervention and item-analysis
   // threshold keys can evolve without a migration per threshold. Any missing
   // key falls back to the code defaults in lib/analytics/{alerts,item-analysis}.
@@ -157,6 +164,7 @@ model CourseOffering {
 
   @@unique([courseId, classId, teacherId, term, academicYear])
   @@index([classId, courseId])
+  @@index([resultsPublishedAt])
 }
 
 model Enrollment {
@@ -178,6 +186,9 @@ model CourseRating {
   studentId  String
   rating     Int
   comment    String?
+  // Set by the retention purge when the free-text comment was redacted. The
+  // numeric rating is retained for aggregate reporting.
+  purgedAt   DateTime?
   createdAt  DateTime       @default(now())
   updatedAt  DateTime       @updatedAt
   offering   CourseOffering @relation(fields: [offeringId], references: [id], onDelete: Cascade)
@@ -235,6 +246,10 @@ model Submission {
   gradedAt     DateTime?
   gradedById   String?
   feedback     String?
+  // Set by the retention purge when this submission's student-authored content
+  // was redacted. Null means the row has not been purged. Retained feedback is
+  // teacher-authored and considered part of the academic record.
+  purgedAt     DateTime?
   createdAt    DateTime         @default(now())
   updatedAt    DateTime         @updatedAt
   assessment   Assessment       @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
@@ -468,6 +483,9 @@ model AIGradeSuggestion {
   completionTokens  Int?
   latencyMs         Int
   rawResponse       Json?
+  // Set by the retention purge when the rationale and quoted evidence were
+  // redacted. Scores, model, and token counts are retained for provenance.
+  purgedAt          DateTime?
   createdAt         DateTime         @default(now())
   assessment        Assessment       @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
   student           StudentProfile   @relation(fields: [studentId], references: [id], onDelete: Cascade)
@@ -625,6 +643,8 @@ model QuizResponse {
   pointsAwarded      Decimal?           @db.Decimal(6, 2)
   rationale          String?
   timeSpentMs        Int?
+  // Set by the retention purge when the student's answer content was redacted.
+  purgedAt           DateTime?
   createdAt          DateTime           @default(now())
   updatedAt          DateTime           @updatedAt
   attempt            QuizAttempt        @relation(fields: [attemptId], references: [id], onDelete: Cascade)
@@ -690,6 +710,8 @@ model TestRun {
   queuedAt     DateTime       @default(now())
   startedAt    DateTime?
   finishedAt   DateTime?
+  // Set by the retention purge when the run's artifacts were redacted.
+  purgedAt     DateTime?
   createdAt    DateTime       @default(now())
   updatedAt    DateTime       @updatedAt
   codeTask     CodeTask       @relation(fields: [codeTaskId], references: [id], onDelete: Cascade)
@@ -747,6 +769,9 @@ model PeerEvaluation {
   overallScore Float?
   comments     String?
   submittedAt  DateTime?
+  // Set by the retention purge when the confidential free-text comments were
+  // redacted. Numeric dimensions/scores are retained for adjustment history.
+  purgedAt     DateTime?
   createdAt    DateTime             @default(now())
   updatedAt    DateTime             @updatedAt
   group        Group                @relation(fields: [groupId], references: [id], onDelete: Cascade)
@@ -820,6 +845,8 @@ model SubmissionVersion {
   contentText   String?
   artifactUrl   String?
   wordCount     Int?
+  // Set by the retention purge when this version's student content was redacted.
+  purgedAt      DateTime?
   createdAt     DateTime   @default(now())
   submission    Submission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
 
