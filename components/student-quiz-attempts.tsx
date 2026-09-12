@@ -65,11 +65,16 @@ export function StudentQuizAttempts({ initialQuizzes }: Props) {
   const [attempts, setAttempts] = useState<QuizAttemptSummary[]>([])
   const [view, setView] = useState<QuizAttemptView | null>(null)
   const [answers, setAnswers] = useState<Record<string, number | null>>({})
+  const [textAnswers, setTextAnswers] = useState<Record<string, string>>({})
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   const selected = quizzes.find((quiz) => quiz.assessmentId === selectedId) ?? null
+
+  function isTextQuestion(question: QuizAttemptView["questions"][number]): boolean {
+    return question.type === "SHORT_ANSWER" || question.type === "ESSAY"
+  }
 
   async function refreshQuizzes() {
     const body = await call<{ success: true; quizzes: StudentQuizSummary[] }>(
@@ -89,6 +94,7 @@ export function StudentQuizAttempts({ initialQuizzes }: Props) {
     setSelectedId(assessmentId)
     setView(null)
     setAnswers({})
+    setTextAnswers({})
     setMessage(null)
     setError(null)
     setBusy(true)
@@ -113,6 +119,7 @@ export function StudentQuizAttempts({ initialQuizzes }: Props) {
       )
       setView(body.attempt)
       setAnswers(Object.fromEntries(body.attempt.questions.map((question) => [question.id, null])))
+      setTextAnswers({})
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Request failed.")
     } finally {
@@ -130,6 +137,7 @@ export function StudentQuizAttempts({ initialQuizzes }: Props) {
       )
       setView(body.attempt)
       setAnswers(Object.fromEntries(body.attempt.questions.map((question) => [question.id, null])))
+      setTextAnswers({})
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Request failed.")
     } finally {
@@ -144,10 +152,15 @@ export function StudentQuizAttempts({ initialQuizzes }: Props) {
     setError(null)
     try {
       const payload = {
-        answers: view.questions.map((question) => ({
-          questionId: question.id,
-          selectedIndex: answers[question.id] ?? null,
-        })),
+        answers: view.questions.map((question) => {
+          if (isTextQuestion(question)) {
+            const text = (textAnswers[question.id] ?? "").trim()
+            return text.length > 0
+              ? { questionId: question.id, selectedIndex: null, answerText: text }
+              : { questionId: question.id, selectedIndex: null }
+          }
+          return { questionId: question.id, selectedIndex: answers[question.id] ?? null }
+        }),
       }
       const body = await call<{ success: true; message?: string; attempt: QuizAttemptView }>(
         `/api/student/quiz-attempts/${encodeURIComponent(view.id)}/submit`,
@@ -155,6 +168,7 @@ export function StudentQuizAttempts({ initialQuizzes }: Props) {
       )
       setView(body.attempt)
       setMessage(body.message ?? "Quiz submitted.")
+      setTextAnswers({})
       await refreshAttempts(view.assessmentId)
       await refreshQuizzes()
     } catch (caught) {
@@ -285,6 +299,34 @@ export function StudentQuizAttempts({ initialQuizzes }: Props) {
             {view.questions.map((question) => {
               const result = resultByQuestion.get(question.id)
               const chosen = answers[question.id] ?? null
+              if (isTextQuestion(question)) {
+                return (
+                  <div key={question.id} className="rounded-lg border border-border p-3">
+                    <p className="text-sm font-medium">{question.prompt}</p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {question.points} mark{question.points === 1 ? "" : "s"} · written answer
+                    </p>
+                    <textarea
+                      className="mt-2 min-h-24 w-full rounded border border-border bg-background p-2 text-sm"
+                      placeholder="Type your answer here."
+                      disabled={view.status !== "IN_PROGRESS"}
+                      value={result ? (result.answerText ?? "") : (textAnswers[question.id] ?? "")}
+                      onChange={(event) =>
+                        setTextAnswers((prev) => ({ ...prev, [question.id]: event.target.value }))
+                      }
+                    />
+                    {result && (
+                      <p className="mt-2 text-xs text-muted-foreground">
+                        {result.needsManualReview
+                          ? "Awaiting teacher scoring."
+                          : `Suggested ${result.points}/${result.maxPoints} (partial credit is a suggestion awaiting teacher approval).`}
+                        {result.rationale ? ` ${result.rationale}` : ""}
+                        {result.explanation ? ` Reference answer: ${result.explanation}` : ""}
+                      </p>
+                    )}
+                  </div>
+                )
+              }
               return (
                 <div key={question.id} className="rounded-lg border border-border p-3">
                   <p className="text-sm font-medium">{question.prompt}</p>

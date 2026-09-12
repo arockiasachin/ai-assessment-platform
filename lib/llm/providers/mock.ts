@@ -1,3 +1,5 @@
+import { textSimilarity } from "@/lib/text-similarity"
+
 import { LlmError } from "../errors"
 import { DEFAULT_MOCK_MODEL } from "../env"
 import {
@@ -214,6 +216,32 @@ function mockCodeEvalResponse(prompt: string): string {
 }
 
 /**
+ * Synthesize a deterministic, schema-valid free-text similarity grade for the
+ * `quiz-grading` task. It reuses the same lexical similarity the deterministic
+ * fallback scores with, so an end-to-end submission under `LLM_PROVIDER=mock`
+ * exercises real partial-credit behaviour (a perfect match scores 1.0, an
+ * unrelated answer near 0) instead of a fixed constant.
+ */
+function extractTripleQuotedAfter(prompt: string, marker: string): string {
+  const index = prompt.indexOf(marker)
+  if (index < 0) return ""
+  const after = prompt.slice(index + marker.length)
+  const match = after.match(/"""\s*\n?([\s\S]*?)\n?\s*"""/)
+  return match?.[1]?.trim() ?? ""
+}
+
+function mockQuizGradingResponse(prompt: string): string {
+  const reference = extractTripleQuotedAfter(prompt, "Reference answer:")
+  const student = extractTripleQuotedAfter(prompt, "Student answer:")
+  const similarity = textSimilarity(student, reference)
+  return JSON.stringify({
+    similarity: Math.round(similarity * 1000) / 1000,
+    rationale: `Deterministic offline lexical similarity ${similarity.toFixed(2)} between the answer and the reference.`,
+    confidence: 0.9,
+  })
+}
+
+/**
  * Offline provider for CI and tests. It performs no network I/O, needs no API
  * key, and returns byte-identical output for identical input. Tests can pin an
  * exact response with `providerOptions.mockResponse`.
@@ -251,6 +279,8 @@ export function createMockProvider(config: MockProviderConfig = {}): LlmProvider
         text = mockQuizResponse(lastUserMessage || promptText)
       } else if (task === "rubric-grading") {
         text = mockRubricResponse(lastUserMessage || promptText)
+      } else if (task === "quiz-grading") {
+        text = mockQuizGradingResponse(lastUserMessage || promptText)
       } else if (task === "code-eval") {
         text = mockCodeEvalResponse(promptText)
       } else if (request.json) {

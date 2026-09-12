@@ -65,6 +65,8 @@ export type StudentQuizOption = z.infer<typeof studentQuizOptionSchema>
 export const studentQuizQuestionSchema = z.object({
   id: z.string(),
   order: z.number().int(),
+  /** The `QuestionType`; `SHORT_ANSWER`/`ESSAY` are answered with prose. */
+  type: z.string(),
   prompt: z.string(),
   points: z.number(),
   options: z.array(studentQuizOptionSchema),
@@ -161,9 +163,15 @@ export const teacherQuizResponseSchema = z.object({
   prompt: z.string(),
   selectedOptionId: z.string().nullable(),
   selectedText: z.string().nullable(),
+  /** The student's prose answer for a text question, `null` for a choice question. */
+  answerText: z.string().nullable(),
   isCorrect: z.boolean().nullable(),
   pointsAwarded: z.number().nullable(),
   maxPoints: z.number(),
+  /** The grader's rationale for a text answer (or `null`). */
+  rationale: z.string().nullable(),
+  /** True when a text answer had no reference answer and needs manual scoring. */
+  needsManualReview: z.boolean(),
   correctOptionId: z.string(),
   correctText: z.string(),
   explanation: z.string().nullable(),
