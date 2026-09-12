@@ -16,12 +16,11 @@ keeps the rules it touches intact:
 - **Only published grades count.** `Grade.publishedAt` is the gate. A pending
   `AIGradeSuggestion` (or an unpublished draft `Grade`) is _excluded_ from the
   final grade — never scored as zero — and is reported back to the caller so the
-  exclusion is visible. Publishing is still only done by a teacher `accept` /
-  `override` in `lib/grading/review-service.ts`; this pod never writes a grade.
-- **Modern `Grade` beats legacy `AssessmentGrade`, absolutely.** The legacy mark
-  is a fallback used only when no modern `Grade` row exists for that
-  assessment/student. When a modern row exists it wins even if unpublished, so an
-  unapproved suggestion blocks the fallback rather than being replaced by it.
+  exclusion is visible. Publishing is done by a teacher `accept` / `override` in
+  `lib/grading/review-service.ts`, or by a teacher entering a manual mark; this
+  pod never writes a grade.
+- **The modern `Grade` is the only store.** The legacy `AssessmentGrade` model was
+  retired and its table dropped; there is no fallback path.
 - **A teacher exports only their own offerings; a student only their own rows.**
   Enforced with `requireRole` plus object-level ownership resolved from the
   signed session.
@@ -62,10 +61,8 @@ configuration, the offering's assessment ids, and each student's raw candidates.
 1. **Resolve marks per assessment** (`resolveMarks`):
    - a modern `Grade` with `publishedAt != null` → `modern-grade`;
    - a modern `Grade` with `publishedAt == null` → **excluded**, recorded in
-     `excludedUnpublishedAssessmentIds` (and the legacy fallback is _not_ used);
-   - no modern row but a legacy `AssessmentGrade` → `legacy-grade`, recorded in
-     `legacyFallbackAssessmentIds`. The legacy denominator is the assessment's
-     `maxMarks` (the legacy model stores only the mark).
+     `excludedUnpublishedAssessmentIds`;
+   - an assessment with no modern `Grade` row contributes no mark.
    - Each mark carries `percentage = clamp(points / maxPoints × 100, 0, 100)`.
 2. **Score each category.** Within a category the score is a weighted average of
    the assessment percentages:
@@ -102,15 +99,17 @@ a readable message:
 When a teacher omits `config`, the service derives a single equal-weight
 category (`defaultFinalGradeConfig`) containing every assessment.
 
-## Known issue: grade duality (legacy `AssessmentGrade`)
+## Resolved: single grade store
 
-The frozen schema still carries the legacy `AssessmentGrade` model alongside the
-modern `Grade` pipeline. This pod reads both with an explicit precedence (modern
-wins, legacy is a fallback only when no modern row exists) and reports every
-fallback in `legacyFallbackAssessmentIds` and in the CSV comment column. This is
-a **reported known issue**, not a resolution: legacy marks have no publish
-concept, so a teacher-entered legacy mark is treated as authoritative on its own.
-Retiring `AssessmentGrade` is the Phase 4 cutover.
+The frozen schema originally carried the legacy `AssessmentGrade` model alongside
+the modern `Grade` pipeline. That duality is **resolved**: `AssessmentGrade` has
+been retired (its table dropped by migration
+`20260912020000_retire_assessment_grade`), every writer now publishes into `Grade`
+with an `AuditLog` row, and every reader (this export included) reads only the
+modern store. `StudentFinalGrade` no longer carries a
+`legacyFallbackAssessmentIds` field, and `resolveMarks` no longer has a
+`legacy-grade` origin. See
+[`docs/verification/grade-store-unification.md`](../verification/grade-store-unification.md).
 
 ## OneRoster 1.2 CSV columns (exact)
 
@@ -138,17 +137,17 @@ One header row per file, RFC 4180 escaping (`"` doubled, fields containing `,`,
 
 **`results.csv`**
 
-| Column             | Meaning                                                                                          |
-| ------------------ | ------------------------------------------------------------------------------------------------ |
-| `sourcedId`        | `result-<assessmentId>-<studentId>` / `result-final-<studentId>`                                 |
-| `status`           | `active`                                                                                         |
-| `dateLastModified` | `Grade.updatedAt` (modern), `AssessmentGrade.gradedAt` (legacy), or the export timestamp (final) |
-| `lineItem`         | the line item `sourcedId`                                                                        |
-| `student`          | the `StudentProfile` id                                                                          |
-| `score`            | numeric result (OneRoster 1.2 numeric scale)                                                     |
-| `scoreStatus`      | `fully graded`                                                                                   |
-| `resultValue`      | the same value as a fixed-2-decimal string (1.1-era consumers)                                   |
-| `comment`          | legacy fallback note, else empty                                                                 |
+| Column             | Meaning                                                          |
+| ------------------ | ---------------------------------------------------------------- |
+| `sourcedId`        | `result-<assessmentId>-<studentId>` / `result-final-<studentId>` |
+| `status`           | `active`                                                         |
+| `dateLastModified` | `Grade.updatedAt`, or the export timestamp for the final grade   |
+| `lineItem`         | the line item `sourcedId`                                        |
+| `student`          | the `StudentProfile` id                                          |
+| `score`            | numeric result (OneRoster 1.2 numeric scale)                     |
+| `scoreStatus`      | `fully graded`                                                   |
+| `resultValue`      | the same value as a fixed-2-decimal string (1.1-era consumers)   |
+| `comment`          | always empty                                                     |
 
 **`scoreScales.csv`**
 
@@ -239,15 +238,15 @@ message names them and states that persistence needs a migration.
 
 ## Tests
 
-| File                                   | Coverage                                                                                                                                                                                               |
-| -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `tests/lms-export-weights.test.ts`     | Coherent/valid configs, sum-check 400s, duplicates, cross-category assignment, unknown assessments, empty categories, per-assessment weights, default config.                                          |
-| `tests/lms-export-final-grade.test.ts` | Published-only exclusion, modern-over-legacy precedence including unpublished blocking, legacy fallback, category/assessment weighting, renormalisation, the "unpublished never influences" invariant. |
-| `tests/lms-export-oneroster.test.ts`   | Exact headers and column values, sourcedId schemes, CRLF, and CSV escaping of quotes/commas/newlines in free text.                                                                                     |
-| `tests/lms-export-lti.test.ts`         | AGS score and LineItem shapes, unpublished refusal, config validation and 422, dry-run client determinism, and the fetch-stubbed no-network property.                                                  |
-| `tests/lms-export-service.test.ts`     | DB-backed: mixed modern/legacy/published resolution, the DB-level unpublished invariant, weight 400s, cross-teacher/student/unenrolled denials, OneRoster published-only output, and the AGS dry run.  |
-| `tests/lms-export-route-auth.test.ts`  | Route-level role enforcement, malformed-input 400s, CSV headers, and service-not-called-on-denial.                                                                                                     |
-| `tests/fixtures/lms-export.ts`         | Spine + roster + three assessments and modern/legacy/published/draft grade helpers.                                                                                                                    |
+| File                                   | Coverage                                                                                                                                                                                |
+| -------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `tests/lms-export-weights.test.ts`     | Coherent/valid configs, sum-check 400s, duplicates, cross-category assignment, unknown assessments, empty categories, per-assessment weights, default config.                           |
+| `tests/lms-export-final-grade.test.ts` | Published-only exclusion, category/assessment weighting, renormalisation, the "unpublished never influences" invariant.                                                                 |
+| `tests/lms-export-oneroster.test.ts`   | Exact headers and column values, sourcedId schemes, CRLF, and CSV escaping of quotes/commas/newlines in free text.                                                                      |
+| `tests/lms-export-lti.test.ts`         | AGS score and LineItem shapes, unpublished refusal, config validation and 422, dry-run client determinism, and the fetch-stubbed no-network property.                                   |
+| `tests/lms-export-service.test.ts`     | DB-backed: published/draft resolution, the DB-level unpublished invariant, weight 400s, cross-teacher/student/unenrolled denials, OneRoster published-only output, and the AGS dry run. |
+| `tests/lms-export-route-auth.test.ts`  | Route-level role enforcement, malformed-input 400s, CSV headers, and service-not-called-on-denial.                                                                                      |
+| `tests/fixtures/lms-export.ts`         | Spine + roster + three assessments and published/draft modern-grade helpers.                                                                                                            |
 
 ## New files
 
@@ -281,10 +280,8 @@ message names them and states that persistence needs a migration.
   (OAuth2 client-credentials + JWT signing, `fetch` transport) is not shipped
   because there is no LMS and no network egress. No OIDC login, deep linking, or
   NRPS either.
-- **Grade duality** (see above) is a reported known issue, not resolved.
-- **Weights are not persisted.** The frozen schema has no settings column, so a
-  configuration arrives per request and the default lives in code. A future
-  migration could persist per-offering weights.
+- **No grade write-back.** Export is read-only; this pod never publishes or
+  alters a `Grade`. Posting scores to an LMS stays gated on `publishedAt`.
 - **OneRoster is the gradebook slice only**, with a single header row, numeric
   score scales only, and no `users.csv`/`classes.csv`/etc. `assignDate` mirrors
   `dueDate` because the schema has no assign date.
@@ -292,5 +289,6 @@ message names them and states that persistence needs a migration.
   `resultValue` carries the same value as a string for 1.1-era consumers. If a
   stricter 1.2-only consumer is the target, `resultValue` can be dropped behind a
   flag without changing the pipeline.
-- **No grade write-back.** Export is read-only; this pod never publishes or
-  alters a `Grade`. Posting scores to an LMS stays gated on `publishedAt`.
+- **Weights are not persisted.** The schema has no settings column, so a
+  configuration arrives per request and the default lives in code. A future
+  migration could persist per-offering weights.

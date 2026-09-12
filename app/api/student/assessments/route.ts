@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { requireRole } from "@/lib/authz"
 import { prisma } from "@/lib/prisma"
+import { toAssessmentScale } from "@/lib/gradebook"
 import type { StudentAssessmentsPayload, SubmissionState } from "@/lib/student-assessments"
 
 function submissionStateFromDbStatus(status: string | null): SubmissionState {
@@ -55,7 +56,10 @@ export async function GET() {
           teacher: { select: { fullName: true } },
         },
       },
-      grades: { select: { studentId: true, marksObtained: true } },
+      finalGrades: {
+        where: { publishedAt: { not: null } },
+        select: { studentId: true, points: true, maxPoints: true },
+      },
       submissions: {
         where: { studentId: student.id },
         select: {
@@ -79,12 +83,25 @@ export async function GET() {
   const payload: StudentAssessmentsPayload = {
     generatedAt: now.toISOString(),
     assessments: assessments.map((assessment) => {
-      const ownGrade = assessment.grades.find((grade) => grade.studentId === student.id)
-      const score = ownGrade ? Number(ownGrade.marksObtained) : null
-      const percentage = score === null ? null : (score / assessment.maxMarks) * 100
+      const ownGrade = assessment.finalGrades.find((grade) => grade.studentId === student.id)
+      const score = ownGrade
+        ? toAssessmentScale(
+            Number(ownGrade.points),
+            Number(ownGrade.maxPoints),
+            assessment.maxMarks,
+          )
+        : null
+      const percentage =
+        ownGrade && Number(ownGrade.maxPoints) > 0
+          ? (Number(ownGrade.points) / Number(ownGrade.maxPoints)) * 100
+          : null
 
-      const classPercentages = assessment.grades
-        .map((grade) => (Number(grade.marksObtained) / assessment.maxMarks) * 100)
+      const classPercentages = assessment.finalGrades
+        .map((grade) =>
+          Number(grade.maxPoints) > 0
+            ? (Number(grade.points) / Number(grade.maxPoints)) * 100
+            : Number.NaN,
+        )
         .filter((value) => Number.isFinite(value))
 
       const classAveragePercentage =

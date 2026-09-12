@@ -7,7 +7,7 @@ import { afterAll, beforeEach, describe, expect, it, vi } from "vitest"
  * assessed. Before this guard, a student could POST `action: "submit"` (which
  * overwrote `GRADED` with `LATE`/`SUBMITTED`) and then `action: "saveDraft"`
  * (which set the status back to `DRAFT` and cleared `submittedAt`) while the
- * attached `AssessmentGrade`, feedback and `gradedAt` stayed in place.
+ * attached grade, feedback and `gradedAt` stayed in place.
  */
 const mocks = vi.hoisted(() => ({ getCookies: vi.fn() }))
 

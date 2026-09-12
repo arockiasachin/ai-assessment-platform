@@ -13,8 +13,8 @@ import { nonEmptyString } from "./common"
  * The non-negotiable rule is encoded here and in `lib/lms-export/final-grade.ts`:
  * an unpublished `Grade` (a model suggestion no teacher has approved) can never
  * contribute to a final grade. The export reads `Grade.publishedAt`, never
- * `AIGradeSuggestion`, and falls back to the legacy `AssessmentGrade` only when
- * no modern `Grade` row exists at all.
+ * `AIGradeSuggestion`. There is no legacy fallback: `AssessmentGrade` has been
+ * retired, so the modern `Grade` is the only store.
  */
 
 // ---------------------------------------------------------------------------
@@ -84,7 +84,7 @@ export type StudentOneRosterExportQuery = z.infer<typeof studentOneRosterExportQ
 // Final grade read model
 // ---------------------------------------------------------------------------
 
-export const finalGradeMarkOriginSchema = z.enum(["modern-grade", "legacy-grade"])
+export const finalGradeMarkOriginSchema = z.literal("modern-grade")
 export type FinalGradeMarkOrigin = z.infer<typeof finalGradeMarkOriginSchema>
 
 /** One assessment result that contributed to (or was excluded from) a final grade. */
@@ -131,8 +131,6 @@ export const studentFinalGradeSchema = z.object({
   marks: z.array(finalGradeMarkSchema),
   /** Modern `Grade` rows that exist but are unpublished — deliberately excluded. */
   excludedUnpublishedAssessmentIds: z.array(z.string()),
-  /** Legacy `AssessmentGrade` rows used because no modern `Grade` row existed. */
-  legacyFallbackAssessmentIds: z.array(z.string()),
 })
 export type StudentFinalGrade = z.infer<typeof studentFinalGradeSchema>
 

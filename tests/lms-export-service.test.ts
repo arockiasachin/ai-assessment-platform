@@ -15,7 +15,6 @@ import type { AuthUser } from "@/lib/session"
 import { disconnectTestDatabase, prisma, truncateAll } from "./helpers/db"
 import {
   createDraftModernGrade,
-  createLegacyGrade,
   createLmsExportFixture,
   lmsStudentSession,
   lmsTeacherSession,
@@ -56,7 +55,7 @@ describe("weighted final grade service", () => {
     await disconnectTestDatabase()
   })
 
-  it("combines published modern grades and legacy fallbacks, and blocks legacy when a modern row exists", async () => {
+  it("combines only the published modern grades and excludes drafts", async () => {
     const fixture = await createLmsExportFixture(prisma, { studentCount: 3 })
     const [a1, a2, a3] = fixture.assessments
     const [s1, s2, s3] = fixture.students
@@ -75,17 +74,18 @@ describe("weighted final grade service", () => {
       ],
     }
 
-    // Student 1: modern published, legacy fallback, modern published => 83.
+    // Student 1: three published modern grades => 83.
     await publishModernGrade(prisma, {
       assessmentId: a1.id,
       studentId: s1.profileId,
       points: 16,
       maxPoints: 20,
     })
-    await createLegacyGrade(prisma, {
+    await publishModernGrade(prisma, {
       assessmentId: a2.id,
       studentId: s1.profileId,
-      marksObtained: 8,
+      points: 8,
+      maxPoints: 10,
     })
     await publishModernGrade(prisma, {
       assessmentId: a3.id,
@@ -94,17 +94,12 @@ describe("weighted final grade service", () => {
       maxPoints: 30,
     })
 
-    // Student 2: an unpublished modern grade on a1 must block the legacy a1 mark.
+    // Student 2: an unpublished modern grade on a1 is excluded, never replaced.
     await createDraftModernGrade(prisma, {
       assessmentId: a1.id,
       studentId: s2.profileId,
       points: 20,
       maxPoints: 20,
-    })
-    await createLegacyGrade(prisma, {
-      assessmentId: a1.id,
-      studentId: s2.profileId,
-      marksObtained: 2,
     })
     await publishModernGrade(prisma, {
       assessmentId: a2.id,
@@ -113,21 +108,12 @@ describe("weighted final grade service", () => {
       maxPoints: 10,
     })
 
-    // Student 3: legacy only.
-    await createLegacyGrade(prisma, {
+    // Student 3: a draft on a1 only => no published grade contributes.
+    await createDraftModernGrade(prisma, {
       assessmentId: a1.id,
       studentId: s3.profileId,
-      marksObtained: 10,
-    })
-    await createLegacyGrade(prisma, {
-      assessmentId: a2.id,
-      studentId: s3.profileId,
-      marksObtained: 5,
-    })
-    await createLegacyGrade(prisma, {
-      assessmentId: a3.id,
-      studentId: s3.profileId,
-      marksObtained: 15,
+      points: 10,
+      maxPoints: 20,
     })
 
     const result = await getTeacherGradeExport(teacher, {
@@ -141,21 +127,20 @@ describe("weighted final grade service", () => {
     expect(p1.letter).toBe("B")
     expect(p1.marks.map((mark) => mark.origin)).toEqual([
       "modern-grade",
-      "legacy-grade",
+      "modern-grade",
       "modern-grade",
     ])
-    expect(p1.legacyFallbackAssessmentIds).toEqual([a2.id])
     expect(p1.excludedUnpublishedAssessmentIds).toEqual([])
 
     const p2 = byId.get(s2.profileId)!
     expect(p2.excludedUnpublishedAssessmentIds).toEqual([a1.id])
-    expect(p2.legacyFallbackAssessmentIds).toEqual([])
     expect(p2.marks).toHaveLength(1)
     expect(p2.percentage).toBe(50)
 
     const p3 = byId.get(s3.profileId)!
-    expect(p3.percentage).toBe(50)
-    expect([...p3.legacyFallbackAssessmentIds].sort()).toEqual([a1.id, a2.id, a3.id].sort())
+    expect(p3.percentage).toBeNull()
+    expect(p3.marks).toEqual([])
+    expect(p3.excludedUnpublishedAssessmentIds).toEqual([a1.id])
   })
 
   it("proves across the DB that an unpublished grade never changes a final grade", async () => {
@@ -329,10 +314,11 @@ describe("OneRoster CSV service", () => {
       points: 10,
       maxPoints: 10,
     })
-    await createLegacyGrade(prisma, {
+    await publishModernGrade(prisma, {
       assessmentId: a3.id,
       studentId: student.profileId,
-      marksObtained: 15,
+      points: 15,
+      maxPoints: 30,
     })
 
     const results = await getTeacherOneRosterCsv(teacher, {

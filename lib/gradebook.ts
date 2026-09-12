@@ -78,6 +78,18 @@ export function markKey(studentId: string, assessmentId: string) {
   return `${studentId}:${assessmentId}`
 }
 
+/**
+ * Project a stored mark onto an assessment's own ceiling. A manual mark is
+ * stored with `maxPoints === assessment.maxMarks` (identity), but an AI/rubric
+ * grade may carry the rubric ceiling, so readers render the equivalent score on
+ * the assessment's scale.
+ */
+export function toAssessmentScale(points: number, maxPoints: number, maxMarks: number): number {
+  if (!Number.isFinite(points)) return 0
+  if (!Number.isFinite(maxPoints) || maxPoints <= 0) return points
+  return Math.round((points / maxPoints) * maxMarks * 100) / 100
+}
+
 export type GradeBand = "excellent" | "good" | "pass" | "fail" | "ungraded"
 
 export function letterGrade(pct: number): string {

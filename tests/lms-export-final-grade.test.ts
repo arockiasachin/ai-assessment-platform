@@ -4,17 +4,16 @@ import type { FinalGradeConfig } from "@/lib/contracts/lms-export"
 import { computeFinalGrade, resolveMarks, type GradeCandidateInput } from "@/lib/lms-export"
 
 /**
- * The two invariants this pod exists to protect:
- *  - an unpublished modern `Grade` is excluded from a final grade, and
- *  - a modern `Grade` row always takes precedence over a legacy `AssessmentGrade`.
+ * The invariant this pod exists to protect: an unpublished modern `Grade` is
+ * excluded from a final grade. `AssessmentGrade` has been retired, so there is
+ * no legacy fallback to reason about.
  */
-describe("resolveMarks — published-only and modern-over-legacy", () => {
+describe("resolveMarks — published-only", () => {
   it("includes a published modern grade", () => {
     const resolved = resolveMarks([
       {
         assessmentId: "a1",
         modern: { points: 16, maxPoints: 20, publishedAt: new Date("2026-11-01T00:00:00Z") },
-        legacy: null,
       },
     ])
     expect(resolved.marks).toHaveLength(1)
@@ -28,45 +27,18 @@ describe("resolveMarks — published-only and modern-over-legacy", () => {
     expect(resolved.excludedUnpublishedAssessmentIds).toEqual([])
   })
 
-  it("excludes an unpublished modern grade and does NOT fall back to legacy", () => {
+  it("excludes an unpublished modern grade", () => {
     const resolved = resolveMarks([
-      {
-        assessmentId: "a1",
-        modern: { points: 20, maxPoints: 20, publishedAt: null },
-        legacy: { marksObtained: 2, maxMarks: 20 },
-      },
+      { assessmentId: "a1", modern: { points: 20, maxPoints: 20, publishedAt: null } },
     ])
     expect(resolved.marks).toEqual([])
     expect(resolved.excludedUnpublishedAssessmentIds).toEqual(["a1"])
-    expect(resolved.legacyFallbackAssessmentIds).toEqual([])
   })
 
-  it("prefers a published modern grade over a legacy mark", () => {
-    const resolved = resolveMarks([
-      {
-        assessmentId: "a1",
-        modern: { points: 18, maxPoints: 20, publishedAt: new Date("2026-11-01T00:00:00Z") },
-        legacy: { marksObtained: 2, maxMarks: 20 },
-      },
-    ])
-    expect(resolved.marks).toHaveLength(1)
-    expect(resolved.marks[0].origin).toBe("modern-grade")
-    expect(resolved.marks[0].percentage).toBe(90)
-    expect(resolved.legacyFallbackAssessmentIds).toEqual([])
-  })
-
-  it("uses the legacy mark only when no modern row exists", () => {
-    const resolved = resolveMarks([
-      {
-        assessmentId: "a1",
-        modern: null,
-        legacy: { marksObtained: 5, maxMarks: 10 },
-      },
-    ])
-    expect(resolved.marks).toHaveLength(1)
-    expect(resolved.marks[0].origin).toBe("legacy-grade")
-    expect(resolved.marks[0].percentage).toBe(50)
-    expect(resolved.legacyFallbackAssessmentIds).toEqual(["a1"])
+  it("ignores an assessment with no modern grade at all", () => {
+    const resolved = resolveMarks([{ assessmentId: "a1", modern: null }])
+    expect(resolved.marks).toEqual([])
+    expect(resolved.excludedUnpublishedAssessmentIds).toEqual([])
   })
 })
 
@@ -87,9 +59,9 @@ describe("computeFinalGrade", () => {
   it("weights categories and assessments", () => {
     // Exams 80; Coursework (80*1 + 90*3) / 4 = 87.5; final = 80*.6 + 87.5*.4 = 83.
     const resolved = resolveMarks([
-      { assessmentId: "a1", modern: pub(16, 20), legacy: null },
-      { assessmentId: "a2", modern: null, legacy: { marksObtained: 8, maxMarks: 10 } },
-      { assessmentId: "a3", modern: pub(27, 30), legacy: null },
+      { assessmentId: "a1", modern: pub(16, 20) },
+      { assessmentId: "a2", modern: pub(8, 10) },
+      { assessmentId: "a3", modern: pub(27, 30) },
     ])
     const final = computeFinalGrade(config, resolved)
     expect(final.percentage).toBe(83)
@@ -102,7 +74,7 @@ describe("computeFinalGrade", () => {
   it("renormalises over categories that have marks", () => {
     // Only the 60-weight exams category has a mark, so the final grade is 80,
     // not 48 (which is what zero-scoring the ungraded category would produce).
-    const resolved = resolveMarks([{ assessmentId: "a1", modern: pub(16, 20), legacy: null }])
+    const resolved = resolveMarks([{ assessmentId: "a1", modern: pub(16, 20) }])
     const final = computeFinalGrade(config, resolved)
     expect(final.percentage).toBe(80)
     expect(final.completedWeight).toBe(60)
@@ -112,28 +84,23 @@ describe("computeFinalGrade", () => {
     expect(coursework).toMatchObject({ included: false, score: null })
   })
 
-  it("never lets an unpublished suggestion influence the final grade", () => {
+  it("never lets an unpublished draft influence the final grade", () => {
     const publishedOnly = computeFinalGrade(
       config,
       resolveMarks([
-        { assessmentId: "a1", modern: pub(16, 20), legacy: null },
-        { assessmentId: "a2", modern: null, legacy: { marksObtained: 8, maxMarks: 10 } },
-        { assessmentId: "a3", modern: null, legacy: { marksObtained: 27, maxMarks: 30 } },
+        { assessmentId: "a1", modern: pub(16, 20) },
+        { assessmentId: "a2", modern: pub(8, 10) },
+        { assessmentId: "a3", modern: pub(27, 30) },
       ]),
     )
 
-    // The same student, but with a high-scoring *unpublished* suggestion for a1
-    // and a legacy mark that a naive implementation might fall back to.
+    // The same student, but with a high-scoring *unpublished* draft for a1.
     const withDraft = computeFinalGrade(
       config,
       resolveMarks([
-        {
-          assessmentId: "a1",
-          modern: { points: 20, maxPoints: 20, publishedAt: null },
-          legacy: null,
-        },
-        { assessmentId: "a2", modern: null, legacy: { marksObtained: 8, maxMarks: 10 } },
-        { assessmentId: "a3", modern: null, legacy: { marksObtained: 27, maxMarks: 30 } },
+        { assessmentId: "a1", modern: { points: 20, maxPoints: 20, publishedAt: null } },
+        { assessmentId: "a2", modern: pub(8, 10) },
+        { assessmentId: "a3", modern: pub(27, 30) },
       ]),
     )
 
@@ -148,7 +115,7 @@ describe("computeFinalGrade", () => {
   it("returns null when there are no usable marks", () => {
     const final = computeFinalGrade(
       config,
-      resolveMarks([{ assessmentId: "a1", modern: pub(20, 20, null), legacy: null }]),
+      resolveMarks([{ assessmentId: "a1", modern: pub(20, 20, null) }]),
     )
     expect(final.percentage).toBeNull()
     expect(final.letter).toBeNull()

@@ -1,9 +1,11 @@
 import "server-only"
 
 import { prisma } from "@/lib/prisma"
+import { recordManualMark } from "@/lib/grading/review-service"
 import type { AuthUser } from "@/lib/session"
 import {
   markKey,
+  toAssessmentScale,
   type Assessment,
   type Course,
   type MarksMap,
@@ -86,6 +88,16 @@ function uniqById<T extends { id: string }>(items: T[]) {
   return result
 }
 
+/**
+ * Only a published `Grade` is a real mark: an unpublished row is a pending AI
+ * draft that no teacher has approved, so it is neither a gradebook mark nor a
+ * class-average input.
+ */
+const PUBLISHED_GRADE_SELECT = {
+  where: { publishedAt: { not: null } },
+  select: { studentId: true, points: true, maxPoints: true },
+}
+
 export async function getGradebookPayloadForSessionUser(
   sessionUser: AuthUser,
 ): Promise<GradebookPayload> {
@@ -119,7 +131,7 @@ export async function getGradebookPayloadForSessionUser(
                 questions: { orderBy: { order: "asc" } },
               },
             },
-            grades: true,
+            finalGrades: PUBLISHED_GRADE_SELECT,
           },
           orderBy: { dueDate: "asc" },
         },
@@ -171,8 +183,12 @@ export async function getGradebookPayloadForSessionUser(
 
     const marks: MarksMap = {}
     for (const a of assessmentPool) {
-      for (const g of a.grades) {
-        marks[markKey(g.studentId, a.id)] = Number(g.marksObtained)
+      for (const g of a.finalGrades) {
+        marks[markKey(g.studentId, a.id)] = toAssessmentScale(
+          Number(g.points),
+          Number(g.maxPoints),
+          a.maxMarks,
+        )
       }
     }
 
@@ -281,7 +297,7 @@ export async function getGradebookPayloadForSessionUser(
                       questions: { orderBy: { order: "asc" } },
                     },
                   },
-                  grades: true,
+                  finalGrades: PUBLISHED_GRADE_SELECT,
                 },
                 orderBy: { dueDate: "asc" },
               },
@@ -332,11 +348,13 @@ export async function getGradebookPayloadForSessionUser(
   const classAverages: Record<string, number | null> = {}
   for (const a of assessmentPool) {
     const percentages: number[] = []
-    for (const g of a.grades) {
-      const percentage = (Number(g.marksObtained) / a.maxMarks) * 100
+    for (const g of a.finalGrades) {
+      const points = Number(g.points)
+      const maxPoints = Number(g.maxPoints)
+      const percentage = maxPoints > 0 ? (points / maxPoints) * 100 : Number.NaN
       if (Number.isFinite(percentage)) percentages.push(percentage)
       if (g.studentId === studentProfile.id) {
-        marks[markKey(g.studentId, a.id)] = Number(g.marksObtained)
+        marks[markKey(g.studentId, a.id)] = toAssessmentScale(points, maxPoints, a.maxMarks)
       }
     }
     classAverages[a.id] = percentages.length
@@ -481,11 +499,14 @@ export async function upsertAssessmentGrade(
   }
 
   if (input.score === null) {
-    await prisma.assessmentGrade.deleteMany({
-      where: {
-        studentId: input.studentId,
-        assessmentId: input.assessmentId,
-      },
+    // Clearing is deliberate: the modern grade is removed and audited rather
+    // than voided, so a cleared mark cannot be mistaken for a pending AI draft.
+    await recordManualMark({
+      studentId: input.studentId,
+      assessmentId: input.assessmentId,
+      points: null,
+      maxPoints: assessment.maxMarks,
+      actor: { id: actor.id, role: actor.role },
     })
     return
   }
@@ -497,22 +518,15 @@ export async function upsertAssessmentGrade(
     throw new Error(`Score must be between 0 and ${assessment.maxMarks}.`)
   }
 
-  await prisma.assessmentGrade.upsert({
-    where: {
-      assessmentId_studentId: {
-        assessmentId: input.assessmentId,
-        studentId: input.studentId,
-      },
-    },
-    create: {
-      assessmentId: input.assessmentId,
-      studentId: input.studentId,
-      marksObtained: input.score,
-    },
-    update: {
-      marksObtained: input.score,
-      gradedAt: new Date(),
-    },
+  // A teacher typing a mark is the human approval: publish it into the audited
+  // modern pipeline (one `Grade` + one `AuditLog` row) instead of the legacy
+  // `AssessmentGrade` store.
+  await recordManualMark({
+    studentId: input.studentId,
+    assessmentId: input.assessmentId,
+    points: input.score,
+    maxPoints: assessment.maxMarks,
+    actor: { id: actor.id, role: actor.role },
   })
 }
 

@@ -587,3 +587,135 @@ export async function submitReviewDecision(input: SubmitReviewDecisionInput) {
     return { review: serializeReview(updatedReview), grade: serializeGrade(grade) }
   })
 }
+
+// ---------------------------------------------------------------------------
+// Manual marks — the gradebook write path
+// ---------------------------------------------------------------------------
+
+/** The authenticated staff member setting a mark by hand. */
+export type ManualMarkActor = { id: string; role: "admin" | "teacher" }
+
+export type ManualMarkInput = {
+  assessmentId: string
+  studentId: string
+  /** The score, or `null` to clear the mark. */
+  points: number | null
+  /** The ceiling the score is out of (the assessment `maxMarks`). */
+  maxPoints: number
+  /** The acting teacher/admin, used for attribution and the audit row. */
+  actor: ManualMarkActor
+}
+
+/** The audit-facing shape of a grade row, `null` before a grade existed. */
+function gradeAuditSnapshot(grade: Grade | null): Prisma.InputJsonValue | undefined {
+  if (!grade) return undefined
+  return {
+    points: Number(grade.points),
+    maxPoints: Number(grade.maxPoints),
+    source: grade.source,
+    approvedById: grade.approvedById,
+    publishedAt: grade.publishedAt?.toISOString() ?? null,
+  }
+}
+
+async function resolveStaffIdForActor(
+  tx: Prisma.TransactionClient,
+  actor: ManualMarkActor,
+): Promise<string | null> {
+  const staff = await tx.staffProfile.findUnique({
+    where: { userId: actor.id },
+    select: { id: true },
+  })
+  return staff?.id ?? null
+}
+
+/**
+ * Publish (or clear) a teacher's manual mark inside an existing transaction.
+ *
+ * A teacher typing a mark *is* the human approval, so the modern `Grade` is
+ * written straight to `publishedAt` — it is deliberately not routed through the
+ * `GradeReview` queue, which would leave the gradebook unusable. The audit row
+ * is written in the same transaction as the grade so neither can commit alone.
+ *
+ * This is the only non-review writer of `Grade.publishedAt`; it lives beside
+ * `submitReviewDecision` so the two publish paths share the audit helper and the
+ * serialization, rather than a second module writing the column.
+ *
+ * Clearing (`points: null`) deletes the modern grade rather than voiding it:
+ * an unpublished row would be indistinguishable from a pending AI draft and the
+ * next `recordAiSuggestion` would silently adopt it. The deletion is audited with
+ * the removed values in `before`.
+ */
+export async function applyManualMark(
+  tx: Prisma.TransactionClient,
+  input: ManualMarkInput,
+): Promise<GradeResponse | null> {
+  const existing = await tx.grade.findUnique({
+    where: {
+      assessmentId_studentId: { assessmentId: input.assessmentId, studentId: input.studentId },
+    },
+  })
+  const actor: AuditActor = { id: input.actor.id, role: input.actor.role }
+
+  if (input.points === null) {
+    if (!existing) return null
+    await tx.grade.delete({ where: { id: existing.id } })
+    await writeAuditLog(tx, {
+      entityType: "Grade",
+      entityId: existing.id,
+      action: "grade.manual_mark_cleared",
+      actor,
+      before: gradeAuditSnapshot(existing),
+      after: { cleared: true },
+      metadata: { assessmentId: input.assessmentId, studentId: input.studentId },
+    })
+    return null
+  }
+
+  const approvedById = await resolveStaffIdForActor(tx, input.actor)
+  const percentage = input.maxPoints > 0 ? (input.points / input.maxPoints) * 100 : null
+  const publishedAt = new Date()
+
+  const grade = await tx.grade.upsert({
+    where: {
+      assessmentId_studentId: { assessmentId: input.assessmentId, studentId: input.studentId },
+    },
+    create: {
+      assessmentId: input.assessmentId,
+      studentId: input.studentId,
+      points: input.points,
+      maxPoints: input.maxPoints,
+      percentage,
+      source: "TEACHER_OVERRIDE",
+      overrideReason: "Manual mark entered in the gradebook.",
+      approvedById,
+      publishedAt,
+    },
+    update: {
+      points: input.points,
+      maxPoints: input.maxPoints,
+      percentage,
+      source: "TEACHER_OVERRIDE",
+      overrideReason: "Manual mark entered in the gradebook.",
+      approvedById,
+      publishedAt,
+    },
+  })
+
+  await writeAuditLog(tx, {
+    entityType: "Grade",
+    entityId: grade.id,
+    action: existing ? "grade.manual_mark_updated" : "grade.manual_mark_published",
+    actor,
+    before: gradeAuditSnapshot(existing),
+    after: gradeAuditSnapshot(grade),
+    metadata: { assessmentId: input.assessmentId, studentId: input.studentId },
+  })
+
+  return serializeGrade(grade)
+}
+
+/** `applyManualMark` in its own transaction, for callers without one. */
+export async function recordManualMark(input: ManualMarkInput): Promise<GradeResponse | null> {
+  return prisma.$transaction((tx) => applyManualMark(tx, input))
+}

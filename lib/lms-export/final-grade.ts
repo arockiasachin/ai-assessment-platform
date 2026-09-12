@@ -6,16 +6,14 @@ import { assessmentWeight, categoryForAssessment, totalWeight } from "./weights"
 /**
  * Pure weighted-final-grade logic.
  *
- * The two product rules this module exists to guarantee:
+ * The product rule this module exists to guarantee: **only published grades
+ * count.** A modern `Grade` row contributes only when `publishedAt` is set. A
+ * model suggestion that no teacher has approved, or a draft, is not zero-scored
+ * — it is *excluded*, and it is reported in `excludedUnpublishedAssessmentIds`
+ * so the caller can show why.
  *
- * 1. **Only published grades count.** A modern `Grade` row contributes only when
- *    `publishedAt` is set. A model suggestion that no teacher has approved is
- *    not zero-scored, it is *excluded*, and it is reported in
- *    `excludedUnpublishedAssessmentIds` so the caller can show why.
- * 2. **Modern beats legacy, absolutely.** A legacy `AssessmentGrade` is a
- *    fallback for assessments that have *no* modern `Grade` row. When a modern
- *    row exists it wins even if it is unpublished — an unpublished suggestion
- *    blocks the legacy fallback rather than being silently replaced by it.
+ * There is no legacy fallback: `AssessmentGrade` was retired so this is the only
+ * grade store, read from the modern `Grade`.
  */
 
 export type ModernGradeCandidate = {
@@ -24,18 +22,12 @@ export type ModernGradeCandidate = {
   publishedAt: Date | string | null
 }
 
-export type LegacyGradeCandidate = {
-  marksObtained: number
-  maxMarks: number
-}
-
 export type GradeCandidateInput = {
   assessmentId: string
   modern: ModernGradeCandidate | null
-  legacy: LegacyGradeCandidate | null
 }
 
-export type ResolvedMarkOrigin = "modern-grade" | "legacy-grade"
+export type ResolvedMarkOrigin = "modern-grade"
 
 export type ResolvedMark = {
   assessmentId: string
@@ -50,8 +42,6 @@ export type ResolvedMarks = {
   marks: ResolvedMark[]
   /** Modern rows that exist but are unpublished — excluded by rule 1. */
   excludedUnpublishedAssessmentIds: string[]
-  /** Assessments scored from the legacy model because no modern row existed. */
-  legacyFallbackAssessmentIds: string[]
 }
 
 function round2(value: number): number {
@@ -68,47 +58,31 @@ function toIso(value: Date | string): string {
 }
 
 /**
- * Apply the published-only rule and the modern-over-legacy precedence to one
- * student's raw candidates. Pure and order-preserving.
+ * Apply the published-only rule to one student's raw candidates. Pure and
+ * order-preserving.
  */
 export function resolveMarks(candidates: readonly GradeCandidateInput[]): ResolvedMarks {
   const marks: ResolvedMark[] = []
   const excludedUnpublishedAssessmentIds: string[] = []
-  const legacyFallbackAssessmentIds: string[] = []
 
   for (const candidate of candidates) {
-    if (candidate.modern) {
-      if (candidate.modern.publishedAt === null) {
-        // Rule 1 and rule 2: an unpublished modern row is excluded, and it
-        // pre-empts the legacy fallback rather than deferring to it.
-        excludedUnpublishedAssessmentIds.push(candidate.assessmentId)
-        continue
-      }
-      marks.push({
-        assessmentId: candidate.assessmentId,
-        points: candidate.modern.points,
-        maxPoints: candidate.modern.maxPoints,
-        percentage: percentageOf(candidate.modern.points, candidate.modern.maxPoints),
-        origin: "modern-grade",
-        publishedAt: toIso(candidate.modern.publishedAt),
-      })
+    if (!candidate.modern) continue
+    if (candidate.modern.publishedAt === null) {
+      // An unpublished modern row is a draft/suggestion no teacher approved.
+      excludedUnpublishedAssessmentIds.push(candidate.assessmentId)
       continue
     }
-
-    if (candidate.legacy && candidate.legacy.maxMarks > 0) {
-      marks.push({
-        assessmentId: candidate.assessmentId,
-        points: candidate.legacy.marksObtained,
-        maxPoints: candidate.legacy.maxMarks,
-        percentage: percentageOf(candidate.legacy.marksObtained, candidate.legacy.maxMarks),
-        origin: "legacy-grade",
-        publishedAt: null,
-      })
-      legacyFallbackAssessmentIds.push(candidate.assessmentId)
-    }
+    marks.push({
+      assessmentId: candidate.assessmentId,
+      points: candidate.modern.points,
+      maxPoints: candidate.modern.maxPoints,
+      percentage: percentageOf(candidate.modern.points, candidate.modern.maxPoints),
+      origin: "modern-grade",
+      publishedAt: toIso(candidate.modern.publishedAt),
+    })
   }
 
-  return { marks, excludedUnpublishedAssessmentIds, legacyFallbackAssessmentIds }
+  return { marks, excludedUnpublishedAssessmentIds }
 }
 
 export type FinalGradeCategoryResult = {

@@ -47,11 +47,27 @@ describe("gradebook payload object-level authorization", () => {
       data: { studentId: classmateId, offeringId: fixture.offering.id, status: "active" },
     })
 
-    await prisma.assessmentGrade.create({
-      data: { assessmentId: fixture.assessment.id, studentId: ownId, marksObtained: 15 },
+    await prisma.grade.create({
+      data: {
+        assessmentId: fixture.assessment.id,
+        studentId: ownId,
+        points: 15,
+        maxPoints: fixture.assessment.maxMarks,
+        percentage: (15 / fixture.assessment.maxMarks) * 100,
+        source: "TEACHER_OVERRIDE",
+        publishedAt: new Date(),
+      },
     })
-    await prisma.assessmentGrade.create({
-      data: { assessmentId: fixture.assessment.id, studentId: classmateId, marksObtained: 5 },
+    await prisma.grade.create({
+      data: {
+        assessmentId: fixture.assessment.id,
+        studentId: classmateId,
+        points: 5,
+        maxPoints: fixture.assessment.maxMarks,
+        percentage: (5 / fixture.assessment.maxMarks) * 100,
+        source: "TEACHER_OVERRIDE",
+        publishedAt: new Date(),
+      },
     })
 
     return { fixture, ownId, classmateId }

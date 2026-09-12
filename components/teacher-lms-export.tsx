@@ -163,9 +163,6 @@ export function TeacherLmsExport({ offerings, initialOfferingId, initialExport }
       (sum, student) => sum + student.excludedUnpublishedAssessmentIds.length,
       0,
     ) ?? 0
-  const legacyCount =
-    data?.students.reduce((sum, student) => sum + student.legacyFallbackAssessmentIds.length, 0) ??
-    0
 
   return (
     <div className="space-y-6">
@@ -265,17 +262,13 @@ export function TeacherLmsExport({ offerings, initialOfferingId, initialExport }
         <CardContent className="space-y-3">
           <p className="text-xs text-muted-foreground">
             Results include <strong>published</strong> grades only. A pending AI suggestion is
-            excluded, never scored as zero. Legacy <code>AssessmentGrade</code> marks appear only
-            where no modern <code>Grade</code> row exists.
+            excluded, never scored as zero.
           </p>
           <div className="flex flex-wrap gap-2 text-xs">
             <Badge variant="secondary">{data?.students.length ?? 0} students</Badge>
             <Badge variant="secondary">{data?.assessments.length ?? 0} assessments</Badge>
             <Badge variant={excludedCount > 0 ? "destructive" : "outline"}>
               {excludedCount} unpublished excluded
-            </Badge>
-            <Badge variant={legacyCount > 0 ? "destructive" : "outline"}>
-              {legacyCount} legacy fallbacks
             </Badge>
             <Badge variant={data?.lti.configured ? "secondary" : "outline"}>
               LTI {data?.lti.configured ? "configured" : "not configured"}
@@ -326,11 +319,6 @@ export function TeacherLmsExport({ offerings, initialOfferingId, initialExport }
                       {student.excludedUnpublishedAssessmentIds.length > 0 && (
                         <Badge variant="destructive">
                           {student.excludedUnpublishedAssessmentIds.length} unpublished
-                        </Badge>
-                      )}
-                      {student.legacyFallbackAssessmentIds.length > 0 && (
-                        <Badge variant="outline">
-                          {student.legacyFallbackAssessmentIds.length} legacy
                         </Badge>
                       )}
                     </TableCell>

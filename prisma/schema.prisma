@@ -64,7 +64,6 @@ model StudentProfile {
   enrollments       Enrollment[]
   courseRatings     CourseRating[]
   submissions       Submission[]
-  grades            AssessmentGrade[]
 
   // Phase 1 assessment spine
   finalGrades           Grade[]
@@ -209,7 +208,6 @@ model Assessment {
   classRoom     ClassRoom         @relation(fields: [classId], references: [id], onDelete: Restrict)
   createdBy     StaffProfile      @relation("AssessmentCreator", fields: [createdById], references: [id], onDelete: Restrict)
   submissions   Submission[]
-  grades        AssessmentGrade[]
   calendarLinks CalendarEvent[]
   quiz          Quiz?
 
@@ -272,21 +270,6 @@ model Submission {
   @@index([studentId, status])
 }
 
-model AssessmentGrade {
-  id            String         @id @default(cuid())
-  assessmentId  String
-  studentId     String
-  marksObtained Decimal        @db.Decimal(5, 2)
-  gradedAt      DateTime       @default(now())
-  graderId      String?
-  rubricRef     String?
-  assessment    Assessment     @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
-  student       StudentProfile @relation(fields: [studentId], references: [id], onDelete: Cascade)
-
-  @@unique([assessmentId, studentId])
-  @@index([studentId])
-}
-
 model CalendarEvent {
   id           String          @id @default(cuid())
   classId      String?
@@ -308,12 +291,11 @@ model CalendarEvent {
 }
 
 // ---------------------------------------------------------------------------
-// Phase 1 — assessment spine (additive).
+// Phase 1 — assessment spine.
 //
-// Legacy models above stay in place until Phase 4 cutover. The new grading
-// pipeline (AIGradeSuggestion -> GradeReview -> Grade, all audited through
-// AuditLog) is the replacement for the duplicate-grade design but does not
-// delete AssessmentGrade yet.
+// The grading pipeline (AIGradeSuggestion -> GradeReview -> Grade, all audited
+// through AuditLog) is the single grade store. The legacy `AssessmentGrade`
+// duplicate was retired; manual marks now publish into `Grade` directly.
 // ---------------------------------------------------------------------------
 
 enum MaterialKind {

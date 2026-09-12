@@ -644,8 +644,9 @@ export async function POST(request: Request) {
       const wobble = (((si + 2) * 11 + (ai + 1) * 5) % 17) / 100 - 0.08
       const pct = Math.max(0.4, Math.min(0.96, base + wobble))
       const marks = Math.round(pct * assessment.maxMarks)
+      const percentage = assessment.maxMarks > 0 ? (marks / assessment.maxMarks) * 100 : null
 
-      await prisma.assessmentGrade.upsert({
+      await prisma.grade.upsert({
         where: {
           assessmentId_studentId: {
             assessmentId: assessment.id,
@@ -653,14 +654,20 @@ export async function POST(request: Request) {
           },
         },
         update: {
-          marksObtained: marks,
-          gradedAt: new Date(),
+          points: marks,
+          maxPoints: assessment.maxMarks,
+          percentage,
+          source: "TEACHER_OVERRIDE",
+          publishedAt: new Date(),
         },
         create: {
           assessmentId: assessment.id,
           studentId,
-          marksObtained: marks,
-          rubricRef: `mongo:rubrics/dev/${assessment.id}`,
+          points: marks,
+          maxPoints: assessment.maxMarks,
+          percentage,
+          source: "TEACHER_OVERRIDE",
+          publishedAt: new Date(),
         },
       })
 

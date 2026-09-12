@@ -49,10 +49,10 @@ import { categoryForAssessment, defaultFinalGradeConfig, validateFinalGradeConfi
 /**
  * DB-backed LMS-export service.
  *
- * This is the only module that reads `Grade`, legacy `AssessmentGrade`,
- * `Assessment`, `Enrollment`, and `CourseOffering` for export. It never reads
- * `AIGradeSuggestion`: the published-only rule lives entirely in
- * `resolveMarks`, which this service feeds with `Grade.publishedAt`.
+ * This is the only module that reads `Grade`, `Assessment`, `Enrollment`, and
+ * `CourseOffering` for export. It never reads `AIGradeSuggestion`: the
+ * published-only rule lives entirely in `resolveMarks`, which this service feeds
+ * with `Grade.publishedAt`.
  *
  * Every function takes the signed-in `AuthUser` and resolves ownership through
  * `./authz` before reading anything, so a teacher cannot export another
@@ -87,19 +87,11 @@ type ModernGradeRow = {
   updatedAt: Date
 }
 
-type LegacyGradeRow = {
-  assessmentId: string
-  studentId: string
-  marksObtained: number
-  gradedAt: Date
-}
-
 type ExportContext = {
   offering: OwnedOffering
   assessments: AssessmentRow[]
   students: StudentRow[]
   modernByKey: Map<string, ModernGradeRow>
-  legacyByKey: Map<string, LegacyGradeRow>
   config: FinalGradeConfig
   generatedAt: string
 }
@@ -135,7 +127,7 @@ async function loadExportContext(
   offering: OwnedOffering,
   options: { config?: FinalGradeConfig; studentId?: string } = {},
 ): Promise<ExportContext> {
-  const [assessmentRows, enrollmentRows, modernRows, legacyRows] = await Promise.all([
+  const [assessmentRows, enrollmentRows, modernRows] = await Promise.all([
     prisma.assessment.findMany({
       where: { offeringId: offering.id },
       orderBy: { dueDate: "asc" },
@@ -168,15 +160,6 @@ async function loadExportContext(
         updatedAt: true,
       },
     }),
-    prisma.assessmentGrade.findMany({
-      where: { assessment: { offeringId: offering.id } },
-      select: {
-        assessmentId: true,
-        studentId: true,
-        marksObtained: true,
-        gradedAt: true,
-      },
-    }),
   ])
 
   const assessments = assessmentRows.map(toAssessmentRow)
@@ -191,15 +174,6 @@ async function loadExportContext(
       updatedAt: row.updatedAt,
     })
   }
-  const legacyByKey = new Map<string, LegacyGradeRow>()
-  for (const row of legacyRows) {
-    legacyByKey.set(gradeKey(row.assessmentId, row.studentId), {
-      assessmentId: row.assessmentId,
-      studentId: row.studentId,
-      marksObtained: Number(row.marksObtained),
-      gradedAt: row.gradedAt,
-    })
-  }
 
   const config = options.config ?? defaultFinalGradeConfig(assessments)
   validateFinalGradeConfig(config, { knownAssessmentIds: assessments.map((a) => a.id) })
@@ -209,7 +183,6 @@ async function loadExportContext(
     assessments,
     students: enrollmentRows.map((row) => row.student),
     modernByKey,
-    legacyByKey,
     config,
     generatedAt: new Date().toISOString(),
   }
@@ -217,17 +190,10 @@ async function loadExportContext(
 
 function buildStudentFinalGrade(context: ExportContext, student: StudentRow): StudentFinalGrade {
   const titleById = new Map(context.assessments.map((a) => [a.id, a.title]))
-  const candidates: GradeCandidateInput[] = context.assessments.map((assessment) => {
-    const legacy = context.legacyByKey.get(gradeKey(assessment.id, student.id))
-    return {
-      assessmentId: assessment.id,
-      modern: context.modernByKey.get(gradeKey(assessment.id, student.id)) ?? null,
-      // The legacy model stores marks only; the denominator is the assessment ceiling.
-      legacy: legacy
-        ? { marksObtained: legacy.marksObtained, maxMarks: assessment.maxMarks }
-        : null,
-    }
-  })
+  const candidates: GradeCandidateInput[] = context.assessments.map((assessment) => ({
+    assessmentId: assessment.id,
+    modern: context.modernByKey.get(gradeKey(assessment.id, student.id)) ?? null,
+  }))
 
   const resolved: ResolvedMarks = resolveMarks(candidates)
   const computation = computeFinalGrade(context.config, resolved)
@@ -252,7 +218,6 @@ function buildStudentFinalGrade(context: ExportContext, student: StudentRow): St
       publishedAt: mark.publishedAt,
     })),
     excludedUnpublishedAssessmentIds: resolved.excludedUnpublishedAssessmentIds,
-    legacyFallbackAssessmentIds: resolved.legacyFallbackAssessmentIds,
   }
 }
 
@@ -299,8 +264,7 @@ export function ltiConfigStatus(
 
 /**
  * OneRoster gradebook rows for a whole offering. Only published modern grades
- * and (where no modern row exists) legacy marks appear as results; the weighted
- * final grade is emitted as its own line item.
+ * appear as results; the weighted final grade is emitted as its own line item.
  */
 function buildOneRoster(context: ExportContext, students: StudentFinalGrade[]): OneRosterGradebook {
   const assessments: OneRosterAssessment[] = context.assessments.map((assessment) => ({
@@ -318,19 +282,14 @@ function buildOneRoster(context: ExportContext, students: StudentFinalGrade[]): 
     for (const mark of student.marks) {
       const key = gradeKey(mark.assessmentId, student.studentId)
       const dateLastModified =
-        mark.origin === "modern-grade"
-          ? (context.modernByKey.get(key)?.updatedAt.toISOString() ?? context.generatedAt)
-          : (context.legacyByKey.get(key)?.gradedAt.toISOString() ?? context.generatedAt)
+        context.modernByKey.get(key)?.updatedAt.toISOString() ?? context.generatedAt
       results.push({
         assessmentId: mark.assessmentId,
         studentId: student.studentId,
         points: mark.points,
         maxPoints: mark.maxPoints,
         dateLastModified,
-        comment:
-          mark.origin === "legacy-grade"
-            ? "Legacy AssessmentGrade fallback (no modern Grade row)."
-            : "",
+        comment: "",
       })
     }
     if (student.percentage !== null) {

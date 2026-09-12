@@ -240,7 +240,6 @@ describe("student export routes", () => {
         categories: [],
         marks: [],
         excludedUnpublishedAssessmentIds: [],
-        legacyFallbackAssessmentIds: [],
       },
       lti: { configured: false, missing: [], message: null, scopes: [] },
       generatedAt: new Date().toISOString(),

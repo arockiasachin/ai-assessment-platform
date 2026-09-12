@@ -615,12 +615,12 @@ async function resolveUniformGroupGrade(
     ),
   ]
   if (memberIds.length === 0) return null
-  const grades = await prisma.assessmentGrade.findMany({
-    where: { assessmentId, studentId: { in: memberIds } },
-    select: { studentId: true, marksObtained: true },
+  const grades = await prisma.grade.findMany({
+    where: { assessmentId, studentId: { in: memberIds }, publishedAt: { not: null } },
+    select: { studentId: true, points: true },
   })
   if (grades.length !== memberIds.length) return null
-  const values = grades.map((grade) => Number(grade.marksObtained))
+  const values = grades.map((grade) => Number(grade.points))
   const first = values[0]
   if (!values.every((value) => Math.abs(value - first) < 1e-9)) return null
   return first

@@ -141,21 +141,6 @@ export async function createDraftModernGrade(
   })
 }
 
-/** A legacy `AssessmentGrade` mark, the fallback for pre-spine assessments. */
-export async function createLegacyGrade(
-  prisma: PrismaClient,
-  args: { assessmentId: string; studentId: string; marksObtained: number; gradedAt?: Date },
-) {
-  return prisma.assessmentGrade.create({
-    data: {
-      assessmentId: args.assessmentId,
-      studentId: args.studentId,
-      marksObtained: args.marksObtained,
-      gradedAt: args.gradedAt ?? new Date("2026-09-15T10:00:00.000Z"),
-    },
-  })
-}
-
 export function lmsTeacherSession(spine: { teacher: { id: string; email: string } }): AuthUser {
   return { id: spine.teacher.id, email: spine.teacher.email, role: "teacher" }
 }

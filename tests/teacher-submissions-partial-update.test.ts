@@ -10,7 +10,8 @@ import { afterAll, beforeEach, describe, expect, it, vi } from "vitest"
  *
  * The route is now a partial update: a field is only written when the request
  * actually carries its key, while an explicit `score: null` (the client's
- * "clear the score" action) still deliberately un-grades.
+ * "clear the score" action) still deliberately un-grades. The grade itself is
+ * the modern, published, audited `Grade` — `AssessmentGrade` was retired.
  */
 const mocks = vi.hoisted(() => ({
   getCookies: vi.fn(),
@@ -72,12 +73,16 @@ describe("PUT /api/teacher/assessments/submissions partial update", () => {
         feedback: "Well done",
       },
     })
-    await prisma.assessmentGrade.create({
+    await prisma.grade.create({
       data: {
         assessmentId: f.assessment.id,
         studentId,
-        marksObtained: 15,
-        gradedAt: GRADED_AT,
+        points: 15,
+        maxPoints: f.assessment.maxMarks,
+        percentage: (15 / f.assessment.maxMarks) * 100,
+        source: "TEACHER_OVERRIDE",
+        approvedById: f.teacher.staffProfile!.id,
+        publishedAt: GRADED_AT,
       },
     })
     setTeacherSession(f.teacher.id, f.teacher.email)
@@ -88,7 +93,7 @@ describe("PUT /api/teacher/assessments/submissions partial update", () => {
     const submission = await prisma.submission.findFirstOrThrow({
       where: { assessmentId, studentId },
     })
-    const grade = await prisma.assessmentGrade.findUniqueOrThrow({
+    const grade = await prisma.grade.findUniqueOrThrow({
       where: { assessmentId_studentId: { assessmentId, studentId } },
     })
     return { submission, grade }
@@ -107,7 +112,8 @@ describe("PUT /api/teacher/assessments/submissions partial update", () => {
     expect(after.gradedAt?.toISOString()).toBe(GRADED_AT.toISOString())
     expect(after.gradedById).toBe(f.teacher.staffProfile!.id)
     expect(after.feedback).toBeNull()
-    expect(Number(grade.marksObtained)).toBe(15)
+    expect(Number(grade.points)).toBe(15)
+    expect(grade.publishedAt?.toISOString()).toBe(GRADED_AT.toISOString())
   })
 
   it("treats a feedback-only request as a partial update", async () => {
@@ -120,7 +126,7 @@ describe("PUT /api/teacher/assessments/submissions partial update", () => {
     expect(after.status).toBe("GRADED")
     expect(after.gradedAt?.toISOString()).toBe(GRADED_AT.toISOString())
     expect(after.feedback).toBe("Great improvement")
-    expect(Number(grade.marksObtained)).toBe(15)
+    expect(Number(grade.points)).toBe(15)
   })
 
   it("preserves feedback when only the score is updated", async () => {
@@ -132,7 +138,8 @@ describe("PUT /api/teacher/assessments/submissions partial update", () => {
     const { submission: after, grade } = await loadState(f.assessment.id, studentId)
     expect(after.status).toBe("GRADED")
     expect(after.feedback).toBe("Well done")
-    expect(Number(grade.marksObtained)).toBe(18)
+    expect(Number(grade.points)).toBe(18)
+    expect(grade.publishedAt).not.toBeNull()
   })
 
   it("still un-grades deliberately when score is explicitly null", async () => {
@@ -141,11 +148,21 @@ describe("PUT /api/teacher/assessments/submissions partial update", () => {
     const response = await put({ submissionId: submission.id, score: null, feedback: "" })
     expect(response.status).toBe(200)
 
-    const { submission: after } = await loadState(f.assessment.id, studentId)
+    const after = await prisma.submission.findFirstOrThrow({
+      where: { assessmentId: f.assessment.id, studentId },
+    })
     expect(after.status).toBe("SUBMITTED")
     expect(after.gradedAt).toBeNull()
     expect(after.gradedById).toBeNull()
     expect(after.feedback).toBeNull()
+
+    // Clearing removes the modern grade and is audited, never silently dropped.
+    await expect(
+      prisma.grade.count({ where: { assessmentId: f.assessment.id, studentId } }),
+    ).resolves.toBe(0)
+    await expect(
+      prisma.auditLog.count({ where: { action: "grade.manual_mark_cleared" } }),
+    ).resolves.toBe(1)
   })
 
   it("rejects a body that carries neither score nor feedback", async () => {
@@ -158,7 +175,7 @@ describe("PUT /api/teacher/assessments/submissions partial update", () => {
 
     const { submission: after, grade } = await loadState(f.assessment.id, studentId)
     expect(after.status).toBe("GRADED")
-    expect(Number(grade.marksObtained)).toBe(15)
+    expect(Number(grade.points)).toBe(15)
   })
 
   it("rejects malformed JSON with 400 instead of throwing", async () => {
@@ -182,6 +199,6 @@ describe("PUT /api/teacher/assessments/submissions partial update", () => {
 
     const { submission: after, grade } = await loadState(f.assessment.id, studentId)
     expect(after.status).toBe("GRADED")
-    expect(Number(grade.marksObtained)).toBe(15)
+    expect(Number(grade.points)).toBe(15)
   })
 })

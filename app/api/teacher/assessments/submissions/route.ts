@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server"
 import { requireRole } from "@/lib/authz"
 import { prisma } from "@/lib/prisma"
+import { applyManualMark } from "@/lib/grading/review-service"
+import { toAssessmentScale } from "@/lib/gradebook"
 
 async function getTeacherStaffId(userId: string) {
   const staff = await prisma.staffProfile.findUnique({ where: { userId }, select: { id: true } })
@@ -53,7 +55,10 @@ export async function GET() {
               course: { select: { code: true, name: true } },
             },
           },
-          grades: { select: { studentId: true, marksObtained: true } },
+          finalGrades: {
+            where: { publishedAt: { not: null } },
+            select: { studentId: true, points: true, maxPoints: true },
+          },
         },
       },
     },
@@ -63,7 +68,7 @@ export async function GET() {
 
   return NextResponse.json({
     submissions: submissions.map((item) => {
-      const score = item.assessment.grades.find((grade) => grade.studentId === item.student.id)
+      const grade = item.assessment.finalGrades.find((row) => row.studentId === item.student.id)
       return {
         id: item.id,
         status: item.status,
@@ -89,7 +94,13 @@ export async function GET() {
           term: item.assessment.offering.term,
           academicYear: item.assessment.offering.academicYear,
         },
-        score: score ? Number(score.marksObtained) : null,
+        score: grade
+          ? toAssessmentScale(
+              Number(grade.points),
+              Number(grade.maxPoints),
+              item.assessment.maxMarks,
+            )
+          : null,
       }
     }),
   })
@@ -177,24 +188,16 @@ export async function PUT(request: Request) {
   }
 
   await prisma.$transaction(async (tx) => {
-    if (hasScore && score !== null) {
-      await tx.assessmentGrade.upsert({
-        where: {
-          assessmentId_studentId: {
-            assessmentId: submission.assessmentId,
-            studentId: submission.studentId,
-          },
-        },
-        create: {
-          assessmentId: submission.assessmentId,
-          studentId: submission.studentId,
-          marksObtained: score,
-          gradedAt: new Date(),
-        },
-        update: {
-          marksObtained: score,
-          gradedAt: new Date(),
-        },
+    if (hasScore) {
+      // The submission grader's score is a teacher's manual mark: publish it
+      // into the audited modern pipeline (or clear+audit it on an explicit
+      // `null`), never the legacy `AssessmentGrade` store.
+      await applyManualMark(tx, {
+        assessmentId: submission.assessmentId,
+        studentId: submission.studentId,
+        points: score,
+        maxPoints: submission.assessment.maxMarks,
+        actor: { id: user.id, role: "teacher" },
       })
     }
 

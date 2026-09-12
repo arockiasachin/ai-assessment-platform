@@ -129,14 +129,13 @@ workarounds that the migration replaced and how each is now handled.
 | LTI registration and user mapping          | Registration read from env vars; the platform `userId` is supplied per request                             | `LtiRegistration` + `LtiUserMapping`; request map is an override            | [`features/lms-export.md`](./features/lms-export.md)                   |
 | Per-assessment quiz attempt cap            | Server constant (`DEFAULT_MAX_ATTEMPTS` = 3) plus `QUIZ_MAX_ATTEMPTS`                                      | `Assessment.maxAttempts` (column → env → 3)                                 | [`features/quiz-grading.md`](./features/quiz-grading.md)               |
 
-### Grade duality
+### Grade store unified
 
-The legacy `AssessmentGrade` model still coexists with the modern `Grade` pipeline. The LMS export
-prefers a published `Grade` and uses `AssessmentGrade` only as a fallback when no modern row exists;
-an unpublished modern draft deliberately pre-empts the legacy fallback. That precedence is a
-**product decision**, not a resolved defect. Retiring `AssessmentGrade` is Phase 4 work. See
-[`features/lms-export.md`](./features/lms-export.md) and
-[`security/security-review.md`](./security/security-review.md) (S-3).
+The legacy `AssessmentGrade` model has been **retired** (table dropped by migration
+`20260912020000_retire_assessment_grade`). A teacher's manual mark now publishes into the modern
+`Grade` with an `AuditLog` row; every reader — the gradebook payload, student assessments,
+submission grading, group-grade resolution, LMS export, and the admin explorer — reads the modern
+store. See [`verification/grade-store-unification.md`](./verification/grade-store-unification.md).
 
 ### Security review — SUSPECTED and decisions (not fixed)
 

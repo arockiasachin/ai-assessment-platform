@@ -23,7 +23,7 @@ async function main() {
   await prisma.submission.deleteMany()
   await prisma.quizQuestion.deleteMany()
   await prisma.quiz.deleteMany()
-  await prisma.assessmentGrade.deleteMany()
+  await prisma.grade.deleteMany()
   await prisma.assessment.deleteMany()
   await prisma.enrollment.deleteMany()
   await prisma.courseOffering.deleteMany()
@@ -574,12 +574,28 @@ async function main() {
 
       const marks = Math.round(pct * assessment.maxMarks)
 
-      await prisma.assessmentGrade.create({
-        data: {
+      await prisma.grade.upsert({
+        where: {
+          assessmentId_studentId: {
+            assessmentId: assessment.id,
+            studentId: student.id,
+          },
+        },
+        update: {
+          points: marks,
+          maxPoints: assessment.maxMarks,
+          percentage: assessment.maxMarks > 0 ? (marks / assessment.maxMarks) * 100 : null,
+          source: "TEACHER_OVERRIDE",
+          publishedAt: new Date(),
+        },
+        create: {
           assessmentId: assessment.id,
           studentId: student.id,
-          marksObtained: marks,
-          rubricRef: `mongo:rubrics/${assessment.id}`,
+          points: marks,
+          maxPoints: assessment.maxMarks,
+          percentage: assessment.maxMarks > 0 ? (marks / assessment.maxMarks) * 100 : null,
+          source: "TEACHER_OVERRIDE",
+          publishedAt: new Date(),
         },
       })
 

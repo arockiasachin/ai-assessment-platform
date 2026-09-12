@@ -9,6 +9,9 @@ import { createSpineFixture } from "./fixtures/spine"
  * `POST /api/gradebook/marks` used to clamp out-of-range scores silently and
  * return `200 success`, so a caller could not tell that the stored value
  * differed from the one it sent. The service must reject instead.
+ *
+ * The mark itself now lands in the modern `Grade` store (published + audited),
+ * not the retired `AssessmentGrade`.
  */
 describe("upsertAssessmentGrade range validation", () => {
   beforeEach(async () => {
@@ -31,13 +34,16 @@ describe("upsertAssessmentGrade range validation", () => {
     return { f, studentId, teacher, otherTeacher, admin }
   }
 
-  it("stores an in-range score", async () => {
+  it("stores an in-range score in the published modern grade", async () => {
     const { f, studentId, teacher } = await setup()
     await upsertAssessmentGrade({ studentId, assessmentId: f.assessment.id, score: 15 }, teacher)
-    const grade = await prisma.assessmentGrade.findFirstOrThrow({
+    const grade = await prisma.grade.findFirstOrThrow({
       where: { assessmentId: f.assessment.id, studentId },
     })
-    expect(Number(grade.marksObtained)).toBe(15)
+    expect(Number(grade.points)).toBe(15)
+    expect(grade.publishedAt).not.toBeNull()
+    expect(grade.approvedById).toBe(f.teacher.staffProfile!.id)
+    expect(grade.source).toBe("TEACHER_OVERRIDE")
   })
 
   it("rejects a score above maxMarks instead of clamping it", async () => {
@@ -47,7 +53,7 @@ describe("upsertAssessmentGrade range validation", () => {
     ).rejects.toThrow("Score must be between 0 and 20.")
 
     await expect(
-      prisma.assessmentGrade.count({ where: { assessmentId: f.assessment.id, studentId } }),
+      prisma.grade.count({ where: { assessmentId: f.assessment.id, studentId } }),
     ).resolves.toBe(0)
   })
 
@@ -68,12 +74,21 @@ describe("upsertAssessmentGrade range validation", () => {
     ).rejects.toThrow("Score must be between 0 and 20.")
   })
 
-  it("still deletes a mark when the score is null", async () => {
+  it("accepts a zero score rather than treating it as missing", async () => {
+    const { f, studentId, teacher } = await setup()
+    await upsertAssessmentGrade({ studentId, assessmentId: f.assessment.id, score: 0 }, teacher)
+    const grade = await prisma.grade.findFirstOrThrow({
+      where: { assessmentId: f.assessment.id, studentId },
+    })
+    expect(Number(grade.points)).toBe(0)
+  })
+
+  it("deletes the published grade when the score is cleared", async () => {
     const { f, studentId, teacher } = await setup()
     await upsertAssessmentGrade({ studentId, assessmentId: f.assessment.id, score: 15 }, teacher)
     await upsertAssessmentGrade({ studentId, assessmentId: f.assessment.id, score: null }, teacher)
     await expect(
-      prisma.assessmentGrade.count({ where: { assessmentId: f.assessment.id, studentId } }),
+      prisma.grade.count({ where: { assessmentId: f.assessment.id, studentId } }),
     ).resolves.toBe(0)
   })
 
@@ -88,7 +103,7 @@ describe("upsertAssessmentGrade range validation", () => {
     const { f, studentId, admin } = await setup()
     await upsertAssessmentGrade({ studentId, assessmentId: f.assessment.id, score: 10 }, admin)
     await expect(
-      prisma.assessmentGrade.count({ where: { assessmentId: f.assessment.id, studentId } }),
+      prisma.grade.count({ where: { assessmentId: f.assessment.id, studentId } }),
     ).resolves.toBe(1)
   })
 })
