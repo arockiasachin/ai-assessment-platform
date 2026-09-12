@@ -1,7 +1,8 @@
 # Tests
 
-Phase 1 test harness: [Vitest](https://vitest.dev) for unit and data-layer tests.
-Tests never call a live LLM; `tests/setup.ts` forces `LLM_PROVIDER=mock`.
+Vitest for unit and data-layer tests, plus DB-backed route/service tests. At
+`12e45be` the suite is **93 test files** (`ls tests/*.test.ts`). Tests never call
+a live LLM; `tests/setup.ts` forces `LLM_PROVIDER=mock`.
 
 ## Running tests
 
@@ -10,9 +11,16 @@ npm test           # run once
 npm run test:watch # watch mode
 ```
 
-Database-backed tests (`tests/spine.test.ts`) need a Postgres with the
+Database-backed tests (about 35 files, identified by importing
+`tests/helpers/db.ts`, e.g. `tests/spine.test.ts`,
+`tests/quiz-attempts-pipeline.test.ts`, `tests/demo-spine.test.ts`,
+`tests/retention-purge.test.ts`) need a Postgres with the
 [pgvector](https://github.com/pgvector/pgvector) extension. Pure unit tests
-(`tests/llm-mock.test.ts`) run without a database.
+(`tests/llm-mock.test.ts`, `tests/quiz-scoring.test.ts`,
+`tests/analytics-item-analysis.test.ts`) run without a database. Two files,
+`tests/code-eval-docker.test.ts` and `tests/code-eval-unit-isolation.test.ts`,
+additionally need the Docker daemon and the pinned `python:3.12-slim` /
+`node:22-slim` images, and skip themselves when those are unavailable.
 
 ## Local test database
 
@@ -52,17 +60,29 @@ migration history with `prisma migrate deploy`:
 2. `prisma migrate deploy` — runs every directory under `prisma/migrations/`
    against the test database, exactly as a deployment would.
 
-The single baseline migration (`20260911180000_baseline`) takes the empty
-database straight to `prisma/schema.prisma`. It runs
-`CREATE EXTENSION IF NOT EXISTS vector;` and creates the
-`MaterialChunk_embedding_hnsw_idx` HNSW index, neither of which Prisma emits
-for an `Unsupported("vector(1536)")` column.
+There are six committed migration directories:
+
+```
+20260911180000_baseline
+20260912000000_schema_unfreeze
+20260912010000_restore_course_rating
+20260912020000_retire_assessment_grade
+20260912030000_retire_quiz
+20260912040000_add_retention_policy
+```
+
+The baseline migration takes the empty database straight to the Phase 1
+`prisma/schema.prisma`. It runs `CREATE EXTENSION IF NOT EXISTS vector;` and
+creates the `MaterialChunk_embedding_hnsw_idx` HNSW index, neither of which
+Prisma emits for an `Unsupported("vector(1536)")` column. The five later
+migrations unfreeze the schema, restore course ratings, retire the legacy
+`AssessmentGrade` and `Quiz`/`QuizQuestion` stores, and add the retention
+policy's anchor, respectively.
 
 Because the suite builds the schema through the migrations, CI fails if the
 migration history stops reproducing `prisma/schema.prisma` from empty. The
 datamodel is authoritative; when it changes, verify the migrations still build a
-fresh database (a squash into a new baseline is the simplest way to do that
-while the project has no production database).
+fresh database.
 
 ## Safety rules
 

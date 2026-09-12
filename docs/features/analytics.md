@@ -37,8 +37,9 @@ student's **latest finalized** attempt (`SUBMITTED` or `GRADED`). `items[]`
 carries the per-question difficulty and discrimination indices plus the
 `insufficientData` flags and notes.
 
-Threshold overrides are query params (the frozen schema has no offering-level
-settings column): `classAverageBelow`, `minClassSampleSize`,
+Threshold overrides are query params that override the offering's persisted
+`CourseOffering.analyticsSettings` (added by `20260912000000_schema_unfreeze`, landed `759333b`):
+`classAverageBelow`, `minClassSampleSize`,
 `contributionShareAtLeast`, `minContributionEvents`, `pendingReviewsAtLeast`.
 Out-of-range values are a 400.
 
@@ -183,10 +184,11 @@ offering.teacherId === staffId` (assessment). Otherwise 403.
 
 ## Deferred items and limits
 
-- **Thresholds are per-request, not persisted.** The frozen schema has no
-  settings column on `CourseOffering`/`Assessment`; overrides arrive as query
-  params and defaults live in code. A future migration could add a JSON column
-  to persist them per offering.
+- **Thresholds are persisted per offering, with per-request overrides.**
+  `CourseOffering.analyticsSettings` (added by `20260912000000_schema_unfreeze`,
+  `759333b`) stores the intervention and item-analysis thresholds. Resolution is
+  code default ← persisted setting ← query-param override, and `GET`/`PUT
+/api/teacher/analytics/settings` read and write the stored values.
 - **Extreme-groups D only.** No point-biserial correlation or distractor
   analysis yet; the 27% method matches the classic "discrimination index" but
   is noisy below ~30 responses even though the floor is 20.

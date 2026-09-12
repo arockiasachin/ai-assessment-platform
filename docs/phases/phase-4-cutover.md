@@ -48,12 +48,38 @@ From the cutover definition and the product spec:
 
 ## Status
 
-**Not started.** The legacy tree is still present and still builds. The Phase 1 schema is explicitly
-additive: commit `643f96d` states that legacy models "are untouched for Phase 4 cutover." The
-existing seed is `prisma/seed.ts`.
+**Complete** at `12e45be`; local `main`, `dev`, `origin/main` and `origin/dev` all point at it, and
+`git rev-list --count main..dev` is 0. The cutover work landed in this order:
 
-Phases 0–2 are complete and all three Phase 3 hardening pods are merged. The Phase 3
-grading-agreement report is not shipped, so one of this phase's stated dependencies is unmet.
+| Work                                                        | Landed in | Migration / source                                                                                                                |
+| ----------------------------------------------------------- | --------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| Security hardening (closes Phase 3 decisions S-1, S-2, S-4) | `7011bfa` | [`security/hardening.md`](../security/hardening.md)                                                                               |
+| Schema unfreeze (six capabilities, seven dead models)       | `759333b` | `20260912000000_schema_unfreeze`; [`schema/unfreeze.md`](../schema/unfreeze.md)                                                   |
+| Course-ratings restoration                                  | `b6222c8` | `20260912010000_restore_course_rating`; [`features/course-ratings.md`](../features/course-ratings.md)                             |
+| Centralised partial-update guard                            | `b225b39` | [`engineering/partial-update-guide.md`](../engineering/partial-update-guide.md)                                                   |
+| Unified grade store; `AssessmentGrade` retired              | `87f094e` | `20260912020000_retire_assessment_grade`; [`verification/grade-store-unification.md`](../verification/grade-store-unification.md) |
+| Seeded demo course                                          | `9b7340f` | `prisma/seed-demo.ts`, `tests/demo-spine.test.ts`, [`demo.md`](../demo.md)                                                        |
+| Legacy quiz store retired; JSON import migrated             | `d353a53` | `20260912030000_retire_quiz`; [`verification/legacy-quiz-retirement.md`](../verification/legacy-quiz-retirement.md)               |
+| DeepSeek provider                                           | `fe65e5a` | [`llm-providers.md`](../llm-providers.md)                                                                                         |
+| Student-work retention policy                               | `702ab25` | `20260912040000_add_retention_policy`; [`privacy/retention-policy.md`](../privacy/retention-policy.md)                            |
+| Embeddings provider decoupled from chat                     | `aefe1c2` | [`llm-providers.md`](../llm-providers.md#split-providers-chat-and-embeddings)                                                     |
+| Short-answer partial credit                                 | `5981203` | [`features/short-answer-partial-credit.md`](../features/short-answer-partial-credit.md)                                           |
+| Grade-immutability fixes (bug-fix run 4)                    | `3992ce4` | [`verification/bugfix-run-4.md`](../verification/bugfix-run-4.md)                                                                 |
+
+Two acceptance items are deliberately **not** met as originally written:
+
+- **`CourseRating` is not gone.** The schema unfreeze dropped it on an audit that wrongly reported
+  zero references, and it was restored in `b6222c8` because it is a live product feature. It is
+  present in `prisma/schema.prisma` at `12e45be`; see
+  [`features/course-ratings.md`](../features/course-ratings.md).
+- **The admin datasets browser was not removed.** `components/admin-datasets-view.tsx` still exists
+  and browses the live tables; the unfreeze removed only its panels for the deleted tables. Removing
+  the browser entirely was not part of what shipped.
+
+The seeded demo course is the end-to-end proof: `tests/demo-spine.test.ts` asserts the whole spine
+(author → generate → deliver → evaluate → review → publish → analytics/export) on one course, and
+that every published grade is attributable to a human action. It is composability evidence, not
+scale or grading-quality evidence.
 
 ## Key decisions and why
 
@@ -63,41 +89,64 @@ grading-agreement report is not shipped, so one of this phase's stated dependenc
 - **Seed the full spine, not a happy-path slice.** A demo that exercises one feature proves one
   feature. The cutover demo must exercise the entire path, which is also the Phase 2 completion
   criterion.
-- **Delete the schema drift rather than migrate it.** Attendance, streams, course ratings, grade
-  history, `ExternalReference`, and `noSqlRefId` serve no use case in this product and were imported
-  from the BI half. There is nothing to preserve.
+- **Delete the schema drift rather than migrate it.** Attendance, streams, grade history,
+  `ExternalReference`, and `noSqlRefId` serve no use case in this product and were imported from the
+  BI half. There is nothing to preserve.
+- **Restore `CourseRating` rather than lose a live feature.** The unfreeze's audit missed the
+  generated-client call sites (`prisma.courseRating`) behind course ratings. Once that was found,
+  the model and its modernized implementation were restored by a dedicated migration instead of
+  leaving a product regression; see [`features/course-ratings.md`](../features/course-ratings.md).
+- **Two stores retired, one at a time.** The grade store and the quiz store were each unified onto
+  the audited modern pipeline with a migration that drops the legacy table, after a repo-wide
+  reference sweep.
 
 ## Evidence
 
-None for the cutover itself. The groundwork is visible in the current tree:
-
-- Legacy models still in `prisma/schema.prisma`: `AttendanceSession`, `AttendanceRecord`, `Stream`,
-  `StudentStream`, `CourseRating`, `CourseGradeHistory`, `ExternalReference`, `AssessmentGrade`,
-  `QuizQuestion`.
-- The legacy surface still present: `app/(dashboard)/`, `app/api/gradebook/`, `app/api/teacher/`,
-  `app/api/student/`, `app/api/auth/seed/route.ts`, `app/api/admin/dev/rebalance-offerings/route.ts`,
-  `components/admin-datasets-view.tsx`, `components/quiz-runner.tsx`, and the `lib/gradebook*.ts`
-  modules.
-- The archive tag `legacy-archive-v1` at commit `82a48fc` preserves the pre-rebuild tree, so the
-  cutover can diff against it after deletion.
+- Migrations, in order: `20260912000000_schema_unfreeze` (six capabilities added, seven dead models
+  dropped), `20260912010000_restore_course_rating`, `20260912020000_retire_assessment_grade`,
+  `20260912030000_retire_quiz`, `20260912040000_add_retention_policy`. There are six directories in
+  `prisma/migrations/` including the baseline, and `tests/global-setup.ts` applies the full history
+  to an empty database on every test run.
+- `prisma/schema.prisma` no longer contains `AttendanceSession`, `AttendanceRecord`, `Stream`,
+  `StudentStream`, `CourseGradeHistory`, `ExternalReference`, `AssessmentGrade`, `Quiz`,
+  `QuizQuestion`, `noSqlRefId`, or `legacyPassword`. `CourseRating` is present because it was
+  deliberately restored; `components/admin-datasets-view.tsx` still exists (see Status).
+- `prisma/seed-demo.ts` seeds the demo course and `tests/demo-spine.test.ts` walks it; the counts and
+  the per-route browser/curl evidence are in [`demo.md`](../demo.md).
+- Bug-fix run 4 ([`verification/bugfix-run-4.md`](../verification/bugfix-run-4.md)) re-verified the
+  unified grade pipeline and the migrated quiz import against a real database and added the
+  grade-immutability regression tests (`tests/grade-manual-immutability.test.ts`,
+  `tests/grade-rerun-race.test.ts`).
+- At `12e45be` the suite is **93 test files** (`ls tests/*.test.ts`) and the route surface is **69**
+  `app/api/**/route.ts` handlers; see [`README.md`](../README.md#repository-at-a-glance).
+- The archive tag `legacy-archive-v1` at commit `82a48fc` preserves the pre-rebuild tree.
 
 ## Risks and open questions
 
-- **Deletion breaks dependents that are easy to miss.** `lib/admin-db.ts`, `lib/gradebook-db.ts`,
-  `components/admin-datasets-view.tsx`, and the rebalance endpoint all reference the legacy models.
-  Removing the models without removing the readers is a build break, which the typecheck gate will
-  catch.
-- **The migration that drops tables is irreversible in production.** It needs a backup step and a
-  dry run against a seeded database before it is applied.
-- **The demo course is a fixture, not evidence of scale.** Passing the spine on one course does not
-  prove performance or grading quality; those are Phase 3 findings.
-- **LTI registration is external.** The LMS pod's LTI AGS path may need a real platform registration,
-  which is outside the repository.
+- **Deletion breaks dependents that are easy to miss.** _Materialized and handled._ `lib/admin-db.ts`,
+  `lib/gradebook-db.ts`, `components/admin-datasets-view.tsx`, and the rebalance endpoint all
+  referenced legacy models; each reader was migrated before its model was dropped, and the typecheck
+  gate would have caught a miss. The `CourseRating` case (a live feature found only after an
+  incorrect "zero references" audit) is the cautionary example: a token grep is not a reference
+  audit.
+- **The migration that drops tables is irreversible in production.** The retirement migrations do
+  not backfill legacy rows by design (the project is pre-release). A deployment with real legacy
+  data must decide attribution and publish state before applying them; see
+  [`verification/grade-store-unification.md`](../verification/grade-store-unification.md).
+- **The demo course is a fixture, not evidence of scale.** Passing the spine on one five-student
+  course does not prove performance or grading quality; those are Phase 3 findings.
+- **LTI registration is external.** The `LtiRegistration`/`LtiUserMapping` models now persist a
+  non-secret registration and user mapping, but a real AGS call still needs an actual platform
+  registration and network egress, which is outside the repository.
+- **No Phase 5 is defined.** The plan ends at Phase 4; there is no roadmap to invent beyond what the
+  cutover delivered.
 
 ## Dependencies on other phases
 
 - **Depended on Phase 3** for the security review, the accessibility and performance audit, and the
-  grading-agreement report. The review and the audit are in hand; the agreement report is not, so
-  cutting over still skips a stated gate.
+  grading-agreement report. The review and the audit are in hand; the grading-agreement report was
+  never built, so cutting over skipped a stated gate. Phase 4 shipped anyway (`12e45be`), and the
+  unbuilt report is recorded in
+  [Known gaps and open decisions](../README.md#known-gaps-and-open-decisions).
 - **Depended on Phase 2** for a spine that actually works end to end. All seven Phase 2 pods are
-  merged, so this is satisfied.
+  merged, so this is satisfied, and the demo course proves the whole path.

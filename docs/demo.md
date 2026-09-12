@@ -9,7 +9,7 @@ teacher authors material → AI generates a quiz → student takes and submits
 → a human publishes → analytics + LMS export reflect it
 ```
 
-This is the missing proof the [docs README](./README.md#end-to-end-proof-on-one-real-course-is-phase-4-work)
+This is the missing proof the [Phase 4 doc](./phases/phase-4-cutover.md#status)
 called out: every Phase 2 pod had route/service tests, but nothing had ever been run through as one
 continuous flow. The demo also closes the seed-coverage gap — the old `prisma/seed.ts` left
 seventeen models with **zero** rows.

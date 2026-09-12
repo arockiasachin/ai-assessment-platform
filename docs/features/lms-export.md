@@ -126,7 +126,7 @@ One header row per file, RFC 4180 escaping (`"` doubled, fields containing `,`,
 | `dateLastModified` | export timestamp (schema has no `updatedAt` on the assessment relation here)                       |
 | `title`            | assessment title / `"<courseCode> final grade"`                                                    |
 | `description`      | assessment description when present, else empty                                                    |
-| `assignDate`       | mirrors `dueDate` — the frozen schema has no assign date                                           |
+| `assignDate`       | mirrors `dueDate` — the schema has no assign date                                                  |
 | `dueDate`          | assessment due date (ISO)                                                                          |
 | `class`            | the offering id (OneRoster class)                                                                  |
 | `course`           | the course id                                                                                      |
@@ -211,8 +211,10 @@ synthesizes `https://lms.invalid/...` URLs.
 
 **Configuration** (`validateLtiAgsConfig` / `requireLtiAgsConfig`) reads
 `LTI_PLATFORM_ISSUER`, `LTI_CLIENT_ID`, `LTI_DEPLOYMENT_ID`, `LTI_KEY_ID`,
-`LTI_PRIVATE_KEY`, `LTI_AGS_LINEITEMS_URL`. Missing variables produce a 422 whose
-message names them and states that persistence needs a migration.
+`LTI_PRIVATE_KEY`, `LTI_AGS_LINEITEMS_URL`. Missing variables produce a 422 that names them. A
+registration can also be persisted with `LtiRegistration` + `LtiUserMapping`
+(added by `20260912000000_schema_unfreeze`, `759333b`); the env-driven values and
+a request-supplied `userId` map remain fallbacks/overrides.
 
 ## Scoping evidence
 
@@ -272,10 +274,11 @@ message names them and states that persistence needs a migration.
 
 ## Deferred items and limits (human decisions)
 
-- **LTI registration persistence needs a migration.** There are no LTI models in
-  the frozen schema, so the registration is read from environment variables and
-  the LTI `userId` is supplied explicitly. Persisting a registration and a
-  per-student LTI user mapping requires a schema change — deliberately not made.
+- **LTI registration persistence landed.** `LtiRegistration` and `LtiUserMapping`
+  (added by `20260912000000_schema_unfreeze`, `759333b`) persist a non-secret
+  registration and the per-student mapping; the env-driven configuration remains
+  the fallback and a request map remains an override. No key material is stored —
+  `privateKeyRef` is an opaque pointer to the environment/secret store.
 - **No live LMS calls.** The typed client is the seam; a live implementation
   (OAuth2 client-credentials + JWT signing, `fetch` transport) is not shipped
   because there is no LMS and no network egress. No OIDC login, deep linking, or
@@ -289,6 +292,6 @@ message names them and states that persistence needs a migration.
   `resultValue` carries the same value as a string for 1.1-era consumers. If a
   stricter 1.2-only consumer is the target, `resultValue` can be dropped behind a
   flag without changing the pipeline.
-- **Weights are not persisted.** The schema has no settings column, so a
-  configuration arrives per request and the default lives in code. A future
+- **Weights are not persisted.** The schema has no grade-weight settings column,
+  so a configuration arrives per request and the default lives in code. A future
   migration could persist per-offering weights.

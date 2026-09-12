@@ -64,8 +64,10 @@ Two Phase 3 deliverables are **not** shipped:
 - Documentation completion is only partly met: these phase documents and the three reports are
   current, but the grading-agreement report is missing.
 
-The security review additionally left four items deliberately unfixed (S-1, S-2, S-4, S-5); see
-[Known gaps and open decisions](../README.md#known-gaps-and-open-decisions).
+The security review additionally left three decisions open (S-1, S-2, S-4) plus one operational item
+(S-5). Phase 4 closed the three decisions in `7011bfa`; S-5 remains an operational orphan-reaper
+concern. See [Known gaps and open decisions](../README.md#known-gaps-and-open-decisions) and
+[`../security/hardening.md`](../security/hardening.md).
 
 ## Key decisions and why
 
@@ -98,8 +100,8 @@ There is no grading-agreement report.
 
 - **Security findings may force a return to Phase 2.** _Materialized._ The review's three CONFIRMED
   findings touched Phase 2 code (`lib/code-eval/**` and the enroll route), not just hardening code,
-  and were fixed in `7360b16`. Four items remain as SUSPECTED or product decisions (S-1, S-2, S-4,
-  S-5).
+  and were fixed in `7360b16`. Three items remained as decisions (S-1, S-2, S-4); Phase 4 closed
+  them in `7011bfa`, and S-5 remains operational only.
 - **The agreement metric needs labeled data that does not yet exist.** _Still open._ Producing the
   fixture set is work in its own right and needs a teacher or domain expert to label. No report was
   produced.
@@ -112,4 +114,6 @@ There is no grading-agreement report.
 - **Depended on Phase 2.** The spine is end to end, and the review, audit, and observability work
   all landed against it.
 - **Phase 4 depends on this phase.** The security review and the a11y/perf audit are in hand; the
-  grading-agreement report is not, so the cutover gate is only partly satisfied.
+  grading-agreement report was never built, so the cutover gate was only partly satisfied. Phase 4
+  shipped anyway (`12e45be`); the agreement report remains unbuilt and is recorded in
+  [Known gaps](../README.md#known-gaps-and-open-decisions).

@@ -8,8 +8,10 @@ staleness (S-2), and in-process `unit` code execution (S-4). The CONFIRMED findi
 (SEC-1, SEC-2, SEC-3) were already fixed in Phase 3 and were **not** re-audited or
 re-fixed.
 
-`prisma/schema.prisma` and `prisma/migrations/**` are unchanged and still frozen.
-No dependency was added; `package.json` and `package-lock.json` are unchanged.
+`prisma/schema.prisma` and `prisma/migrations/**` were unchanged by this pass and were still frozen
+at this branch point (base `dev` @ `85fee42`); the schema was unfrozen later in Phase 4
+(`20260912000000_schema_unfreeze`, `759333b`). No dependency was added; `package.json` and
+`package-lock.json` are unchanged.
 
 ---
 
@@ -121,7 +123,7 @@ database mocked).
   or deletion to take effect.
 - The cache is per process, so different instances may briefly disagree during the
   window.
-- The frozen schema has no token-version column, so this does not invalidate sessions
+- The schema has no token-version column, so this does not invalidate sessions
   on password change or logout elsewhere; it addresses **role staleness** only, which
   is the recorded S-2 decision. A token-version column remains the clean fix for
   global session revocation and would need a migration.

@@ -91,6 +91,10 @@ deliverable is **not** fully met: the legacy fetch-on-mount client views were no
 Server Components, so `react-hooks/set-state-in-effect` remains a warning (see the deferred P1/P2
 items in [`../quality/a11y-perf-audit.md`](../quality/a11y-perf-audit.md)).
 
+The phase goal's end-to-end proof — the whole path working on one real course — landed in Phase 4
+as the seeded demo course (`prisma/seed-demo.ts` and `tests/demo-spine.test.ts`, landed `9b7340f`);
+see [`../demo.md`](../demo.md).
+
 ## Key decisions and why
 
 - **Each pod works in its own git worktree.** Parallel agents in one tree stomp each other. Isolating
@@ -117,9 +121,10 @@ documents linked above; each pod's tests are named in its own "Tests" table.
 - **The code sandbox was the highest risk.** It shipped with Docker isolation (no network, explicit
   CPU/memory/PID limits, non-root read-only containers, guaranteed cleanup) rather than the planned
   Piston worker. The Phase 3 security review confirmed the submission cap is atomic under
-  concurrency but left the in-process `unit` harness as a documented arms race (S-4 in
-  [`../security/security-review.md`](../security/security-review.md)), and container cleanup still
-  depends on the Docker daemon (S-5).
+  concurrency and left the in-process `unit` harness as a documented arms race (S-4). S-4 was
+  **closed in Phase 4** (`7011bfa`): `unit` execution now runs in a fresh child interpreter and the
+  harness owns the result framing. Container cleanup still depends on the Docker daemon (S-5,
+  operational); see [`../security/hardening.md`](../security/hardening.md).
 - **Grading quality cannot be proven by unit tests.** The plan called for a small human-labeled
   fixture set and a reported agreement score. That Phase 3 deliverable is **not shipped**; see
   [Known gaps and open decisions](../README.md#known-gaps-and-open-decisions).

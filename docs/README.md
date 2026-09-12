@@ -4,8 +4,10 @@ An LLM-assisted assessment platform in which teachers keep final grading authori
 server-authoritative, and group projects receive fair per-student assessment.
 
 This directory is the documentation index for the greenfield rebuild. The status below reflects
-`dev` at commit `8f00a5f` (`fix(instrumentation): stop bundling Node-only code into the Edge
-runtime`), where all of Phases 0–3 have landed.
+`dev` at commit `12e45be` (`Merge branch 'p4/verify-unified' into dev`), where all of Phases 0–4 have
+landed. Local `main`, `dev`, `origin/main` and `origin/dev` all point at `12e45be`; `git rev-list
+--count main..dev` and `git rev-list --count origin/main..dev` are both **0**. There is no Phase 5 in
+the plan or the repository.
 
 ## Start here
 
@@ -15,24 +17,38 @@ runtime`), where all of Phases 0–3 have landed.
   flow, the Definition of Done, CI gates, commit conventions, and the local verification commands.
 - [`llm-providers.md`](./llm-providers.md) — how to select a provider, the DeepSeek
   configuration, the cost/latency trade-off, and how model provenance is recorded on AI grades.
+- [`privacy/retention-policy.md`](./privacy/retention-policy.md) — the student-work retention
+  policy, the results-published anchor, and the entity-by-entity disposition.
+- [`security/hardening.md`](./security/hardening.md) — the Phase 4 work that closed the Phase 3
+  security decisions (login rate limiting, session role re-validation, out-of-process `unit`).
 
 ## Phase documents
 
-| Phase | Document                                                             | Status      |
-| ----- | -------------------------------------------------------------------- | ----------- |
-| 0     | [`phases/phase-0-foundations.md`](./phases/phase-0-foundations.md)   | Complete    |
-| 1     | [`phases/phase-1-contracts.md`](./phases/phase-1-contracts.md)       | Complete    |
-| 2     | [`phases/phase-2-feature-pods.md`](./phases/phase-2-feature-pods.md) | Complete    |
-| 3     | [`phases/phase-3-hardening.md`](./phases/phase-3-hardening.md)       | Complete    |
-| 4     | [`phases/phase-4-cutover.md`](./phases/phase-4-cutover.md)           | Not started |
+| Phase | Document                                                             | Status   |
+| ----- | -------------------------------------------------------------------- | -------- |
+| 0     | [`phases/phase-0-foundations.md`](./phases/phase-0-foundations.md)   | Complete |
+| 1     | [`phases/phase-1-contracts.md`](./phases/phase-1-contracts.md)       | Complete |
+| 2     | [`phases/phase-2-feature-pods.md`](./phases/phase-2-feature-pods.md) | Complete |
+| 3     | [`phases/phase-3-hardening.md`](./phases/phase-3-hardening.md)       | Complete |
+| 4     | [`phases/phase-4-cutover.md`](./phases/phase-4-cutover.md)           | Complete |
 
 Phase 3's three hardening pods (security review, accessibility and performance, observability) are
-complete. The human-labeled grading-agreement report that `phase-3-hardening.md` also lists as a
-deliverable is **not** shipped; see [Known gaps and open decisions](#known-gaps-and-open-decisions).
+complete, and the Phase 3 security decisions the review left open were closed in Phase 4
+([`security/hardening.md`](./security/hardening.md)). The human-labeled grading-agreement report
+that `phase-3-hardening.md` also lists as a deliverable was **never built**; see
+[Known gaps and open decisions](#known-gaps-and-open-decisions).
+
+Phase 4 delivered the seeded demo course (`9b7340f`), the schema unfreeze (`759333b`), the security
+hardening that closed the Phase 3 decisions (`7011bfa`), course-ratings restoration (`b6222c8`), the
+centralised partial-update guard (`b225b39`), the unified grade store (`87f094e`, `AssessmentGrade`
+retired), the legacy quiz retirement (`d353a53`, `Quiz`/`QuizQuestion` retired), the DeepSeek
+provider (`fe65e5a`) with a decoupled embeddings provider (`aefe1c2`), the student-work retention
+policy (`702ab25`), short-answer partial credit (`5981203`), and the grade-immutability fixes from
+bug-fix run 4 (`3992ce4`, merged `83dbbe9`).
 
 ## Shipped feature pods
 
-Ten pods are implemented and merged to `dev`. Commit hashes are the landing commits from
+Ten Phase 2/3 pods are implemented and merged to `dev`. Commit hashes are the landing commits from
 `git log --oneline dev`.
 
 | #   | Pod                                                | Phase | Landed in                   | Feature doc                                                    |
@@ -48,33 +64,51 @@ Ten pods are implemented and merged to `dev`. Commit hashes are the landing comm
 | 9   | Security review and hardening                      | 3     | `7360b16` (merge `ddbb30f`) | [`security/security-review.md`](./security/security-review.md) |
 | 10  | Accessibility and performance                      | 3     | `ebeaa1a` (merge `0e04764`) | [`quality/a11y-perf-audit.md`](./quality/a11y-perf-audit.md)   |
 
+Phase 4 then landed the cutover work. These are the Phase 4 landings, in landing order:
+
+| Work                                                        | Landed in | Feature doc / source                                                                   |
+| ----------------------------------------------------------- | --------- | -------------------------------------------------------------------------------------- |
+| Security hardening (Phase 3 decisions S-1, S-2, S-4 closed) | `7011bfa` | [`security/hardening.md`](./security/hardening.md)                                     |
+| Schema unfreeze (six columns, seven dead models dropped)    | `759333b` | [`schema/unfreeze.md`](./schema/unfreeze.md)                                           |
+| Restore course ratings                                      | `b6222c8` | [`features/course-ratings.md`](./features/course-ratings.md)                           |
+| Centralised partial-update guard                            | `b225b39` | [`engineering/partial-update-guide.md`](./engineering/partial-update-guide.md)         |
+| Unified grade store (`AssessmentGrade` retired)             | `87f094e` | [`verification/grade-store-unification.md`](./verification/grade-store-unification.md) |
+| Seeded demo course                                          | `9b7340f` | [`demo.md`](./demo.md)                                                                 |
+| Legacy quiz retirement (`Quiz`/`QuizQuestion` retired)      | `d353a53` | [`verification/legacy-quiz-retirement.md`](./verification/legacy-quiz-retirement.md)   |
+| DeepSeek provider                                           | `fe65e5a` | [`llm-providers.md`](./llm-providers.md)                                               |
+| Student-work retention policy                               | `702ab25` | [`privacy/retention-policy.md`](./privacy/retention-policy.md)                         |
+| Embeddings provider decoupled from chat                     | `aefe1c2` | [`llm-providers.md`](./llm-providers.md#split-providers-chat-and-embeddings)           |
+| Short-answer partial credit                                 | `5981203` | [`features/short-answer-partial-credit.md`](./features/short-answer-partial-credit.md) |
+| Grade immutability fixes (bug-fix run 4)                    | `3992ce4` | [`verification/bugfix-run-4.md`](./verification/bugfix-run-4.md)                       |
+
 ## Repository at a glance
 
-Measured on `dev` at `8f00a5f`.
+Measured on `dev` at `12e45be`.
 
-| Metric                | Value  | Measurement                                         |
-| --------------------- | ------ | --------------------------------------------------- |
-| Test files            | 65     | `ls tests/*.test.ts` (count)                        |
-| API route handlers    | 64     | `app/api/**/route.ts` (count)                       |
-| Phase 2 pods shipped  | 7      | Merged on `dev`                                     |
-| Phase 3 pods shipped  | 3      | Merged on `dev`                                     |
-| Repository visibility | public | `gh api repos/arockiasachin/ai-assessment-platform` |
-| Default branch        | `main` | `gh api repos/arockiasachin/ai-assessment-platform` |
+| Metric                | Value  | Measurement                                               |
+| --------------------- | ------ | --------------------------------------------------------- |
+| Test files            | 93     | `ls tests/*.test.ts` (count)                              |
+| API route handlers    | 69     | `find app/api -name route.ts` (count)                     |
+| Prisma migrations     | 6      | `ls prisma/migrations/` (excluding `migration_lock.toml`) |
+| Phase 2 pods shipped  | 7      | Merged on `dev`                                           |
+| Phase 3 pods shipped  | 3      | Merged on `dev`                                           |
+| Repository visibility | public | `gh api repos/arockiasachin/ai-assessment-platform`       |
+| Default branch        | `main` | `gh api repos/arockiasachin/ai-assessment-platform`       |
 
 ## Branch protection and CI
 
-Branch protection is enabled on both long-lived branches (verified with
+Branch protection is enabled on both long-lived branches (verified 2026-09-12 with
 `gh api repos/arockiasachin/ai-assessment-platform/branches/<branch>/protection`):
 
 - **`main`** — required status check: `Verify`. Zero required approving reviews
-  (`required_approving_review_count: 0`); `enforce_admins: false`. `main` receives only
-  phase-boundary merges and is currently at `22f608b` (the Phase 1 boundary).
+  (`required_approving_review_count: 0`); `enforce_admins: false`.
 - **`dev`** — required status check: `Verify` only (no required pull-request reviews;
-  `enforce_admins: false`). The integration branch; Phase 2 and Phase 3 landed here.
+  `enforce_admins: false`).
 
-`dev` is the default place for work. `main` lags: `git rev-list --count main..dev` is **36** and
-`git rev-list --count origin/main..dev` is **40** (the remote `main` is four commits behind the
-local `main`, which carries the four Phase 1 commits that were never pushed).
+`main` and `dev` both point at `12e45be`; `git rev-list --count main..dev` is **0** and
+`git rev-list --count origin/main..dev` is **0**. The Phase 1–4 boundary merges are all on both
+branches. The no-direct-pushes-to-`main` rule remains a convention for administrators rather than an
+absolute GitHub block, because `enforce_admins` is `false`.
 
 CI ([`../.github/workflows/ci.yml`](../.github/workflows/ci.yml)) runs on every pull request and on
 pushes to **both** `main` and `dev`. The `Verify` job installs dependencies, generates and validates
@@ -100,27 +134,34 @@ from empty. See [`development-workflow.md`](./development-workflow.md#ci-gates).
   machine. The legacy quiz path was moved server-authoritative so no answer key reaches the client.
 - **Phase 2, feature pods — complete.** All seven pods are implemented and merged (quiz generation,
   quiz attempt persistence and grading, rubric grading, code sandbox, groups and peer evaluation,
-  analytics, LMS export). Each ships behind the Phase 1 `zod` contract with route/service tests; the
-  per-pod schema workarounds are collected under [Known gaps](#known-gaps-and-open-decisions).
+  analytics, LMS export). Each ships behind the Phase 1 `zod` contract with route/service tests.
+  Short-answer partial credit, which Phase 1 and this phase left to a later item, shipped in Phase 4
+  (`5981203`).
 - **Phase 3, hardening — complete.** The security review, the accessibility and performance audit,
-  and the observability instrumentation are merged. The security review left four items as
-  SUSPECTED or product decisions, and the human-labeled grading-agreement report is not shipped;
-  both are recorded under [Known gaps](#known-gaps-and-open-decisions).
-- **Phase 4, cutover — not started.** A seeded demo course exercising the whole spine, then the
-  legacy tree is retired.
+  and the observability instrumentation are merged. The security review left three decisions open
+  (S-1, S-2, S-4) and one operational item (S-5); Phase 4 closed the three decisions, and S-5 is
+  an operational orphan-reaper concern. The human-labeled grading-agreement report was never built.
+  See [Known gaps](#known-gaps-and-open-decisions).
+- **Phase 4, cutover — complete.** The schema was unfrozen (`759333b`), seven dead models were
+  dropped, the Phase 3 security decisions were closed (`7011bfa`), course ratings were restored
+  (`b6222c8`), the grade stores were unified and `AssessmentGrade` retired (`87f094e`), a whole-spine
+  demo course was seeded and proven end to end (`9b7340f`), the legacy `Quiz`/`QuizQuestion` store
+  was retired (`d353a53`), DeepSeek became a first-class provider (`fe65e5a`) with a decoupled
+  embeddings provider (`aefe1c2`), the student-work retention policy shipped (`702ab25`),
+  short-answer partial credit shipped (`5981203`), and the grade-immutability defects found by
+  bug-fix run 4 were fixed (`3992ce4`).
 
 ## Known gaps and open decisions
 
 These are reported, not hidden. Each item links to the source that documents it.
 
-### Schema was frozen; six features worked around it (now unfrozen)
+### The schema was unfrozen; the workarounds were replaced
 
-`prisma/schema.prisma` and `prisma/migrations/**` were not changed by the Phase 2/3 pods, so six
-features needed a field the schema does not have and stored the state elsewhere. The
-`p4/schema-unfreeze` branch adds a single migration
-(`20260912000000_schema_unfreeze`) that gives each of the six a real column/model and drops seven
-dead models; see [`schema/unfreeze.md`](./schema/unfreeze.md). The table below records the
-workarounds that the migration replaced and how each is now handled.
+`prisma/schema.prisma` and `prisma/migrations/**` were frozen from Phase 1 through Phase 3, so six
+features needed a field the schema did not have and stored the state elsewhere. Migration
+`20260912000000_schema_unfreeze` (landed `759333b`) gave each of the six a real column/model and
+dropped seven dead models; see [`schema/unfreeze.md`](./schema/unfreeze.md). The table below records
+the workarounds that the migration replaced and how each is handled now.
 
 | Feature                                    | Workaround                                                                                                 | Migration outcome                                                           | Source                                                                 |
 | ------------------------------------------ | ---------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
@@ -131,54 +172,115 @@ workarounds that the migration replaced and how each is now handled.
 | LTI registration and user mapping          | Registration read from env vars; the platform `userId` is supplied per request                             | `LtiRegistration` + `LtiUserMapping`; request map is an override            | [`features/lms-export.md`](./features/lms-export.md)                   |
 | Per-assessment quiz attempt cap            | Server constant (`DEFAULT_MAX_ATTEMPTS` = 3) plus `QUIZ_MAX_ATTEMPTS`                                      | `Assessment.maxAttempts` (column → env → 3)                                 | [`features/quiz-grading.md`](./features/quiz-grading.md)               |
 
-### Grade store unified
+### Grade store unified, then the legacy quiz store retired
 
-The legacy `AssessmentGrade` model has been **retired** (table dropped by migration
-`20260912020000_retire_assessment_grade`). A teacher's manual mark now publishes into the modern
-`Grade` with an `AuditLog` row; every reader — the gradebook payload, student assessments,
-submission grading, group-grade resolution, LMS export, and the admin explorer — reads the modern
-store. See [`verification/grade-store-unification.md`](./verification/grade-store-unification.md).
+Two duplicate stores were retired in Phase 4:
 
-### Security review — SUSPECTED and decisions (not fixed)
+- The legacy `AssessmentGrade` model was **retired** (table dropped by migration
+  `20260912020000_retire_assessment_grade`). A teacher's manual mark now publishes into the modern
+  `Grade` with an `AuditLog` row; every reader — the gradebook payload, student assessments,
+  submission grading, group-grade resolution, LMS export, and the admin explorer — reads the modern
+  store. See [`verification/grade-store-unification.md`](./verification/grade-store-unification.md).
+- The legacy `Quiz`/`QuizQuestion` models were **retired** (tables dropped by migration
+  `20260912030000_retire_quiz`). The JSON importer writes published `Question`/`QuestionOption`
+  rows, and the import now requires an ownership-checked `offeringId`. See
+  [`verification/legacy-quiz-retirement.md`](./verification/legacy-quiz-retirement.md).
 
-The Phase 3 review left four items deliberately unfixed. See
-[`security/security-review.md`](./security/security-review.md) for evidence and rationale.
+`CourseRating` was dropped by the schema unfreeze and then deliberately restored in
+`20260912010000_restore_course_rating`; see [`features/course-ratings.md`](./features/course-ratings.md).
 
-- **S-1, medium — no login rate limiting.** `POST /api/auth/login` has no lockout, so bcrypt
-  guessing is unbounded. A meaningful fix needs shared state or edge middleware.
-- **S-2, medium — session role staleness.** A signed session carries the role for up to 7 days with
-  no database re-validation, so a demoted or deleted user keeps the old role until expiry
-  (`/api/auth/seed` re-checks; other admin routes do not).
-- **S-4, low — in-process `unit` code execution.** The demonstrated sandbox forgeries are closed,
-  but restoring intrinsics is an arms race; running `unit` execution out-of-process would fully
-  close it. That changes a documented sandbox behaviour and was left as a decision.
-- **S-5, low — container cleanup.** The final `docker rm -f` depends on the Docker daemon being
-  reachable; if it dies mid-request a container can leak. An orphan reaper is operational tooling.
+### Security review — the Phase 3 decisions are closed
+
+The Phase 3 review left three decisions open and one operational item; Phase 4 closed the three
+decisions in `7011bfa` ([`security/hardening.md`](./security/hardening.md)):
+
+- **S-1, login rate limiting — fixed.** `lib/login-rate-limit.ts` throttles `POST /api/auth/login`
+  on a sliding window over the normalized identifier and the client IP, with `429` + `Retry-After`
+  and non-enumerating responses.
+- **S-2, session role staleness — fixed.** `lib/authz-actor.ts` + `lib/authz.ts` re-validate the
+  actor against the database in `requireRole`/`requireUser`, with a short-lived cache.
+- **S-4, in-process `unit` code execution — fixed.** The `unit` harness now runs the student module
+  in a fresh child interpreter and owns the result framing, so the demonstrated container-stdout
+  forgeries cannot alter the result set.
+- **S-5, container cleanup — open, operational.** The final `docker rm -f` depends on the Docker
+  daemon being reachable; if it dies mid-request a container can leak. An orphan reaper is
+  operational tooling, not shipped code.
+
+The CONFIRMED findings from the Phase 3 review (SEC-1 harness integrity, SEC-2 submission-cap race,
+SEC-3 enrollment-cap race) were fixed in Phase 3 and were not re-audited.
+
+### Retention — deliberate retention and reversible decisions
+
+The retention policy ([`privacy/retention-policy.md`](./privacy/retention-policy.md)) is redact-only
+and never deletes a row. What remains:
+
+- **`AuditLog.before`/`after` snapshots are retained in full.** The policy never deletes or mutates
+  audit rows, but those snapshots can embed student text (for example a grade or suggestion
+  snapshot). Redacting inside an append-only audit row would weaken the evidence trail, so it is
+  left as a noted residual risk for a human decision.
+- **Retained free text that could quote a student.** `Submission.feedback`, `GradeReview.notes`,
+  and `ContributionEvent.summary` are deliberately retained. Each is a documented, reversible call:
+  adding the field to the redaction in `purgeOffering` and its tests is the change.
+- **No "unpublish" endpoint and no admin UI for the retention purge.** Publication is one-way by
+  design; the purge is available only as the guarded HTTP route
+  (`POST /api/admin/retention/purge`) and the `npm run retention:purge` script.
+
+### Grading quality and validation gaps
+
+- **The grading-agreement / calibration-metrics report (a Phase 3 deliverable) was never built.**
+  Human-labeled inter-rater agreement is not measured. No agreement number exists and none should
+  be quoted; the offline mock provider and the per-pod test suites exercise the pipeline but do not
+  measure grading quality.
+- **Prompt-hackability on LLM-graded text is mitigated, not eliminated.** The answer is never
+  trusted for correctness, an injection heuristic caps a suspicious response at its lexical
+  similarity and drops its confidence, and nothing publishes without a teacher. The platform's
+  safeguard is the human review gate, not a proof of model correctness.
+- **The short-answer similarity threshold is global, not per-question.** It is
+  `QUIZ_TEXT_SIMILARITY_THRESHOLD` (default `0.35`); a per-question override would need a schema
+  column that does not exist. See [`features/short-answer-partial-credit.md`](./features/short-answer-partial-credit.md).
+
+### Provider and multi-instance constraints
+
+- **`deepseek-flash` has no immutable snapshot**, so a grade cannot be tied to an exact model build.
+  The response `id` and provider-supplied `system_fingerprint` are retained in
+  `AIGradeSuggestion.rawResponse` for contestability, but the fingerprint is a claim, not a
+  guarantee. See [`llm-providers.md`](./llm-providers.md#provenance-deepseek-flash-is-a-moving-target).
+- **DeepSeek has no embeddings endpoint**, so `EMBEDDINGS_PROVIDER` must differ from `LLM_PROVIDER`
+  when using it; material indexing and retrieval need a provider that supports embeddings. See
+  [`llm-providers.md`](./llm-providers.md#split-providers-chat-and-embeddings).
+- **Multi-instance deployments need shared state.** The login rate limiter
+  (`lib/login-rate-limit.ts`) and the session re-validation cache (`lib/authz-actor.ts`) are
+  per-process. `next start` is a single process, so they are real mitigations there; a multi-instance
+  or serverless deployment needs shared state (for example Redis or Postgres).
+
+### Two quiz graders still exist, one of them transient
+
+`createQuizFromImportForSessionUser` was fixed to write the modern `Question`/`QuestionOption` store,
+so imported quizzes are delivered and scored by the student attempt pipeline. `POST /api/quiz/grade`
+remains a second, transient grader that persists nothing, is choice-only (a text question there is
+rejected with `409`), and is not a publishing path. The supported path is the student attempt
+pipeline. See [`verification/bugfix-run-4.md`](./verification/bugfix-run-4.md) (S-3).
 
 ### Preserved, deliberately unmerged quiz generation
 
-A second, duplicate implementation of LLM quiz generation exists on the preserved branch
-`feat/quiz-generation` at commit `67809f7` (`feat(quiz-generation): material-grounded drafts with
-review and publish`, worktree `/Users/slade/Documents/Learning/GH/ad-wt/quiz-generation`). It was
-deliberately **not** merged; the shipped implementation is the one landed in `25e47ed`.
+A second, duplicate implementation of LLM quiz generation is preserved on the annotated tag
+`archive/quiz-generation-duplicate` at commit
+`67809f7f93ad48d72d0b738aa3b7bf6ad88bcc4b` (`feat(quiz-generation): material-grounded drafts with
+review and publish`). It was deliberately **not** merged; the shipped implementation is the one
+landed in `25e47ed`. See [`archive/duplicate-quiz-generation.md`](./archive/duplicate-quiz-generation.md).
 
 ### Deferred accessibility/performance follow-up
 
 The a11y and performance audit deferred server-seeding the dashboard data: `GradebookProvider`
 (mounted in `app/layout.tsx`) and two large views still fetch in a client `useEffect` on mount
-instead of receiving server-fetched props. See
+instead of receiving server-fetched props. The lint warning count at the frozen tip (`12e45be`) is
+**9 warnings, 0 errors** (measured with `npm run lint`); these fetch-on-mount effects plus two
+deliberate `window.location` assignments account for the residual warnings. See
 [`quality/a11y-perf-audit.md`](./quality/a11y-perf-audit.md) (P1/P2).
 
-### End-to-end proof on one real course is Phase 4 work
+### The demo course is composability evidence, not scale evidence
 
-`phase-2-feature-pods.md`'s goal says Phase 2 is not complete until the whole path works for one
-real course. Each pod is merged with its own route/service tests, but the single seeded demo-course
-run that proves the spine end to end is the Phase 4 deliverable
-([`phases/phase-4-cutover.md`](./phases/phase-4-cutover.md)) and is not shipped. The Phase 2
-"Complete" status above means merge-and-test completion, not an end-to-end course run.
-
-### Grading-agreement report not shipped
-
-`phase-3-hardening.md` lists a human-labeled grading-agreement report as a Phase 3 deliverable. No
-such report exists in the repository and no agreement number should be quoted. The offline mock
-provider and the per-pod test suites exercise the pipeline but do not measure grading quality.
+The seeded demo course ([`demo.md`](./demo.md)) proves the whole spine runs end to end on one
+course with a five-student cohort and the offline mock provider. It does not prove scale, latency,
+or grading quality. There is no Phase 5 roadmap defined in the plan or the repository, so none is
+invented here.

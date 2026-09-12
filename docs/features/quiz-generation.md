@@ -78,14 +78,15 @@ runs end to end with `LLM_PROVIDER=mock` and with no network.
 
 ## Draft-vs-published state
 
-`prisma/schema.prisma` is frozen and `Question` has no publish column, so the
-state lives in the existing `Question.metadata` JSON field
-(`lib/quiz-generation/metadata.ts`):
+`Question` now carries explicit publish columns (`Question.status`,
+`Question.publishedAt`, `Question.publishedById`), added by migration
+`20260912000000_schema_unfreeze` (landed `759333b`; see
+[`../schema/unfreeze.md`](../schema/unfreeze.md)). `Question.metadata` still carries the generation
+provenance envelope:
 
 ```json
 {
   "generator": "quiz-generation",
-  "generationStatus": "draft",
   "promptVersion": "quiz-generation-v1",
   "model": "...",
   "provider": "...",
@@ -96,12 +97,12 @@ state lives in the existing `Question.metadata` JSON field
 }
 ```
 
-Only `POST /api/teacher/quiz-generation/publish` sets
-`generationStatus: "published"` (with `publishedAt` and `publishedByStaffId`) and
+Publish writes `status: "published"` plus `publishedAt`/`publishedById` and
 writes a `quiz_question.published` audit row. Publication re-checks server-side
 that each question has exactly one correct option before its state flips.
-Published questions are immutable (`PATCH` → 409). A question without this
-metadata marker is never treated as a generated draft.
+Published questions are immutable (`PATCH` → 409). Readers resolve the column first and fall back to
+the legacy `metadata.generationStatus`/`publishedAt`/`publishedByStaffId` keys for rows written
+before the migration; a question without any of those markers is never treated as a generated draft.
 
 ## Answer-key handling
 
@@ -135,7 +136,8 @@ metadata marker is never treated as a generated draft.
 - `components/role-routes-menu.tsx` — one teacher nav entry ("Quiz AI").
 
 `prisma/schema.prisma`, `prisma/migrations/**`, `package.json`, and
-`package-lock.json` are unchanged.
+`package-lock.json` are unchanged by this pod; the schema was unfrozen later in
+Phase 4 (`20260912000000_schema_unfreeze`).
 
 ## Deferred items and limits
 
@@ -149,9 +151,10 @@ metadata marker is never treated as a generated draft.
 - **Answer-key disclosure after submission** follows the existing product rule:
   a student learns the correct answer only from the post-submission grading
   response, not from any generation/read payload.
-- **Draft state is convention-based** (`Question.metadata`). A future migration
-  could promote `generationStatus`/`publishedAt` to real columns once the schema
-  is unfrozen; the service boundary would not change.
+- **Draft state moved to real columns, with a legacy fallback.**
+  `20260912000000_schema_unfreeze` (`759333b`) promoted the publish state to
+  `Question.status`/`publishedAt`/`publishedById`; readers still fall back to the
+  legacy `Question.metadata` keys for pre-migration rows.
 - **Prompt quality is not yet proven against real models.** The mock provider
   makes the pipeline offline-testable; a human-labeled fixture set and a
   distractor-quality rubric remain a Phase 3 deliverable.

@@ -92,10 +92,11 @@ Formation provenance (criteria, weights, objective, per-team scores) is stored i
 `Group.metadata.formation`, so formation criteria and weights are visible in the
 output exactly as required.
 
-**Schema gap (reported, not worked around):** the frozen schema has no per-student
-attribute or availability column, so formation attributes and availability are
-supplied per run in the request body and only the formation provenance is
-persisted. There is no offering-level JSON column to cache a roster's attributes.
+**Persistence (resolved).** `StudentProfile.formationProfile` (added by
+`20260912000000_schema_unfreeze`, landed `759333b`) stores each student's formation attributes and
+availability. `saveFormationProfilesForTeacher` persists the roster, and `formTeamsForTeacher` reads
+the stored profiles when the request omits `students`; an explicit `students` array remains a
+one-off override. See [`../schema/unfreeze.md`](../schema/unfreeze.md) (capability 1).
 
 ## How adjustment factors work
 
@@ -205,9 +206,8 @@ shows both plus per-group weighted completion.
 
 ## Deferred items and limits
 
-- **No attribute/availability persistence** (schema gap, see above). A future
-  migration adding `StudentProfile.metadata` (or an offering-level column) would
-  let a roster's attributes be cached between runs.
+- **Attribute/availability persistence landed** as `StudentProfile.formationProfile` (see above);
+  the request `students` array is now an override rather than the only source.
 - **Group grade source.** The analysis accepts an explicit `groupGrade`, or derives
   one from an owned `GROUP_PROJECT` assessment only when every active member
   carries the same mark. Wiring the gradebook's group mark directly, and publishing

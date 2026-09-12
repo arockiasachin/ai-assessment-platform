@@ -15,6 +15,14 @@ This pass starts from
 [`bugfix-run-2.md`](../verification/bugfix-run-2.md) and does not re-report
 anything they fixed.
 
+**Phase 4 status update (2026-09-12).** Three of the SUSPECTED/decision items
+recorded below were closed after this review, in `7011bfa`: S-1 (login rate
+limiting), S-2 (session role staleness) and S-4 (in-process `unit` execution).
+S-5 (container cleanup) remains operational. The findings below are the record as
+of the Phase 3 review; see [`hardening.md`](./hardening.md) and
+[Known gaps and open decisions](../README.md#known-gaps-and-open-decisions) for
+the current state.
+
 ## Environment
 
 | Item               | Value                                                                             |

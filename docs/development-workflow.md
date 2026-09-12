@@ -17,7 +17,7 @@ The flow:
 
 ```mermaid
 flowchart LR
-  featNode["feat/slice"] -->|"PR: install, prisma generate, prisma validate, typecheck, lint, format, build"| devNode["dev: integration"]
+  featNode["feat/slice"] -->|"PR: install, prisma generate, prisma validate, typecheck, lint, format, test, build"| devNode["dev: integration"]
   devNode -->|"phase boundary: acceptance criteria met and CI green"| mainNode["main: always deployable"]
   mainNode -.->|"only phase-boundary merges"| devNode
 ```
@@ -25,17 +25,16 @@ flowchart LR
 A phase boundary merge is a deliberate gate, not a routine push: `dev` is verified green, the
 phase's acceptance criteria are met, and only then is `dev` merged into `main`.
 
-### Current branch state (at `8f00a5f`)
+### Current branch state (at `12e45be`)
 
-- Local `dev` and `origin/dev` both point at `8f00a5f` (`fix(instrumentation): stop bundling
-Node-only code into the Edge runtime`). All of Phases 0–3 are on `dev`.
-- Local `main` is at `22f608b` (`fix(vector): report configured provider for empty queries`), the
-  Phase 1 boundary. It has not received the Phase 2 or Phase 3 boundary merges.
-- `origin/main` is at `62953d8` (`fix(build): force dynamic rendering for admin dashboards`), the
-  Phase 0 boundary — four commits behind local `main` (the four Phase 1 commits) and 40 behind
-  `dev`. `dev` is 36 commits ahead of local `main` (`git rev-list --count main..dev`) and 40 ahead
-  of `origin/main` (`git rev-list --count origin/main..dev`).
-- Nothing has been tagged except `legacy-archive-v1` (the pre-rebuild archive commit).
+- Local and remote both point at the same commit: `main`, `dev`, `origin/main` and `origin/dev` are
+  all `12e45be` (`Merge branch 'p4/verify-unified' into dev`). All of Phases 0–4 are on both
+  branches.
+- `git rev-list --count main..dev` is **0** and `git rev-list --count origin/main..dev` is **0**;
+  every phase-boundary merge (including the Phase 4 cutover work) is on `main` as well as `dev`.
+- Two tags exist: `legacy-archive-v1` (the pre-rebuild archive commit) and
+  `archive/quiz-generation-duplicate` (the preserved, deliberately unmerged quiz-generation
+  implementation; see [`archive/duplicate-quiz-generation.md`](./archive/duplicate-quiz-generation.md)).
 
 ### Branch protection
 
@@ -98,27 +97,27 @@ builds the schema from an empty database. The Playwright spine test remains plan
 
 ### Test suite
 
-`tests/` is a single Vitest suite (`npm test` = `vitest run`). At `8f00a5f` it is **65 test files**
-(`ls tests/*.test.ts`) spanning Phases 1–3. It mixes:
+`tests/` is a single Vitest suite (`npm test` = `vitest run`). At `12e45be` it is **93 test files**
+(`ls tests/*.test.ts`) spanning Phases 1–4. It mixes:
 
 - **Pure unit tests** — the majority, no database required (e.g. `tests/llm-mock.test.ts`,
   `tests/quiz-scoring.test.ts`, `tests/analytics-item-analysis.test.ts`,
   `tests/code-eval-sandbox.test.ts`).
-- **Database-backed tests** — about 18 files, identified by importing `tests/helpers/db.ts` (e.g.
+- **Database-backed tests** — about 35 files, identified by importing `tests/helpers/db.ts` (e.g.
   `tests/spine.test.ts`, `tests/quiz-generation-pipeline.test.ts`,
   `tests/quiz-attempts-pipeline.test.ts`, `tests/rubric-grading-pipeline.test.ts`,
   `tests/groups-peer-evaluation.test.ts`, `tests/lms-export-service.test.ts`,
-  `tests/analytics-scoping.test.ts`). They need a pgvector Postgres.
-- `tests/code-eval-docker.test.ts` additionally needs the Docker daemon and the pinned
-  `python:3.12-slim` / `node:22-slim` images; it skips itself (never fails) when either is missing.
+  `tests/analytics-scoping.test.ts`, `tests/demo-spine.test.ts`,
+  `tests/retention-purge.test.ts`). They need a pgvector Postgres.
+- `tests/code-eval-docker.test.ts` and `tests/code-eval-unit-isolation.test.ts` additionally need
+  the Docker daemon and the pinned `python:3.12-slim` / `node:22-slim` images; they skip themselves
+  (never fail) when either is missing.
 
 Provisioning lives in `tests/helpers/provision.ts`: it drops and recreates `public` on the guarded
 test database and then applies the committed migration history with `prisma migrate deploy` — never
 `migrate reset` or `migrate dev`. `tests/global-setup.ts` skips provisioning when
-`TEST_DATABASE_URL` is unset, so the pure unit tests still run offline.
-
-Note: `tests/README.md` still describes a one-or-two-file suite; it predates the Phase 2/3 test
-growth and is outside this documentation pass's `docs/**` scope.
+`TEST_DATABASE_URL` is unset, so the pure unit tests still run offline. The suite-level framing is
+in [`../tests/README.md`](../tests/README.md).
 
 ## Commit conventions
 
@@ -164,21 +163,15 @@ npm run format        # prettier --write .  (writes; use carefully in a shared t
 npm run build
 ```
 
-Verified on 2026-09-11 against commit `22f608b`, and re-run during the Phase 3 security review
-against `b9d8242` (both exit 0):
+The lint warning count at the current tip `12e45be` is **9 warnings, 0 errors** (measured with
+`npm run lint` during the 2026-09-12 documentation refresh). The count has been stable at 9 since
+`b9d8242`; the Phase 1 verification recorded 13 at `22f608b`. The residual warnings are the demoted
+`react-hooks/set-state-in-effect` fetch-on-mount effects plus two deliberate `window.location`
+assignments. The rule stays a warning until the remaining fetch-on-mount views are server-seeded
+(see the deferred P1/P2 items in [`quality/a11y-perf-audit.md`](./quality/a11y-perf-audit.md)).
 
-- `npm run typecheck` — 0 errors.
-- `npm run lint` — 0 errors; 9 warnings at `b9d8242` (the Phase 1 verification recorded 13 at
-  `22f608b`). The residual warnings are the demoted `react-hooks/set-state-in-effect` fetch-on-mount
-  effects plus two deliberate `window.location` assignments. The rule stays a warning until the
-  remaining fetch-on-mount views are server-seeded (see the deferred P1/P2 items in
-  [`quality/a11y-perf-audit.md`](./quality/a11y-perf-audit.md)).
-- `npx prettier --check .` — clean.
-
-The exact lint warning count at the current tip `8f00a5f` is **unverified**: this documentation pass
-did not re-run the gates. The most recent recorded run is the Phase 3 security review
-([`security/security-review.md`](./security/security-review.md): 9 warnings at `b9d8242`).
-
-`npm run build` is not reproduced here: the build writes `.next/` and this repository had
-concurrent writers in the tree. The build gate is enforced by CI, and commit `62953d8` records it
-passing against an unreachable `DATABASE_URL`.
+`npm run typecheck`, `npm run format:check` and the build were not re-run by the 2026-09-12
+documentation refresh; their most recent recorded green runs are the Phase 4 bug-fix pass
+([`verification/bugfix-run-4.md`](./verification/bugfix-run-4.md): `npm run verify` exit 0 at the
+`p4/verify-unified` tip, and a build against an unreachable `DATABASE_URL`). `npm run build` is not
+reproduced here because it writes `.next/`; the build gate is enforced by CI.

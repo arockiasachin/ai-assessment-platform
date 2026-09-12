@@ -114,8 +114,8 @@ server-side (`63e642a`, `9ab0b64`, `8128b97`), so no answer key reaches the clie
 Two items that Phase 1 left open for Phase 2 have since landed: quiz grade persistence
 (`a21ee3b`, the quiz-grading pod) and a DB-backed state-machine/dedupe suite
 (`tests/grading-state-machine.test.ts`, `tests/grading-suggestion-dedupe.test.ts`). Short-answer
-partial credit remains unbuilt. `main` carries this phase at the `22f608b` boundary; the full phase
-history is on `dev`.
+partial credit, which this phase left open, shipped in Phase 4 (`5981203`). `main` and `dev` both
+point at the frozen tip `12e45be`, so the full phase history is on both branches.
 
 ## Key decisions and why
 
@@ -217,8 +217,8 @@ service image. See the verification report for the full run log.
 - **Legacy quiz answer keys no longer reach the client.** `lib/gradebook-db.ts` stopped serializing
   `correctIndex`, and `components/quiz-runner.tsx` posts selected answers to `POST /api/quiz/grade`,
   which grades server-side. Persisting auto-graded quiz results landed in the Phase 2 quiz-grading
-  pod (`a21ee3b`); short-answer partial credit is still unbuilt (see
-  [`../features/quiz-grading.md`](../features/quiz-grading.md#deferred-items-and-limits)).
+  pod (`a21ee3b`); short-answer partial credit shipped in Phase 4 (`5981203`, see
+  [`../features/short-answer-partial-credit.md`](../features/short-answer-partial-credit.md)).
 - **Unresolved spec questions that belong to this phase** (from
   [`product-spec.md`](../product-spec.md#open-questions-to-resolve-during-phase-1)): default LLM
   provider and model per task; retention policy for student work, rationales, and evidence quotes;

@@ -104,12 +104,13 @@ cannot change a published grade.
 
 ### Published-quiz detection
 
-`prisma/schema.prisma` is frozen and there is no assessment-level publish flag,
-so "published quiz" reuses the quiz-generation pod's `Question.metadata`
-envelope: a question with `generator: "quiz-generation"` is deliverable only when
-`generationStatus === "published"`; a question without that marker is
-hand-authored and treated as published. This is the same rule the generation pod
-documents.
+There is no assessment-level publish flag; publication is per question. A generated question (one
+carrying the `generator: "quiz-generation"` marker in `Question.metadata`) is deliverable only when
+its publish state is `published` — read from `Question.status`, falling back to the legacy
+`metadata.generationStatus` for pre-migration rows. The `Question.status`/`publishedAt`/
+`publishedById` columns were added by `20260912000000_schema_unfreeze` (`759333b`). A question
+without the generator marker is hand-authored and treated as published. This is the same rule the
+generation pod documents.
 
 ## Adaptive-retake compatibility
 
@@ -152,19 +153,17 @@ there is no second, separately-graded quiz representation. See
 
 ## Deferred items and limits
 
-- **Per-assessment attempt cap needs a migration.** There is no assessment-level
-  JSON metadata column (`Assessment` has none; only `Question.metadata` /
-  `Group.metadata` / `CodeTask.metadata` / `Rubric.metadata` exist), so a
-  per-assessment override cannot be stored without a schema change. The cap is a
-  documented server constant plus `QUIZ_MAX_ATTEMPTS`; `resolveMaxAttempts` is
-  the single place to bind a real `Assessment.metadata` column once the schema is
-  unfrozen. **This is the one schema gap this pod reports.**
+- **Per-assessment attempt cap is persisted now.** `Assessment.maxAttempts` (added by
+  `20260912000000_schema_unfreeze`, `759333b`) sits above `QUIZ_MAX_ATTEMPTS` in the precedence
+  order; `resolveMaxAttempts` remains the single bind point. A `null` column still falls through to
+  the env override, then 3.
 - **Results are re-derived from the current answer key on read.** If a teacher
   edits a question after submission, the displayed per-question feedback reflects
   the new key while the persisted draft/published grade reflects the score at
   submission time. No teacher-facing key editing exists in this pod.
-- **No partial credit.** Scoring is exact-match multiple choice, per product-spec
-  §2; the optional short-answer similarity threshold is a separate item.
+- **Short-answer partial credit shipped in Phase 4** (`5981203`); this pod's deterministic
+  auto-scorer remains exact-match multiple choice. See
+  [`short-answer-partial-credit.md`](./short-answer-partial-credit.md).
 - **Teacher UI is read-only here.** Teachers can list and inspect attempts with
   the answer key, but approval still happens through the existing review routes /
   UI.

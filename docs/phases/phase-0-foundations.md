@@ -26,7 +26,8 @@ in place so every later change is verified automatically.
 - Schema redesign. The assessment spine is Phase 1.
 - Auth hardening and the test harness. Both are Phase 1.
 - Deleting the legacy models (attendance, streams, ratings, `ExternalReference`, `noSqlRefId`, and
-  so on). Deletion is deferred to the Phase 4 cutover so the legacy tree keeps building.
+  so on). Deletion was deferred to the Phase 4 cutover so the legacy tree kept building; Phase 4
+  completed it (with ratings deliberately restored).
 
 ## Deliverables
 
@@ -104,7 +105,7 @@ npm ci
 npx prisma generate
 npx prisma validate
 npm run typecheck      # 0 errors
-npm run lint           # 0 errors, 13 warnings
+npm run lint           # 0 errors, 13 warnings at `22f608b`; 9 at `12e45be`
 npm run format:check   # clean
 git log --all --oneline -- .env pass   # empty: secrets never committed
 git ls-files | rg -i 'pass$|\.env'     # only .env.example is tracked
@@ -118,10 +119,11 @@ The items below were open at the end of Phase 0; their resolution is noted inlin
   enabled on `main` and `dev` (required `Verify` check; 0 required approvals on `main`;
   `enforce_admins: false`). See
   [`development-workflow.md`](../development-workflow.md#branch-protection).
-- **Thirteen lint warnings remain.** _Mostly resolved._ The count was 13 at `22f608b` and 9 at
-  `b9d8242`; the residual warnings are the demoted React effect rule in the remaining fetch-on-mount
-  views plus two deliberate `window.location` assignments. The rule returns to `error` once those
-  views are server-seeded. The exact count at the current tip is unverified.
+- **Thirteen lint warnings remain.** _Resolved to a stable 9._ The count was 13 at `22f608b`, 9 at
+  `b9d8242`, and is **9 at the frozen tip `12e45be`** (`npm run lint`, 0 errors). The residual
+  warnings are the demoted React effect rule in the remaining fetch-on-mount views plus two
+  deliberate `window.location` assignments. The rule returns to `error` once those
+  views are server-seeded.
 - **CI does not yet run tests, a migration drift check, or Playwright.** _Partly resolved._ CI now
   runs `npm test` against a `pgvector/pgvector:pg16` service (commit `f54b2f0`); the test harness
   provisions its database by applying the committed migrations, which is the migration drift check.

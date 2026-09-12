@@ -125,8 +125,8 @@ tests), explicitly not line coverage.
 (`code-eval-v1`), calls the provider with `task: "code-eval"`, and validates the
 response strictly (`lib/code-eval/parsing.ts`). Generated test cases are persisted
 as **drafts**: their ids are recorded in `CodeTask.metadata.draftTestCaseIds`
-(the schema is frozen, so the state lives in the existing JSON column — the
-quiz-generation pod's pattern). Only `publish-tests` removes a draft id, and it
+(the state lives in the existing per-task JSON column; the schema has no
+test-case status column). Only `publish-tests` removes a draft id, and it
 writes an `AuditLog` row per published test case. The `mock` provider synthesizes
 deterministic, schema-valid drafts, so the whole prompt → generation → draft →
 publish pipeline runs offline with `LLM_PROVIDER=mock`.

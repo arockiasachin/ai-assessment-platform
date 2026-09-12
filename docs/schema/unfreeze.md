@@ -12,6 +12,13 @@ Migration: `prisma/migrations/20260912000000_schema_unfreeze/migration.sql`
 Generated with `prisma migrate diff --from-schema <baseline> --to-schema prisma/schema.prisma
 --script` and applied with `prisma migrate deploy` (never `migrate dev`, never `db push`).
 
+**Later Phase 4 work changed three of the statements below.** Course ratings were restored
+(`b6222c8`, `20260912010000_restore_course_rating`), and `AssessmentGrade` and
+`Quiz`/`QuizQuestion` were subsequently retired (`87f094e` /
+`20260912020000_retire_assessment_grade` and `d353a53` / `20260912030000_retire_quiz`). This
+document remains the record of the unfreeze migration itself; see [`README.md`](../README.md) and
+[`phases/phase-4-cutover.md`](../phases/phase-4-cutover.md) for the current schema state.
+
 ## What the migration does
 
 **Adds**
