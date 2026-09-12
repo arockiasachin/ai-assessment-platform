@@ -12,12 +12,27 @@ section.
 
 ## [Unreleased]
 
-Phase 1 (contracts), Phase 2 (feature pods) and Phase 3 (hardening) are complete and landed on
-`dev`. Phase 2 delivered seven feature pods (quiz generation, quiz attempt persistence, rubric
-grading, sandboxed code evaluation, groups/peer evaluation, analytics, LMS export) and Phase 3
-delivered three hardening pods (security review, accessibility/performance, observability). Phases 0
-through 3 are merged; Phase 4 (cutover) has not started. Nothing below is released — `package.json`
-is still `0.1.0`.
+Phase 1 (contracts), Phase 2 (feature pods), Phase 3 (hardening) and Phase 4 (cutover) are complete
+and landed on `dev`. Phase 2 delivered seven feature pods (quiz generation, quiz attempt
+persistence, rubric grading, sandboxed code evaluation, groups/peer evaluation, analytics, LMS
+export); Phase 3 delivered three hardening pods (security review, accessibility/performance,
+observability); and Phase 4 delivered the seeded demo course, the unified grade store, and the
+retirement of the two legacy stores (`AssessmentGrade`, `Quiz`/`QuizQuestion`). Nothing below is
+released — `package.json` is still `0.1.0`.
+
+Deferred to a future release: the **grading-agreement / calibration report** (a Phase 3
+deliverable). The platform records everything needed to compute human-vs-AI grading agreement — the
+per-criterion `AIGradeSuggestion` score, `confidence` and `model`, joined to the published `Grade`
+(`points`, `source`, `approvedById`, `overrideReason`) and the `AuditLog` trail of `accept` versus
+`override` — so this needs no schema change to build later. It was not built because agreement
+cannot be meaningfully measured from demo data, and a number computed off a handful of seeded
+examples would read as rigour while meaning nothing. Two caveats for whoever picks it up: a raw
+**accept rate is an anchoring-confounded proxy** (the review queue shows the teacher the AI's score,
+so a high accept rate cannot distinguish an accurate model from a rubber-stamping reviewer — a
+genuine measurement needs an independent second marker, which pairs with the deferred
+second-marker-sampling workflow), and **AI rationale/evidence text is redacted 15 days after results
+publication** by the retention policy, so agreement should be computed at publish time rather than
+retroactively (score-level agreement survives permanently).
 
 Known issues deliberately left open at this boundary: the Prisma schema was frozen through Phases
 1–3, but is now unfrozen. One migration added the six capabilities that six features previously
@@ -284,6 +299,43 @@ Real-time bug-fixing pass 3 of 3 (see [`docs/verification/bugfix-run-3.md`](docs
   creation now runs in one transaction that takes a `SELECT … FOR UPDATE` lock on the assessment row
   and re-checks the existing in-progress attempt and the cap, so a concurrent start resumes the
   winner instead of erroring.
+
+### Documentation
+
+Final documentation refresh against the frozen post-Phase-4 tree (`dev` @ `12e45be`), which had
+drifted repeatedly while agents were shipping.
+
+- **Phase status corrected.** Phases 0–4 are now all recorded as complete, including Phase 4
+  (demo course, unified grade store, legacy-store retirements, retention policy); there is no
+  Phase 5. Shipped-feature tables now include the post-Phase-4 landings: schema unfreeze
+  (`759333b`), security hardening (`7011bfa`), course-ratings restoration (`b6222c8`), the
+  partial-update guard (`b225b39`), the unified grade store (`87f094e`), the demo course
+  (`9b7340f`), legacy quiz retirement (`d353a53`), DeepSeek (`fe65e5a`), retention (`702ab25`),
+  embeddings split (`aefe1c2`), short-answer partial credit (`5981203`), and the run-4
+  grade-immutability fixes (`3992ce4`).
+- **Stale claims removed**: a `docs/README.md` assertion that login rate limiting was not
+  implemented (it shipped in `7011bfa`), "not started" phase statuses, schema-frozen workarounds
+  the unfreeze replaced (quiz publish state, analytics thresholds, team-formation profiles, LTI
+  persistence, per-assessment attempt cap), "short-answer partial credit unbuilt", an outdated
+  lint-warning count (13 at `22f608b`; 9 at `12e45be`), and a broken README anchor in
+  `docs/demo.md`.
+- **Measured counts recorded**: 93 test files, 69 API route handlers, 6 migrations, 9 lint
+  warnings, and `main` = `dev` = `12e45be`.
+- **Known gaps rewritten** to record what is genuinely open rather than resolved: `AuditLog`
+  `before`/`after` snapshots are retained in full (they can embed student text), retained free
+  text that may quote a student (`Submission.feedback`, `GradeReview.notes`,
+  `ContributionEvent.summary`), no "unpublish" endpoint or admin UI for the retention purge,
+  `POST /api/quiz/grade` remaining a choice-only preview, a global rather than per-question
+  short-answer similarity threshold, the residual prompt-hackability of LLM-graded text (the
+  safeguard is the human review gate), `deepseek-flash` having no immutable snapshot, DeepSeek
+  having no embeddings endpoint, per-process rate limiting and session-revalidation caches, and
+  the calibration report being deferred. See [`docs/README.md`](docs/README.md).
+- `tests/README.md` now describes the current 93-file suite (~35 database-backed) and the
+  six-migration provisioning path.
+- Point-in-time records (`docs/verification/*`, the `security-review.md` findings table,
+  `a11y-perf-audit.md`) deliberately keep their historical commit hashes and warning counts so
+  their evidence provenance stays intact; a status note was added to `security-review.md` rather
+  than editing its findings.
 
 ## [0.1.0] - 2026-09-11
 
