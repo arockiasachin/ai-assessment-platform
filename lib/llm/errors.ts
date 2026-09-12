@@ -1,4 +1,4 @@
-import type { LlmProviderName } from "./types"
+import { SUGGESTED_EMBEDDING_PROVIDERS, type LlmProviderName } from "./types"
 
 export type LlmErrorOptions = {
   provider?: LlmProviderName
@@ -24,11 +24,43 @@ export class LlmError extends Error {
   }
 }
 
+export type LlmUnsupportedErrorOptions = {
+  /** Overrides the generic message; used by capability-specific subclasses. */
+  message?: string
+}
+
 /** Thrown when a provider cannot serve a request shape (e.g. Anthropic embeddings). */
 export class LlmUnsupportedError extends LlmError {
-  constructor(provider: LlmProviderName, capability: string) {
-    super(`${provider} does not support ${capability}`, { provider })
+  constructor(
+    provider: LlmProviderName,
+    capability: string,
+    options: LlmUnsupportedErrorOptions = {},
+  ) {
+    super(options.message ?? `${provider} does not support ${capability}`, { provider })
     this.name = "LlmUnsupportedError"
+  }
+}
+
+/**
+ * Thrown when the resolved *embeddings* provider cannot embed — almost always
+ * `EMBEDDINGS_PROVIDER` (or the `LLM_PROVIDER` it inherits) pointing at a
+ * generation-only provider such as DeepSeek or Anthropic.
+ *
+ * The message names the variable to change and providers that work, so the fix
+ * is obvious from a single log line. It extends `LlmUnsupportedError`, so any
+ * caller already catching that still catches this.
+ */
+export class LlmEmbeddingsUnsupportedError extends LlmUnsupportedError {
+  constructor(provider: LlmProviderName) {
+    super(provider, "embeddings", {
+      message:
+        `The embeddings provider "${provider}" exposes no embeddings endpoint, so it cannot power ` +
+        `material indexing or retrieval. Set EMBEDDINGS_PROVIDER to a provider that supports ` +
+        `embeddings (${SUGGESTED_EMBEDDING_PROVIDERS.join(", ")}) — for example ` +
+        `EMBEDDINGS_PROVIDER=${SUGGESTED_EMBEDDING_PROVIDERS[0]} — while LLM_PROVIDER="${provider}" ` +
+        `continues to serve chat generation and grading.`,
+    })
+    this.name = "LlmEmbeddingsUnsupportedError"
   }
 }
 

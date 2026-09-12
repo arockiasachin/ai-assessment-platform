@@ -1,5 +1,10 @@
 import { LlmConfigError } from "./errors"
-import { resolveProviderName, resolveTimeoutMs, type LlmEnv } from "./env"
+import {
+  resolveEmbeddingsProviderName,
+  resolveProviderName,
+  resolveTimeoutMs,
+  type LlmEnv,
+} from "./env"
 import type { FetchLike } from "./http"
 import { observeLlmProvider } from "./observability"
 import { createAnthropicProviderFromEnv } from "./providers/anthropic"
@@ -7,7 +12,12 @@ import { createDeepSeekProviderFromEnv } from "./providers/deepseek"
 import { createMockProvider } from "./providers/mock"
 import { createOllamaProviderFromEnv } from "./providers/ollama"
 import { createOpenAiProviderFromEnv } from "./providers/openai-compatible"
-import type { LlmProvider, LlmProviderName } from "./types"
+import type {
+  LlmEmbeddingProvider,
+  LlmGenerationProvider,
+  LlmProvider,
+  LlmProviderName,
+} from "./types"
 
 export * from "./errors"
 export * from "./env"
@@ -22,6 +32,15 @@ export { createOllamaProvider } from "./providers/ollama"
 
 export type CreateLlmProviderOptions = {
   /** Overrides LLM_PROVIDER for this instance. */
+  provider?: LlmProviderName
+  /** Overrides process.env; useful in tests. */
+  env?: LlmEnv
+  /** Injected fetch for deterministic tests. */
+  fetchImpl?: FetchLike
+}
+
+export type CreateEmbeddingProviderOptions = {
+  /** Overrides EMBEDDINGS_PROVIDER (and, when unset, LLM_PROVIDER) for this instance. */
   provider?: LlmProviderName
   /** Overrides process.env; useful in tests. */
   env?: LlmEnv
@@ -65,17 +84,50 @@ export function createLlmProvider(options: CreateLlmProviderOptions = {}): LlmPr
   return observeLlmProvider(createBaseProvider(provider, env, timeoutMs, options.fetchImpl))
 }
 
-let cachedProvider: LlmProvider | undefined
+/**
+ * Build the *embeddings* provider from env. Provider selection is
+ * `EMBEDDINGS_PROVIDER`, falling back to `LLM_PROVIDER` when unset, so an
+ * operator can run DeepSeek for chat and OpenAI (or Ollama) for retrieval.
+ * Capability is validated at the point of use (`embedTexts`) with an actionable
+ * error rather than here, so a bad embeddings choice never blocks chat.
+ */
+export function createEmbeddingsProvider(
+  options: CreateEmbeddingProviderOptions = {},
+): LlmEmbeddingProvider {
+  const env = options.env ?? process.env
+  const provider = options.provider ?? resolveEmbeddingsProviderName(env)
+  const timeoutMs = resolveTimeoutMs(env)
+  return observeLlmProvider(createBaseProvider(provider, env, timeoutMs, options.fetchImpl))
+}
 
-/** Process-wide lazy singleton. Nothing is constructed until first use. */
-export function getLlmProvider(): LlmProvider {
+let cachedProvider: LlmProvider | undefined
+let cachedEmbeddingsProvider: LlmEmbeddingProvider | undefined
+
+/**
+ * Process-wide lazy generation/grading singleton. Nothing is constructed until
+ * first use. The narrow return type deliberately omits `embed()`.
+ */
+export function getLlmProvider(): LlmGenerationProvider {
   if (!cachedProvider) {
     cachedProvider = createLlmProvider()
   }
   return cachedProvider
 }
 
-/** Test helper: drop the cached provider so env changes take effect. */
+/**
+ * Process-wide lazy embeddings singleton, selected by `EMBEDDINGS_PROVIDER`
+ * (defaulting to `LLM_PROVIDER`). Embedding callers must use this, never
+ * `getLlmProvider()`.
+ */
+export function getEmbeddingsProvider(): LlmEmbeddingProvider {
+  if (!cachedEmbeddingsProvider) {
+    cachedEmbeddingsProvider = createEmbeddingsProvider()
+  }
+  return cachedEmbeddingsProvider
+}
+
+/** Test helper: drop the cached providers so env changes take effect. */
 export function resetLlmProviderCache(): void {
   cachedProvider = undefined
+  cachedEmbeddingsProvider = undefined
 }

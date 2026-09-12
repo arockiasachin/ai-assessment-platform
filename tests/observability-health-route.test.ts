@@ -12,6 +12,7 @@ const ENV_KEYS = [
   "DATABASE_URL",
   "HEALTH_DB_TIMEOUT_MS",
   "LLM_PROVIDER",
+  "EMBEDDINGS_PROVIDER",
   "APP_VERSION",
   "GIT_COMMIT_SHA",
   "GITHUB_SHA",
@@ -28,6 +29,7 @@ beforeEach(() => {
   for (const key of ENV_KEYS) saved[key] = process.env[key]
   process.env.DATABASE_URL = SECRET_URL
   process.env.LLM_PROVIDER = "mock"
+  delete process.env.EMBEDDINGS_PROVIDER
   delete process.env.HEALTH_DB_TIMEOUT_MS
   mocks.queryRawUnsafe.mockReset()
 })
@@ -44,6 +46,9 @@ function call() {
   return GET(new Request("https://app.test/api/health"), undefined)
 }
 
+type LlmCheck = { provider: string; mode: string }
+type LlmChecks = { generation: LlmCheck; embeddings: LlmCheck }
+
 describe("GET /api/health", () => {
   it("reports ok without auth and never leaks the connection string", async () => {
     mocks.queryRawUnsafe.mockResolvedValue([{ ok: 1 }])
@@ -52,12 +57,15 @@ describe("GET /api/health", () => {
     expect(response.status).toBe(200)
     const body = (await response.json()) as {
       status: string
-      checks: { app: string; database: { status: string }; llm: { provider: string; mode: string } }
+      checks: { app: string; database: { status: string }; llm: LlmChecks }
     }
     expect(body.status).toBe("ok")
     expect(body.checks.app).toBe("ok")
     expect(body.checks.database.status).toBe("ok")
-    expect(body.checks.llm).toEqual({ provider: "mock", mode: "offline" })
+    expect(body.checks.llm).toEqual({
+      generation: { provider: "mock", mode: "offline" },
+      embeddings: { provider: "mock", mode: "offline" },
+    })
     expect(response.headers.get("x-request-id")).toBeTruthy()
 
     const serialized = JSON.stringify(body)
@@ -116,21 +124,52 @@ describe("GET /api/health", () => {
     mocks.queryRawUnsafe.mockResolvedValue([{ ok: 1 }])
 
     process.env.LLM_PROVIDER = "openai"
-    const live = (await (await call()).json()) as {
-      checks: { llm: { provider: string; mode: string } }
-    }
-    expect(live.checks.llm).toEqual({ provider: "openai", mode: "live" })
+    const live = (await (await call()).json()) as { checks: { llm: LlmChecks } }
+    expect(live.checks.llm).toEqual({
+      generation: { provider: "openai", mode: "live" },
+      embeddings: { provider: "openai", mode: "live" },
+    })
 
     process.env.LLM_PROVIDER = "deepseek"
-    const deepseek = (await (await call()).json()) as {
-      checks: { llm: { provider: string; mode: string } }
-    }
-    expect(deepseek.checks.llm).toEqual({ provider: "deepseek", mode: "live" })
+    const deepseek = (await (await call()).json()) as { checks: { llm: LlmChecks } }
+    expect(deepseek.checks.llm).toEqual({
+      generation: { provider: "deepseek", mode: "live" },
+      embeddings: { provider: "deepseek", mode: "live" },
+    })
 
     process.env.LLM_PROVIDER = "not-a-provider"
-    const unknown = (await (await call()).json()) as {
-      checks: { llm: { provider: string; mode: string } }
-    }
-    expect(unknown.checks.llm).toEqual({ provider: "unknown", mode: "unknown" })
+    const unknown = (await (await call()).json()) as { checks: { llm: LlmChecks } }
+    expect(unknown.checks.llm).toEqual({
+      generation: { provider: "unknown", mode: "unknown" },
+      embeddings: { provider: "unknown", mode: "unknown" },
+    })
+  })
+
+  it("reports generation and embeddings separately when they differ", async () => {
+    mocks.queryRawUnsafe.mockResolvedValue([{ ok: 1 }])
+
+    process.env.LLM_PROVIDER = "deepseek"
+    process.env.EMBEDDINGS_PROVIDER = "openai"
+    const split = (await (await call()).json()) as { checks: { llm: LlmChecks } }
+    expect(split.checks.llm).toEqual({
+      generation: { provider: "deepseek", mode: "live" },
+      embeddings: { provider: "openai", mode: "live" },
+    })
+
+    // A blank EMBEDDINGS_PROVIDER inherits LLM_PROVIDER.
+    process.env.EMBEDDINGS_PROVIDER = "   "
+    const inherited = (await (await call()).json()) as { checks: { llm: LlmChecks } }
+    expect(inherited.checks.llm).toEqual({
+      generation: { provider: "deepseek", mode: "live" },
+      embeddings: { provider: "deepseek", mode: "live" },
+    })
+
+    // An unknown embeddings value degrades to unknown without failing the probe.
+    process.env.EMBEDDINGS_PROVIDER = "nope"
+    const badEmbeddings = (await (await call()).json()) as { checks: { llm: LlmChecks } }
+    expect(badEmbeddings.checks.llm).toEqual({
+      generation: { provider: "deepseek", mode: "live" },
+      embeddings: { provider: "unknown", mode: "unknown" },
+    })
   })
 })

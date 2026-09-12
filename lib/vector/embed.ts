@@ -1,10 +1,10 @@
 import { prisma } from "@/lib/prisma"
 import {
   DEFAULT_EMBEDDING_DIMENSIONS,
+  LlmEmbeddingsUnsupportedError,
   LlmError,
-  LlmUnsupportedError,
-  getLlmProvider,
-  type LlmProvider,
+  getEmbeddingsProvider,
+  type LlmEmbeddingProvider,
   type LlmProviderName,
 } from "@/lib/llm"
 import { chunkText, type ChunkTextOptions } from "./chunk"
@@ -20,7 +20,11 @@ export type EmbedTextsResult = {
 }
 
 export type EmbedTextsOptions = {
-  provider?: LlmProvider
+  /**
+   * Embeddings provider override (tests). Defaults to the process-wide
+   * `EMBEDDINGS_PROVIDER` singleton — never the generation provider.
+   */
+  provider?: LlmEmbeddingProvider
   dimensions?: number
   model?: string
 }
@@ -28,14 +32,20 @@ export type EmbedTextsOptions = {
 /**
  * Embed a batch of texts and verify the vector width before it reaches the
  * database, so a provider/model mismatch fails at the boundary.
+ *
+ * The provider is resolved from `EMBEDDINGS_PROVIDER` (defaulting to
+ * `LLM_PROVIDER`), so a chat provider with no embeddings endpoint — DeepSeek,
+ * Anthropic — does not break indexing when the operator points embeddings at a
+ * capable provider. A provider that genuinely cannot embed fails with an
+ * actionable `LlmEmbeddingsUnsupportedError`, not a bare "unsupported".
  */
 export async function embedTexts(
   texts: string[],
   options: EmbedTextsOptions = {},
 ): Promise<EmbedTextsResult> {
-  const provider = options.provider ?? getLlmProvider()
+  const provider = options.provider ?? getEmbeddingsProvider()
   if (!provider.supportsEmbeddings) {
-    throw new LlmUnsupportedError(provider.name, "embeddings")
+    throw new LlmEmbeddingsUnsupportedError(provider.name)
   }
   const dimensions = options.dimensions ?? EMBEDDING_DIMENSIONS
   if (texts.length === 0) {

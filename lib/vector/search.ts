@@ -1,6 +1,6 @@
 import { Prisma } from "@/lib/generated/prisma/client"
 import { prisma } from "@/lib/prisma"
-import type { LlmProvider } from "@/lib/llm"
+import type { LlmEmbeddingProvider } from "@/lib/llm"
 import { embedTexts, toVectorLiteral, type EmbedTextsResult } from "./embed"
 
 export type ChunkSearchHit = {
@@ -16,7 +16,7 @@ export type ChunkSearchHit = {
 }
 
 export type SimilaritySearchOptions = {
-  provider?: LlmProvider
+  provider?: LlmEmbeddingProvider
   courseId?: string | null
   offeringId?: string | null
   materialId?: string | null

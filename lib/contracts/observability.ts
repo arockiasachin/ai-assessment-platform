@@ -52,8 +52,14 @@ export const healthResponseSchema = z.object({
       latencyMs: z.number().nonnegative().nullable(),
     }),
     llm: z.object({
-      provider: z.string(),
-      mode: healthLlmModeSchema,
+      generation: z.object({
+        provider: z.string(),
+        mode: healthLlmModeSchema,
+      }),
+      embeddings: z.object({
+        provider: z.string(),
+        mode: healthLlmModeSchema,
+      }),
     }),
   }),
 })

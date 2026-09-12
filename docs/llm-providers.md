@@ -7,19 +7,31 @@ line is emitted per call (see [`observability.md`](./observability.md)).
 
 ## Selecting a provider
 
-Selection is one env var:
+There are **two** selections, because chat and embeddings can be served by
+different vendors:
 
 ```bash
+# Generation + grading (chat)
 LLM_PROVIDER="mock"      # default: deterministic, offline, no API key
 LLM_PROVIDER="deepseek"  # DeepSeek-V4.1-Flash (deepseek-flash)
 LLM_PROVIDER="openai"    # OpenAI or any OpenAI-shaped endpoint
 LLM_PROVIDER="anthropic"
 LLM_PROVIDER="ollama"    # local daemon, no API key
+
+# Embeddings (material indexing + retrieval)
+EMBEDDINGS_PROVIDER="mock"      # default: inherits LLM_PROVIDER when unset/blank
+EMBEDDINGS_PROVIDER="openai"
+EMBEDDINGS_PROVIDER="ollama"    # local/self-hosted option
 ```
 
-`openai-compatible` / `openai_compatible` are accepted aliases for `openai`. An
-unrecognized value throws an `LlmConfigError` at first use rather than silently
-falling back.
+`EMBEDDINGS_PROVIDER` **defaults to `LLM_PROVIDER`** when unset or blank, so an
+existing single-provider configuration behaves exactly as before. Set it only
+when the chat provider cannot embed (see
+[Split providers](#split-providers-chat-and-embeddings)).
+
+`openai-compatible` / `openai_compatible` are accepted aliases for `openai` on
+both variables. An unrecognized value throws an `LlmConfigError` at first use
+rather than silently falling back.
 
 **`mock` is the default on purpose.** A missing or blank `LLM_PROVIDER` resolves
 to `mock`, so CI and the test suite never construct a live provider or make a
@@ -35,8 +47,56 @@ network call. Do not change `DEFAULT_PROVIDER` (`lib/llm/env.ts`) away from
 | `ollama`    | —                   | `OLLAMA_BASE_URL`    | `OLLAMA_MODEL`    | yes         |
 
 `EMBEDDING_MODEL` is a cross-provider override for the embedding model where the
-selected provider supports embeddings. `LLM_TIMEOUT_MS` bounds every request
-(default `60000`).
+selected (embeddings) provider supports embeddings. `LLM_TIMEOUT_MS` bounds every
+request (default `60000`).
+
+## Split providers: chat and embeddings
+
+Chat models and embedding models are not interchangeable. DeepSeek and Anthropic
+expose **no embeddings endpoint**, so a single-provider configuration that
+selects one of them for chat cannot index or retrieve material. The platform
+therefore resolves them independently:
+
+- `getLlmProvider()` / `createLlmProvider()` — **generation and grading**, from
+  `LLM_PROVIDER`. The returned type is `LlmGenerationProvider`, which has no
+  `embed()` method, so a generation caller cannot accidentally request
+  embeddings.
+- `getEmbeddingsProvider()` / `createEmbeddingsProvider()` — **material
+  indexing (`indexMaterial`) and retrieval (`embedTexts`, `searchMaterialChunks`,
+  quiz-generation retrieval)**, from `EMBEDDINGS_PROVIDER` (defaulting to
+  `LLM_PROVIDER`).
+
+Worked example — DeepSeek for chat, OpenAI for embeddings:
+
+```bash
+LLM_PROVIDER=deepseek            # chat: generation + grading
+EMBEDDINGS_PROVIDER=openai       # embeddings: material indexing + retrieval
+
+DEEPSEEK_API_KEY="<your key>"
+OPENAI_API_KEY="<your key>"
+```
+
+This is the configuration to use for DeepSeek-V4.1-Flash: it powers quiz
+generation and rubric grading while a capable provider handles retrieval, so
+material-grounded quiz generation works instead of failing at `embedTexts`.
+
+**Prefer a single vendor?** Point `EMBEDDINGS_PROVIDER` at `openai` and set
+`LLM_PROVIDER=openai`. **Avoid a second paid provider?** Run
+[Ollama](#cost-latency-and-the-mock-default) locally and set
+`EMBEDDINGS_PROVIDER=ollama` with an embedding model pulled (for example
+`nomic-embed-text`); Ollama needs no API key.
+
+**Misconfiguration fails loudly.** If the resolved embeddings provider cannot
+embed — e.g. `EMBEDDINGS_PROVIDER=deepseek`, or `LLM_PROVIDER=deepseek` left to
+default — `embedTexts` throws `LlmEmbeddingsUnsupportedError` whose message names
+`EMBEDDINGS_PROVIDER` and suggests `openai`/`ollama`. It is a subclass of
+`LlmUnsupportedError`, so existing catches keep working. Chat is unaffected: a
+bad embeddings choice does not block generation or grading.
+
+`/api/health` reports both: `checks.llm.generation` and `checks.llm.embeddings`.
+Every `llm.generate` / `llm.embed` log line also carries a `capability`
+(`"generation"` / `"embeddings"`) tag next to `provider`, so a split
+configuration is visible per call.
 
 ## DeepSeek (DeepSeek-V4.1-Flash)
 
@@ -82,17 +142,28 @@ an immutable snapshot.
 ### No embeddings route
 
 DeepSeek's verified API surface is chat completions plus an Anthropic-compatible
-route; it exposes no embeddings endpoint. `deepseek` therefore reports
+route; it exposes no embeddings endpoint. There is no supported
+`deepseek-embedding` model: DeepSeek's published model list is generation-only
+(`deepseek-v4-flash`, `deepseek-v4-pro`), and third-party references to an
+embedding model are not part of the official API. `deepseek` therefore reports
 `supportsEmbeddings: false` and `embed()` throws `LlmUnsupportedError` instead of
-POSTing to a route that does not exist. **Material indexing (retrieval) needs a
-separate embedding provider** — the same caveat as Anthropic. Selecting
-`LLM_PROVIDER="deepseek"` powers generation and grading but not `indexMaterial`.
+POSTing to a route that does not exist.
+
+Because of this, **DeepSeek needs `EMBEDDINGS_PROVIDER` for retrieval** — the
+same caveat as Anthropic. Selecting only `LLM_PROVIDER="deepseek"` powers
+generation and grading but leaves `indexMaterial` / `embedTexts` resolving to
+DeepSeek, which fails with an actionable `LlmEmbeddingsUnsupportedError`. See
+[Split providers](#split-providers-chat-and-embeddings) for the working
+configuration (`LLM_PROVIDER=deepseek` + `EMBEDDINGS_PROVIDER=openai`, or
+`ollama` for a local embedder).
 
 ## Generation and grading share one model
 
-There is one process-wide provider (`getLlmProvider()`, a lazy singleton). Today
-quiz generation and rubric grading use the _same_ configured model; there is no
-per-task model policy. The owner left that open. The task tags
+There are two lazily-constructed process-wide providers: the generation/grading
+provider (`getLlmProvider()`, from `LLM_PROVIDER`) and the embeddings provider
+(`getEmbeddingsProvider()`, from `EMBEDDINGS_PROVIDER`). Quiz generation and
+rubric grading still use the _same_ generation model; there is no per-task model
+policy. The owner left that open. The task tags
 (`quiz-generation`, `rubric-grading`, `code-eval`, …) are carried for telemetry
 and explainability only and are never sent to the provider, so adding per-task
 routing later is a change to the selector rather than to any prompt.
@@ -128,3 +199,6 @@ provider-independent.
    `createLlmProvider` (`lib/llm/index.ts`).
 4. Document it here and in `.env.example`, and add an offline test with an
    injected `fetch`.
+5. If the vendor has no embeddings endpoint, set `supportsEmbeddings: false` and
+   say so here — operators must then point `EMBEDDINGS_PROVIDER` at a provider
+   that embeds.
