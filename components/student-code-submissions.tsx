@@ -36,6 +36,21 @@ function statusVariant(status: string): "default" | "secondary" | "destructive" 
   return "secondary"
 }
 
+/**
+ * Deterministic date rendering: without an explicit locale the Node server and
+ * the browser can format the same timestamp differently, which raises a React
+ * hydration error. See the same helper in `student-quiz-attempts.tsx`.
+ */
+function formatDateTime(iso: string) {
+  return new Date(iso).toLocaleString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  })
+}
+
 export function StudentCodeSubmissions({ initialTasks }: Props) {
   const [tasks, setTasks] = useState(initialTasks)
   const [selectedId, setSelectedId] = useState<string | null>(null)
@@ -146,8 +161,7 @@ export function StudentCodeSubmissions({ initialTasks }: Props) {
                 {selected.assessmentTitle}
                 <span className="ml-2 text-xs font-normal text-muted-foreground">
                   {selected.language === "python" ? "Python 3.12" : "Node.js 22"} ·{" "}
-                  {selected.testCaseCount} test cases · due{" "}
-                  {new Date(selected.dueDate).toLocaleString()}
+                  {selected.testCaseCount} test cases · due {formatDateTime(selected.dueDate)}
                 </span>
               </CardTitle>
             </CardHeader>

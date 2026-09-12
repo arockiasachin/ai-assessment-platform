@@ -43,6 +43,22 @@ function statusVariant(status: string): "default" | "secondary" | "destructive" 
   return "secondary"
 }
 
+/**
+ * Deterministic date rendering. Without an explicit locale the server (Node,
+ * `en-US`) and the browser (the user's locale) format the same timestamp
+ * differently, which makes the hydrated output disagree with the server HTML and
+ * raises a React hydration error. Pinning the locale keeps both renders equal.
+ */
+function formatDateTime(iso: string) {
+  return new Date(iso).toLocaleString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  })
+}
+
 export function StudentQuizAttempts({ initialQuizzes }: Props) {
   const [quizzes, setQuizzes] = useState(initialQuizzes)
   const [selectedId, setSelectedId] = useState<string | null>(null)
@@ -181,7 +197,7 @@ export function StudentQuizAttempts({ initialQuizzes }: Props) {
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <span className="font-medium">{quiz.title}</span>
                 <span className="text-xs text-muted-foreground">
-                  due {new Date(quiz.dueDate).toLocaleString()}
+                  due {formatDateTime(quiz.dueDate)}
                 </span>
               </div>
               <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
@@ -232,7 +248,7 @@ export function StudentQuizAttempts({ initialQuizzes }: Props) {
                   Attempt {attempt.attemptNumber}
                   {attempt.submittedAt && (
                     <span className="ml-2 text-xs text-muted-foreground">
-                      submitted {new Date(attempt.submittedAt).toLocaleString()}
+                      submitted {formatDateTime(attempt.submittedAt)}
                     </span>
                   )}
                 </span>

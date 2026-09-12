@@ -4,6 +4,15 @@ import bcrypt from "bcryptjs"
 import { PrismaPg } from "@prisma/adapter-pg"
 import { PrismaClient } from "../lib/generated/prisma/client"
 
+/**
+ * The full-faculty development seed (users, courses, offerings, grades).
+ *
+ * For the Phase 4 demo course that exercises the whole product spine end to end
+ * — indexed material, an AI-generated published quiz, server-scored attempts,
+ * rubric suggestions on a review queue, groups, a code task, ratings and LMS
+ * export — use `npm run prisma:seed:demo` (`prisma/seed-demo.ts`). It is
+ * deterministic and idempotent. See `docs/demo.md`.
+ */
 const connectionString = process.env.DATABASE_URL
 if (!connectionString) {
   throw new Error("DATABASE_URL is not set")
