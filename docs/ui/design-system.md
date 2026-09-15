@@ -467,8 +467,13 @@ real page carry a `null` target and are dropped from the app nav rather than
 rendered as broken links. `tests/nav-scope.test.ts` asserts that every app-scope
 href has a page on disk.
 
-**Identity.** The `User` model has no name column, so an app-scope shell shows the
-email and derives initials from it (`lib/user-identity.ts`). Do not invent a name.
+**Identity.** The `User` model (the signed-in account) has no name column, so an app-scope shell
+shows the email and derives initials from it (`lib/user-identity.ts`). Do not invent a name for the
+current user.
+
+This limit applies **only to the signed-in account**. `StudentProfile.fullName` and
+`StaffProfile.fullName` both exist, so rosters, submission lists and rating tables can render real
+people's names. Do not assume a person's name is unavailable just because the shell shows an email.
 
 ### 8.4 Fixture modules
 

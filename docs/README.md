@@ -55,6 +55,10 @@ mockups to the backend that already exists behind them:
   _presentation_ onto the existing real pages, rather than wiring `/mockup` itself to data), the
   component seam, five sequenced waves, the fixture fields that have no schema backing and each
   need a decision, and the risks. Written against `dev` @ `2bc51b5`.
+- [`plans/wave-1.md`](./plans/wave-1.md) — the Wave 1 research: field-by-field port dossiers for all
+  twelve remaining pages, the nine decisions that gate them, cross-cutting prerequisites, and two
+  corrections to the parent plan (`teacher/classes` is a different screen, not a re-skin, and
+  `teacher/submissions` has no real page at all).
 
 ## Shipped feature pods
 

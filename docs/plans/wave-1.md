@@ -1,0 +1,246 @@
+# Wave 1 — per-page port dossiers
+
+Status: **research complete, implementation not started.** Written against `dev` @ `a177868`
+(Wave 0 landed). Companion to [`mockup-to-backend.md`](./mockup-to-backend.md), which this
+document corrects in two places.
+
+Three read-only research passes produced field-by-field dossiers for all twelve Wave 1 pages
+(grading/rubrics, code-eval/groups, student-learning/auth). This consolidates them into an
+execution plan: what is ready, what each page actually needs, and the decisions that block it.
+
+---
+
+## 1. Corrections to the Wave 1 plan
+
+The parent plan's Wave 1 table is wrong on two rows, and overstates one constraint. Recording
+them here rather than silently fixing the table, because both were load-bearing.
+
+### 1.1 `teacher/classes` is not a presentation port — it is a different screen
+
+The plan lists it as "backend already complete, pure presentation port". It is not. The two pages
+show **different nouns**:
+
+|                | Real page                                                                                               | Mockup                                                    |
+| -------------- | ------------------------------------------------------------------------------------------------------- | --------------------------------------------------------- |
+| Primary object | Course **offering**                                                                                     | Student **roster**                                        |
+| Body           | `TeacherClassesManager`                                                                                 | `DataTable<Student>`                                      |
+| Content        | capacity, registration windows, publish-results (`resultsPublishedAt` — the **retention anchor**), Save | student, group, average, submitted, last active, standing |
+
+The real page's behaviour is not decoration. `POST /api/teacher/offerings/[offeringId]/results`
+sets `CourseOffering.resultsPublishedAt`, which is the clock the retention purge reads. **The
+mockup design has no place for it.** Porting the mockup over this route would delete working,
+tested functionality.
+
+`docs/plans/mockup-to-backend.md` §3 Wave 1 should drop this row into a new "needs a decision"
+group. See §4 decision D1.
+
+### 1.2 `teacher/submissions` has no real page at all
+
+The plan's table lists it as if it had backing. It does not — Wave 0 already encoded this
+(`nav-config.ts` maps `/mockup/teacher/submissions` to `null`, because the real submissions UI is a
+component _inside_ the assignments page). Porting it therefore means **creating a route**, which
+reverses a Wave 0 invariant:
+
+- `tests/nav-scope.test.ts` asserts `navHref("/mockup/teacher/submissions", "app") === null`
+- and asserts the teacher app nav is exactly `mockupCount - 3`
+
+Both must change (`-3` → `-2`, and the href moves out of the orphan list). That is expected and is
+the right place to update, but it is not a "no backend work" row.
+
+### 1.3 The "no name" constraint is narrower than I stated
+
+When summarising Wave 0 I wrote that _"the app cannot show a person's name at all."_ That was
+wrong, and it matters for these dossiers. Verified:
+
+- `User` has only `id` / `email` (`prisma/schema.prisma:39-48`) — **the signed-in account** genuinely
+  has no name. The design system and the code comments say exactly this, and they are accurate.
+- `StudentProfile.fullName` (`:53`) and `StaffProfile.fullName` (`:86`) **exist** and are already
+  selected by the real queries (`lib/gradebook-db.ts:205`, `lib/course-ratings.ts:124`).
+
+So every roster, submission and rating table in these dossiers **can** show a real person's name.
+Only the shell's own account label is limited to the email, which Wave 0 already handles via
+`lib/user-identity.ts`. The practical consequence is the opposite of what I implied: none of the
+Wave 1 pages is blocked on a name column.
+
+---
+
+## 2. Cross-cutting prerequisites
+
+Do these before or alongside the first port; each is small and unblocks several pages.
+
+| #   | Prerequisite                                                              | Why                                                                                                                                                                                                                                                                                                                  | Detail                                                                                                                                                                    |
+| --- | ------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| P1  | **Move `app/mockup/teacher/_lib/labels.ts` into `lib/`**                  | Eighteen exported mappings (`ASSESSMENT_KIND_LABEL`, `SUBMISSION_STATE_TO_STATUS`, `TEST_RUN_STATE_TO_STATUS`, `MILESTONE_STATE_TO_STATUS`, `AUTO_ACCEPT_CONFIDENCE_FLOOR`, …) live in a tree the plan schedules for **deletion**. A real page that imports them inherits a dangling dependency.                     | No real page currently imports the mockup tree (verified — the only matches are comments in `theme-toggle.tsx`). Move them now, while nothing depends on either location. |
+| P2  | **Extract the query from the route handler where one exists only inline** | `student/assessments` and `student/courses` have their Prisma query trapped inside `export async function GET()`, and the **only** consumer is a client `useEffect`. Without extraction, a server-rendered port cannot reuse the query, and the page would be forced into a new client fetch — which §8.3.1 forbids. | Mirror `listStudentQuizzes` (`lib/quiz-attempts/service.ts:255`). This also gives two currently-untested read paths a unit-testable surface.                              |
+| P3  | **Agree the per-page shape before writing**                               | Several mockups are read-only reports while the real page is an editor (rubrics, peer-evaluation, code-submissions), or vice versa. "Replace the component" would silently delete a working write path.                                                                                                              | Each dossier names the specific affordance at risk. See §4.                                                                                                               |
+
+---
+
+## 3. Readiness by page
+
+Twelve pages. "Backend" = does the read path exist and is it tested.
+
+| Page                          | Backend                                                       | Shape                                                    | Risk       | Verdict                                                                             |
+| ----------------------------- | ------------------------------------------------------------- | -------------------------------------------------------- | ---------- | ----------------------------------------------------------------------------------- |
+| `student/peer-evaluation`     | Complete, tested                                              | Mockup read-only, real is a **form**                     | Low        | **Merge** — keep the form, add the reporting cards                                  |
+| `student/quizzes`             | Complete, tested                                              | Rebuild presentation                                     | Low        | **Best-backed.** One payload gap (`getStudentAttempt` must surface draft responses) |
+| `teacher/reports`             | Ratings half complete + tested; report-card half **no query** | Re-skin + new work                                       | Low/Med    | **Ship the ratings half first**                                                     |
+| `teacher/rubrics`             | Complete; `listRubricsForTeacher` **untested**                | Mockup read-only vs real **editor**                      | Low        | Add a read-only summary panel beside the editor                                     |
+| `auth/login`, `auth/register` | Working, tested                                               | Pure re-skin                                             | **Lowest** | **Do first** — the only page pair that is purely presentational                     |
+| `teacher/code-tasks`          | Complete, tested                                              | Real = list + client detail; mockup = single-task detail | Med        | Server-fetch the detail; keep mutations as a client island                          |
+| `student/code-submissions`    | Complete, tested                                              | Mockup read-only vs real **editor**                      | Med        | Merge, don't replace; one small contract extension                                  |
+| `student/courses`             | Complete, **GET untested**                                    | Rebuild presentation                                     | Med        | Drop the Materials card (no reader); drop/anon peer ratings                         |
+| `teacher/groups`              | Complete, tested                                              | Rebuild presentation                                     | Med        | Keep all five queries; one contract extension                                       |
+| `student/assessments`         | Complete, **GET untested**                                    | Rebuild presentation                                     | Med        | Preserve the submission editor; expose `published`                                  |
+| `teacher/classes`             | Complete, tested                                              | **Different screen**                                     | **High**   | **Decision D1 required**                                                            |
+| `teacher/submissions`         | Data layer exists as a route only                             | **No page**                                              | **High**   | **Decision D2 required**; needs a new route + Wave 0 test update                    |
+
+---
+
+## 4. Decisions, ranked
+
+Each of these blocks at least one page. None is a coding question.
+
+### D1 — Where does offering administration go? _(blocks `teacher/classes`)_
+
+`TeacherClassesManager` owns `studentLimit`, registration windows, and publish-results (the
+retention anchor). The mockup roster design has no home for any of it.
+
+- **Option A (recommended):** split. `/teacher/classes` becomes the roster; move offering admin to
+  a new `/teacher/offerings` and add a nav entry. Preserves everything; costs one new route.
+- **Option B:** leave `/teacher/classes` as offering admin; put the roster on `/teacher/analytics`
+  or a new `/teacher/roster`. Cheapest, but contradicts the nav copy, which already describes
+  "Offerings, sections, and enrolled rosters".
+
+### D2 — Does `teacher/submissions` become a real page? _(blocks it)_
+
+If yes: create the route, and **decide where the grading editor lives**. `components/teacher-submissions-manager.tsx`
+is the only client of `PUT /api/teacher/assessments/submissions`. A read-only table would strand it.
+Also: what happens to `/teacher/assignments`, which currently renders that manager?
+
+### D3 — "At risk" has no per-student backing _(blocks 2 pages: classes, reports)_
+
+Real alerts are **offering-level** (`lib/analytics/alerts.ts:36-38`: class-average-below-threshold,
+contribution-imbalance, pending-reviews). There is no per-student flag and no column. Either define
+a per-student rule (Wave 3 work) or drop the column and the KPI from both pages.
+
+### D4 — `QuizAttempt.kind` (GRADED vs PRACTICE) _(blocks `student/quizzes`)_
+
+Confirmed independently: `QuizAttempt` has `status` only — no `kind`. Migrating one must also teach
+the attempt cap about it, because `COUNTED_STATUSES` counts `IN_PROGRESS/SUBMITTED/GRADED/EXPIRED`,
+so a persisted PRACTICE row would consume a graded attempt. Options: migrate and exclude it from the
+cap; drop the distinction; or model practice outside `QuizAttempt` (which the read-only retake
+implementation already implies).
+
+### D5 — Peer-rating disclosure threshold: 2 or 3? _(blocks `student/peer-evaluation`)_
+
+The mockup says **2** (`MIN_RESPONSES_TO_AGGREGATE = 2`, and its copy says "at least 2 teammates").
+The server says **3** (`MIN_RATERS_FOR_DISCLOSURE`, `lib/groups/student-service.ts:32`), and
+`tests/groups-peer-evaluation.test.ts` asserts 3. **The server wins** — the mockup number must not
+be ported, and its copy must be regenerated from the server constant rather than hardcoded.
+
+### D6 — May a teacher see the evaluator↔evaluatee pair matrix? _(blocks `teacher/groups`)_
+
+The mockup groups ratings under an evaluator's name. No teacher contract exposes that pair matrix
+today, and the student-facing confidentiality copy says a teammate never sees who rated them. The
+student rule is not the instructor rule, so this is a **product** decision, not a leak — but it must
+be a deliberate contract addition, not an accident of the port.
+
+### D7 — May a student see peers' course ratings? _(blocks `student/courses`)_
+
+The mockup shows every classmate's name and comment. `docs/features/course-ratings.md:88-89`
+documents the opposite as deliberate: students see aggregate + own only. Recommendation:
+distribution only, no names, no comments.
+
+### D8 — Rubric weight unit _(blocks `teacher/rubrics`)_
+
+The mockup asserts "weights total 100%" with fractional weights. The schema fixes no unit:
+`RubricCriterion.weight` is `Float @default(1)` and validation only requires positive, finite,
+≤1000. Rendering a validity claim the backend does not enforce is exactly the "number nothing
+derives" failure. Either enforce the sum or drop the claim.
+
+### D9 — Smaller GAPs to drop or migrate
+
+| Item                               | Pages                               | Recommendation                                                                            |
+| ---------------------------------- | ----------------------------------- | ----------------------------------------------------------------------------------------- |
+| `CompletionPercent` (fixture `62`) | classes, reports, courses           | Drop — matches nothing derivable                                                          |
+| `Last active` / `lastLoginAt`      | classes                             | Drop — no timestamp exists; confirm `AuditLog` records logins before considering a derive |
+| `room` on `ClassRoom`              | courses                             | Drop, or migrate a column                                                                 |
+| `Notification`, `FeatureFlag`      | (already dropped in Wave 0's shell) | Keep dropped                                                                              |
+| Search field                       | shell                               | Already hidden in app scope pending real search                                           |
+
+---
+
+## 5. Recommended slice order
+
+Each slice is independently shippable and leaves the tree green.
+
+1. **Slice 1 — auth re-skin.** `login` + `register`. The only purely presentational pair. Four
+   mockup-only affordances must **not** be carried over: the login **role selector** (no backend,
+   would let a user pick a workspace they have no account in), **forgot-password** (dead end),
+   **remember-me** (no cookie parameter), and the register **"Full name"** field
+   (`registerRequestSchema` accepts no name). Also: `MIN_PASSWORD_LENGTH = 12` is client-only today
+   and the "Pending verification" state does not exist — the route signs the user in immediately.
+2. **Slice 2 — `student/peer-evaluation`.** Merge, don't replace. Fixes D5 by using the server
+   constant. Needs a small contract addition for per-teammate completion and `role`.
+3. **Slice 3 — `student/quizzes`.** Best-backed data layer; needs the `getStudentAttempt` payload
+   addition and a decision on D4.
+4. **Slice 4 — `teacher/reports`** (ratings half). Straight re-skin that _fixes_ a fetch-on-mount.
+5. **Slice 5 — `teacher/rubrics`** (read-only panel beside the editor).
+6. Then code-eval, groups, and the two decision-gated pages once D1/D2 resolve.
+
+---
+
+## 6. Seed fixes needed before demoing
+
+Two concrete gaps make ported pages render `—` against the demo seed. Both are cheap.
+
+1. **`TestRun` evidence is the wrong shape.** `prisma/seed-demo.ts:661-672` writes
+   `resultsJson: { cases: [{ name, passed }] }`, but `readRunEvidence` requires `record.results` to
+   be a `TestResult[]` (`lib/code-eval/serialize.ts:31-48`). It therefore parses to `results: []`,
+   `earnedPoints: 0`. The row also sets **no `finishedAt` and no `coverage`** — so Finished,
+   Coverage, Diagnostics and per-test rows all render `—`, and a `PASSED` run reports "not finished".
+   Fix: write `toRunEvidenceJson`-shaped evidence plus `finishedAt`/`coverage`.
+2. **The peer-evaluation aggregate is never demonstrable.** `Team Alpha` has **3** members
+   (`seed-demo.ts:689`), so each student receives **2** non-self ratings — below
+   `MIN_RATERS_FOR_DISCLOSURE = 3`, so `received.withheld === true` always. The "how your teammates
+   rated you" card cannot be shown without a 4+ member team.
+
+---
+
+## 7. Test impact
+
+Reassuring, and verified: **no test renders any of these pages**, and no test imports their client
+components. A presentation-only port cannot break the suite. The data layers are a different story:
+
+- **Untested read paths:** `student/assessments` GET and `student/courses` GET have **no test at
+  all**; `listRubricsForTeacher` has none. These are the pages where a port has no safety net —
+  add a mapping unit test (no DB needed) with the port.
+- **The end-to-end proof:** `tests/demo-spine.test.ts` covers grading, publishing, the
+  published-only export invariant, and the answer-key invariant. Two assertions are hard
+  constraints on any payload change:
+  - a pre-submission payload must contain no `isCorrect` / `correctOptionId` / `rationale` / `explanation`;
+  - item analysis withholds `difficultyIndex` below threshold.
+- **Contract changes** (`studentCodeTaskSchema`, `rubricResponseSchema`, `courseRatingItemSchema`,
+  `StudentPeerEvaluationGroup`) are invisible to most tests because several route-auth tests
+  `vi.mock` the service — so re-run the full suite rather than trusting a green subset.
+- **`tests/nav-scope.test.ts`** is the one test a page creation _should_ change (D2).
+
+---
+
+## 8. What the dossiers could not verify
+
+Stated plainly, because each affects a decision above.
+
+- Whether `AuditLog` records logins — decides whether "last active" can be derived or must be
+  dropped (D9).
+- Whether the demo seed's `Group`/`PeerEvaluation` rows are the only ones, i.e. whether a 4-member
+  team is needed to demo the aggregate (§6.2) — the 3-member team is confirmed, the absence of any
+  larger one is inferred.
+- Whether `Grade.percentage` is populated anywhere; the student assessments route recomputes from
+  points/maxPoints instead of reading it.
+- Whether `RoleGuard`'s `cookies()` alone keeps `student/assessments` and `student/courses` dynamic
+  in this Next version. Recommendation: declare `force-dynamic` explicitly when the port moves data
+  server-side, matching every sibling page.
+- Live rendering of any of these pages — all three dossiers are read-only analyses of code, not
+  browser observations.
