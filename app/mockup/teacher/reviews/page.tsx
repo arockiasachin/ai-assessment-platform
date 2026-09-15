@@ -276,6 +276,7 @@ export default async function TeacherReviewsPage({
           searchPlaceholder="Search student or register number…"
           resultCount={MOCK_REVIEW_QUEUE.length}
           resultNoun="item in the queue"
+          resultNounPlural="items in the queue"
           selects={[
             {
               id: "filter-assessment",

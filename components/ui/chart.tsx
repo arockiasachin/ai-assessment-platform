@@ -9,6 +9,14 @@ import { cn } from "@/lib/utils"
 // Format: { THEME_NAME: CSS_SELECTOR }
 const THEMES = { light: "", dark: ".dark" } as const
 
+/**
+ * Explicit locale, hoisted like the formatters in `lib/mock/format.ts`.
+ * `toLocaleString()` with no argument resolves to the *runtime's* locale, so the
+ * server and the browser can disagree and produce a hydration mismatch. `en-US`
+ * matches the convention used by the other formatters in this codebase.
+ */
+const numberFormatter = new Intl.NumberFormat("en-US")
+
 const INITIAL_DIMENSION = { width: 320, height: 200 } as const
 type TooltipNameType = number | string
 
@@ -232,7 +240,7 @@ function ChartTooltipContent({
                       {item.value != null && (
                         <span className="font-mono font-medium text-foreground tabular-nums">
                           {typeof item.value === "number"
-                            ? item.value.toLocaleString()
+                            ? numberFormatter.format(item.value)
                             : String(item.value)}
                         </span>
                       )}

@@ -29,6 +29,12 @@ export type FilterBarProps = {
   /** Shown at the end of the bar, e.g. `14` + `submissions`. */
   resultCount?: number
   resultNoun?: string
+  /**
+   * Plural form, when appending `s` to `resultNoun` would be wrong.
+   * Needed for any multi-word noun: `"item in the queue"` would otherwise
+   * render as `"3 item in the queues"`. Defaults to `${resultNoun}s`.
+   */
+  resultNounPlural?: string
   /** Extra controls (a view toggle, an export button). */
   children?: React.ReactNode
   className?: string
@@ -47,6 +53,7 @@ export function FilterBar({
   selects = [],
   resultCount,
   resultNoun = "result",
+  resultNounPlural,
   children,
   className,
 }: FilterBarProps) {
@@ -98,8 +105,7 @@ export function FilterBar({
 
       {typeof resultCount === "number" && (
         <p className="text-xs text-muted-foreground">
-          {resultCount} {resultNoun}
-          {resultCount === 1 ? "" : "s"}
+          {resultCount} {resultCount === 1 ? resultNoun : (resultNounPlural ?? `${resultNoun}s`)}
         </p>
       )}
     </div>
