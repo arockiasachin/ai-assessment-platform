@@ -1,8 +1,8 @@
 # Wave 1 — per-page port dossiers
 
-Status: **research complete, implementation not started.** Written against `dev` @ `a177868`
-(Wave 0 landed). Companion to [`mockup-to-backend.md`](./mockup-to-backend.md), which this
-document corrects in two places.
+Status: **research complete. The first slice (`teacher/submissions`, D2) has shipped** — see §D2.
+Written against `dev` @ `a177868` (Wave 0 landed). Companion to
+[`mockup-to-backend.md`](./mockup-to-backend.md), which this document corrects in two places.
 
 Three read-only research passes produced field-by-field dossiers for all twelve Wave 1 pages
 (grading/rubrics, code-eval/groups, student-learning/auth). This consolidates them into an
@@ -130,29 +130,36 @@ list, and the teacher app nav goes from `mockupCount - 3` to `mockupCount - 2`.
 
 **Slice plan (files):**
 
-| File                                               | Change                                                                                                                                                                                                                                                                                   |
-| -------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `lib/labels.ts`                                    | **New** — the canonical home. Moves `ASSESSMENT_KIND_LABEL`, `SUBMISSION_STATE_TO_STATUS` and their 16 siblings out of `app/mockup/teacher/_lib/labels.ts`, which becomes a re-export shim. This is prerequisite **P1**; a real page must not import from a tree scheduled for deletion. |
-| `lib/teacher-submissions.ts`                       | **New** — `listSubmissionsForTeacher(user)`, plus a **pure** `toTeacherSubmissionRow(row)` so the projection is unit-testable without a database.                                                                                                                                        |
-| `app/api/teacher/assessments/submissions/route.ts` | Refactor `GET` to use the service, then **project back to its current response shape** — its existing consumer must not start seeing unpublished marks where it previously saw `null`. Service is truth; the route is a legacy projection.                                               |
-| `app/(dashboard)/teacher/submissions/page.tsx`     | **New** — guard, `AppShell scope="app"`, `PageHeader`, `force-dynamic`. Server-fetches; no client fetch.                                                                                                                                                                                 |
-| `components/teacher-submissions-table.tsx`         | **New** — KPI row + table, client component receiving rows as props (filters loaded rows locally, fetches nothing).                                                                                                                                                                      |
-| `components/shell/nav-config.ts`                   | `/mockup/teacher/submissions` → `/teacher/submissions`; delete the orphan comment.                                                                                                                                                                                                       |
-| `tests/nav-scope.test.ts`                          | `-3` → `-2`; drop the href from the null-assertion list.                                                                                                                                                                                                                                 |
-| `tests/teacher-submissions-mapping.test.ts`        | **New** — pure, no database. The GET read path has **no test today**; this is where it gets one.                                                                                                                                                                                         |
+| File                                               | Change                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| -------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `lib/labels.ts`                                    | **New** — the canonical home. Moves `ASSESSMENT_KIND_LABEL`, `SUBMISSION_STATE_TO_STATUS` and their 16 siblings out of `app/mockup/teacher/_lib/labels.ts`, which becomes a re-export shim. This is prerequisite **P1**; a real page must not import from a tree scheduled for deletion.                                                                                                                                                                                            |
+| `lib/teacher-submissions.ts`                       | **New** — `listSubmissionsForTeacher(user)`, plus a **pure** `toTeacherSubmissionRow(row)` so the projection is unit-testable without a database.                                                                                                                                                                                                                                                                                                                                   |
+| `app/api/teacher/assessments/submissions/route.ts` | **Left untouched, deliberately.** It serves the inline editor and its shape diverges on purpose — it collapses the kind, and hides unpublished marks. The queue needs the opposite of both, so forcing one projection to serve both would bloat the row with fields the queue never renders. Two reads over one table, each for its own consumer; the duplicated ownership predicate (both filter on `offering.teacherId`) is the thing to watch, and unifying them is a follow-up. |
+| `app/(dashboard)/teacher/submissions/page.tsx`     | **New** — guard, `AppShell scope="app"`, `PageHeader`, `force-dynamic`. Server-fetches; no client fetch.                                                                                                                                                                                                                                                                                                                                                                            |
+| `components/teacher-submissions-table.tsx`         | **New** — KPI row + table, client component receiving rows as props (filters loaded rows locally, fetches nothing).                                                                                                                                                                                                                                                                                                                                                                 |
+| `components/shell/nav-config.ts`                   | `/mockup/teacher/submissions` → `/teacher/submissions`; delete the orphan comment.                                                                                                                                                                                                                                                                                                                                                                                                  |
+| `tests/nav-scope.test.ts`                          | `-3` → `-2`; drop the href from the null-assertion list.                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| `tests/teacher-submissions-mapping.test.ts`        | **New** — pure, no database. The GET read path has **no test today**; this is where it gets one.                                                                                                                                                                                                                                                                                                                                                                                    |
 
-**Blocker found while building it — the filter bar.** `FilterBar` is documented as _"Inert by
-design — there is no state and no submit handler"_. Its search box and four selects do nothing. That
-is fine on a design screen, and it is exactly the **dangling-affordance** problem already fixed once
-in Wave 0 (the top-bar search was hidden in app scope for the same reason). Two ways forward, and
-this is not a silent choice because it changes a primitive 13 pages depend on:
+**Blocker found while building it — the filter bar. RESOLVED: extend it.** `FilterBar` was
+documented as _"Inert by design — there is no state and no submit handler"_, so its search box and
+four selects did nothing. Porting that onto a real page is the **dangling-affordance** problem
+already fixed once in Wave 0 (the top-bar search was hidden in app scope for the same reason).
+`FilterBar` now takes **opt-in controlled props** — `searchValue` / `onSearchChange`, and a
+per-select `onValueChange` — with every control defaulting to the original inert behaviour, so the
+13 mockup pages that render it are untouched. A control is therefore either inert or fully
+controlled, never half-wired.
 
-- **Extend `FilterBar`** with optional controlled props (search value/onChange, per-select
-  value/onChange), defaulting to today's inert behaviour so the mockup pages are unchanged. Keeps one
-  visual definition; touches the shared primitive.
-- **Omit filters from this slice** and ship the KPI row + table, then add filtering as its own step.
+**The slice shipped.** Verified in the browser against the seeded demo data: 3 submissions, KPIs
+reading Submitted 3 / Late 0 / Marked 1 / Marked, withheld 1, and a **withheld mark visible** — the
+state the old route hid. Row kinds render truthfully (`Code`, `Descriptive`) instead of the route's
+collapse to "Assignment". Typing a register number narrowed the table to one row and the count read
+"1 submission" (singular), which is the plural fix doing its job. `verify` exit 0, 426 tests (up 10),
+build 78/78, all 38 mockup routes still 200.
 
-Everything else in the slice is mechanical.
+**Deliberate wart to revisit:** the KPI tiles describe the whole set, not the filtered view, matching
+the mockup's behaviour. If the tiles should track the filters, that is a small change to the same
+component.
 
 ### D3 — "At risk" has no per-student backing _(blocks 2 pages: classes, reports)_
 

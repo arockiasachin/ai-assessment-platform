@@ -422,10 +422,7 @@ const APP_PATH_OVERRIDES: Record<string, string | null> = {
   // nav calls them "Quiz AI" and "Activity log" but links to these paths.
   "/mockup/teacher/quiz-ai": "/teacher/quiz-generation",
   "/mockup/teacher/activity": "/teacher/observability",
-  // No real page. Submissions is a component inside the assignments page
-  // (`components/teacher-submissions-manager.tsx`), not a route of its own.
-  "/mockup/teacher/submissions": null,
-  // No onboarding/settings surface exists for any role yet.
+  // No real page exists yet for the settings/profile surface of any role.
   "/mockup/teacher/profile": null,
   "/mockup/teacher/settings": null,
   "/mockup/student/profile": null,

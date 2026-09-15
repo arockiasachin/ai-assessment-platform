@@ -149,9 +149,9 @@ describe("nav scope: app tree resolves to real pages", () => {
 
   it("drops items whose page was never built, rather than linking to a 404", () => {
     // These are mockup-only: the design anticipated a destination the backend
-    // does not have. `submissions` is a component inside the assignments page.
+    // does not have. (`teacher/submissions` used to be here, and was promoted to
+    // a real route — see docs/plans/wave-1.md §D2.)
     for (const href of [
-      "/mockup/teacher/submissions",
       "/mockup/teacher/profile",
       "/mockup/teacher/settings",
       "/mockup/student/profile",
@@ -177,13 +177,13 @@ describe("nav scope: app tree resolves to real pages", () => {
         role,
       ).toBe(true)
     }
-    // teacher loses submissions, profile and settings.
+    // teacher loses profile and settings; submissions became a real page.
     const teacherApp = navSectionsFor("teacher", "app").reduce((n, s) => n + s.items.length, 0)
     const teacherMockup = navSectionsFor("teacher", "mockup").reduce(
       (n, s) => n + s.items.length,
       0,
     )
-    expect(teacherApp).toBe(teacherMockup - 3)
+    expect(teacherApp).toBe(teacherMockup - 2)
   })
 
   it("anchors the brand on the signed-in role's home", () => {

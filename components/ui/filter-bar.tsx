@@ -1,3 +1,5 @@
+"use client"
+
 import { Search } from "lucide-react"
 
 import { Input } from "@/components/ui/input"
@@ -17,14 +19,26 @@ export type FilterSelect = {
   id: string
   label: string
   placeholder?: string
-  /** Pre-selected value — mockups render a realistic selection, inert. */
+  /** Current value. Renders as the selection either way. */
   value: string
   options: FilterOption[]
+  /**
+   * Provide to make the select **controlled** — it fires on every change and the
+   * caller owns the value. Omit for the original behaviour: the control renders
+   * `value` and the user can move it, but nothing reacts.
+   */
+  onValueChange?: (value: string) => void
 }
 
 export type FilterBarProps = {
   searchLabel?: string
   searchPlaceholder?: string
+  /**
+   * Provide with `onSearchChange` to make the search box controlled. Omit for
+   * the original behaviour: the box is labelled and typeable but inert.
+   */
+  searchValue?: string
+  onSearchChange?: (value: string) => void
   selects?: FilterSelect[]
   /** Shown at the end of the bar, e.g. `14` + `submissions`. */
   resultCount?: number
@@ -43,9 +57,11 @@ export type FilterBarProps = {
 /**
  * Standard list-page toolbar: search, labelled selects, and a result count.
  *
- * Inert by design — there is no state and no submit handler, so reviewers can
- * judge the composition without a data layer. Every control is still properly
- * labelled, so the a11y tree is unchanged once it is wired up.
+ * **Opt-in controlled.** Every control defaults to the original inert behaviour,
+ * so the mockup pages that render it for composition keep working unchanged. Pass
+ * `onSearchChange` / a select's `onValueChange` and that control becomes
+ * controlled. The two modes are not mixed: a control is either inert or fully
+ * controlled, never half-wired.
  *
  * The `items` prop on the `Select` root is not optional in spirit: Base UI's
  * `Select.Value` renders the raw value unless the root knows the value→label
@@ -56,6 +72,8 @@ export type FilterBarProps = {
 export function FilterBar({
   searchLabel = "Search",
   searchPlaceholder = "Search…",
+  searchValue,
+  onSearchChange,
   selects = [],
   resultCount,
   resultNoun = "result",
@@ -82,7 +100,20 @@ export function FilterBar({
               className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground"
               aria-hidden="true"
             />
-            <Input id={searchId} type="search" placeholder={searchPlaceholder} className="pl-8" />
+            <Input
+              id={searchId}
+              type="search"
+              placeholder={searchPlaceholder}
+              className="pl-8"
+              // Controlled only when the caller supplies a handler; otherwise the
+              // original uncontrolled behaviour is preserved exactly.
+              {...(onSearchChange
+                ? {
+                    value: searchValue ?? "",
+                    onChange: (event) => onSearchChange(event.target.value),
+                  }
+                : {})}
+            />
           </div>
         </div>
 
@@ -91,18 +122,22 @@ export function FilterBar({
             <Label htmlFor={select.id} className="text-xs text-muted-foreground">
               {select.label}
             </Label>
-            <Select defaultValue={select.value} items={select.options}>
-              <SelectTrigger id={select.id} size="sm" className="w-full sm:w-44">
-                <SelectValue placeholder={select.placeholder} />
-              </SelectTrigger>
-              <SelectContent>
-                {select.options.map((option) => (
-                  <SelectItem key={option.value} value={option.value}>
-                    {option.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            {select.onValueChange ? (
+              // Controlled: `value` + handler, so the caller owns the state.
+              <Select
+                value={select.value}
+                onValueChange={(next) => select.onValueChange?.(next === null ? "" : String(next))}
+                items={select.options}
+              >
+                <FilterSelectBody select={select} />
+              </Select>
+            ) : (
+              // Inert: `defaultValue` so the user can still move the control, but
+              // nothing reacts — this is the mockup behaviour.
+              <Select defaultValue={select.value} items={select.options}>
+                <FilterSelectBody select={select} />
+              </Select>
+            )}
           </div>
         ))}
 
@@ -115,5 +150,23 @@ export function FilterBar({
         </p>
       )}
     </div>
+  )
+}
+
+/** The trigger and menu, shared by the controlled and uncontrolled branches. */
+function FilterSelectBody({ select }: { select: FilterSelect }) {
+  return (
+    <>
+      <SelectTrigger id={select.id} size="sm" className="w-full sm:w-44">
+        <SelectValue placeholder={select.placeholder} />
+      </SelectTrigger>
+      <SelectContent>
+        {select.options.map((option) => (
+          <SelectItem key={option.value} value={option.value}>
+            {option.label}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </>
   )
 }
