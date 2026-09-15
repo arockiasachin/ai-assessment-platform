@@ -7,6 +7,7 @@ import {
   type FormationCriterionValue,
   type GroupSummary,
   type MilestoneResponse,
+  type PeerEvaluationPair,
   type RosterStudent,
 } from "@/lib/contracts/groups"
 import type { Prisma } from "@/lib/generated/prisma/client"
@@ -36,7 +37,12 @@ import {
   toFormationStudent,
 } from "./formation-profile"
 import { analyzeCohortProgress, summarizeMilestones, type GroupProgress } from "./milestones"
-import { buildContributionEvidence, serializeGroupSummary, serializeMilestone } from "./serialize"
+import {
+  buildContributionEvidence,
+  serializeGroupSummary,
+  serializeMilestone,
+  serializePeerEvaluationPairs,
+} from "./serialize"
 import { readStoredRatings } from "./storage"
 
 const groupDetailInclude = {
@@ -474,6 +480,12 @@ export type GroupAnalysisResult = {
   analysis: GroupAnalysis
   contributionEvidence: ContributionEvidenceValue
   suggestedIndividualGrades: SuggestedIndividualGrade[] | null
+  /**
+   * Instructor-only evaluator↔evaluatee matrix (D6). Built from the same
+   * `PeerEvaluation` rows the analysis consumes — it is serialization, not a new
+   * query. Never reaches a student payload.
+   */
+  peerEvaluationPairs: PeerEvaluationPair[]
 }
 
 export type OfferingAnalysis = {
@@ -509,7 +521,10 @@ export async function getOfferingAnalysisForTeacher(
         evaluateeId: true,
         status: true,
         dimensions: true,
+        submittedAt: true,
       },
+      // Deterministic order, so the D6 pair matrix a teacher reads is stable.
+      orderBy: [{ evaluatorId: "asc" }, { evaluateeId: "asc" }],
     }),
     prisma.contributionEvent.findMany({
       where: { groupId: { in: groupIds } },
@@ -573,11 +588,20 @@ export async function getOfferingAnalysisForTeacher(
     groups: groups.map((group) => {
       const analysis = analysisByGroup.get(group.id)!
       const groupContributions = contributions.filter((event) => event.groupId === group.id)
+      // Soft-removed members stay in `group.members` (the include does not filter
+      // on `leftAt`), so a former member's historical rating is still nameable.
+      const namesById = new Map(
+        group.members.map((member) => [member.studentId, member.student.fullName]),
+      )
       return {
         analysis,
         contributionEvidence: buildContributionEvidence(group.id, groupContributions),
         suggestedIndividualGrades:
           groupGrade === null ? null : suggestIndividualGrades(groupGrade, analysis),
+        peerEvaluationPairs: serializePeerEvaluationPairs(
+          evaluations.filter((evaluation) => evaluation.groupId === group.id),
+          namesById,
+        ),
       }
     }),
     cohortProgress,

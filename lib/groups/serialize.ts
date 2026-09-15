@@ -5,6 +5,7 @@ import type {
   GroupSummary,
   MilestoneResponse,
   MyEvaluationResponse,
+  PeerEvaluationPair,
   TeammateResponse,
 } from "@/lib/contracts/groups"
 import type {
@@ -173,16 +174,52 @@ export function serializeMyEvaluation(
   }
 }
 
+export type PeerEvaluationPairRow = {
+  evaluatorId: string
+  evaluateeId: string
+  status: "DRAFT" | "SUBMITTED"
+  /** The raw `PeerEvaluation.dimensions` column; parsed by `readRatings`. */
+  dimensions: unknown
+  submittedAt: Date | null
+}
+
+/**
+ * Project the instructor-only evaluator↔evaluatee matrix (D6).
+ *
+ * A draft's values stay hidden (`null`) until it is submitted — the same boundary
+ * the student UI draws. A name that is not on the group's roster falls back to
+ * the id rather than a fabricated label. This shape is teacher-only: the student
+ * wrapper never calls it.
+ */
+export function serializePeerEvaluationPairs(
+  rows: readonly PeerEvaluationPairRow[],
+  namesById: ReadonlyMap<string, string>,
+): PeerEvaluationPair[] {
+  return rows.map((row) => {
+    const isSubmitted = row.status === "SUBMITTED"
+    return {
+      evaluatorId: row.evaluatorId,
+      evaluatorName: namesById.get(row.evaluatorId) ?? row.evaluatorId,
+      evaluateeId: row.evaluateeId,
+      evaluateeName: namesById.get(row.evaluateeId) ?? row.evaluateeId,
+      status: isSubmitted ? "SUBMITTED" : "DRAFT",
+      ratings: isSubmitted ? readRatings(row.dimensions) : null,
+      submittedAt: isSubmitted && row.submittedAt ? row.submittedAt.toISOString() : null,
+    }
+  })
+}
+
 /**
  * Project the pure `GroupAnalysis` onto the API response. Completion is taken
  * from the free-rider signals (each carries the member's submitted/expected
  * evaluation counts), and the contribution block is the evidence-stamped payload
- * — never a grade.
+ * — never a grade. `peerEvaluationPairs` is the instructor-only D6 matrix.
  */
 export function serializeGroupAnalysis(
   analysis: GroupAnalysis,
   evidence: ContributionEvidenceValue,
   suggestedIndividualGrades: SuggestedIndividualGrade[] | null,
+  peerEvaluationPairs: PeerEvaluationPair[],
 ): GroupAnalysisResponse {
   return {
     groupId: analysis.groupId,
@@ -199,6 +236,7 @@ export function serializeGroupAnalysis(
       completionRate: signal.completionRate,
     })),
     contributionEvidence: evidence,
+    peerEvaluationPairs,
     suggestedIndividualGrades,
   }
 }
