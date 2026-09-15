@@ -80,20 +80,20 @@ Do these before or alongside the first port; each is small and unblocks several 
 
 Twelve pages. "Backend" = does the read path exist and is it tested.
 
-| Page                          | Backend                                                       | Shape                                                    | Risk       | Verdict                                                                             |
-| ----------------------------- | ------------------------------------------------------------- | -------------------------------------------------------- | ---------- | ----------------------------------------------------------------------------------- |
-| `student/peer-evaluation`     | Complete, tested                                              | Mockup read-only, real is a **form**                     | Low        | **Merge** — keep the form, add the reporting cards                                  |
-| `student/quizzes`             | Complete, tested                                              | Rebuild presentation                                     | Low        | **Best-backed.** One payload gap (`getStudentAttempt` must surface draft responses) |
-| `teacher/reports`             | Ratings half complete + tested; report-card half **no query** | Re-skin + new work                                       | Low/Med    | **Ship the ratings half first**                                                     |
-| `teacher/rubrics`             | Complete; `listRubricsForTeacher` **untested**                | Mockup read-only vs real **editor**                      | Low        | Add a read-only summary panel beside the editor                                     |
-| `auth/login`, `auth/register` | Working, tested                                               | Pure re-skin                                             | **Lowest** | **Do first** — the only page pair that is purely presentational                     |
-| `teacher/code-tasks`          | Complete, tested                                              | Real = list + client detail; mockup = single-task detail | Med        | Server-fetch the detail; keep mutations as a client island                          |
-| `student/code-submissions`    | Complete, tested                                              | Mockup read-only vs real **editor**                      | Med        | Merge, don't replace; one small contract extension                                  |
-| `student/courses`             | Complete, **GET untested**                                    | Rebuild presentation                                     | Med        | Drop the Materials card (no reader); drop/anon peer ratings                         |
-| `teacher/groups`              | Complete, tested                                              | Rebuild presentation                                     | Med        | Keep all five queries; one contract extension                                       |
-| `student/assessments`         | Complete, **GET untested**                                    | Rebuild presentation                                     | Med        | Preserve the submission editor; expose `published`                                  |
-| `teacher/classes`             | Complete, tested                                              | **Different screen**                                     | **High**   | **Decision D1 required**                                                            |
-| `teacher/submissions`         | Data layer exists as a route only                             | **No page**                                              | **High**   | **D2 resolved (option A)**: read-only queue, editor stays in assignments            |
+| Page                          | Backend                                                       | Shape                                                    | Risk       | Verdict                                                                                        |
+| ----------------------------- | ------------------------------------------------------------- | -------------------------------------------------------- | ---------- | ---------------------------------------------------------------------------------------------- |
+| `student/peer-evaluation`     | Complete, tested                                              | Mockup read-only, real is a **form**                     | Low        | **Merge** — keep the form, add the reporting cards                                             |
+| `student/quizzes`             | Complete, tested                                              | Rebuild presentation                                     | Low        | **Best-backed.** One payload gap (`getStudentAttempt` must surface draft responses)            |
+| `teacher/reports`             | Ratings half complete + tested; report-card half **no query** | Re-skin + new work                                       | Low/Med    | **Ship the ratings half first**                                                                |
+| `teacher/rubrics`             | Complete; `listRubricsForTeacher` **untested**                | Mockup read-only vs real **editor**                      | Low        | Add a read-only summary panel beside the editor                                                |
+| `auth/login`, `auth/register` | Working, tested                                               | Pure re-skin                                             | **Lowest** | **Do first** — the only page pair that is purely presentational                                |
+| `teacher/code-tasks`          | Complete, tested                                              | Real = list + client detail; mockup = single-task detail | Med        | Server-fetch the detail; keep mutations as a client island                                     |
+| `student/code-submissions`    | Complete, tested                                              | Mockup read-only vs real **editor**                      | Med        | Merge, don't replace; one small contract extension                                             |
+| `student/courses`             | Complete, **GET untested**                                    | Rebuild presentation                                     | Med        | Drop the Materials card (no reader); drop/anon peer ratings                                    |
+| `teacher/groups`              | Complete, tested                                              | Rebuild presentation                                     | Med        | Keep all five queries; one contract extension                                                  |
+| `student/assessments`         | Complete, **GET untested**                                    | Rebuild presentation                                     | Med        | Preserve the submission editor; expose `published`                                             |
+| `teacher/classes`             | Complete, tested                                              | **Different screen**                                     | **High**   | **D1 resolved (option A)**: classes becomes the roster, offerings move to a new app-only route |
+| `teacher/submissions`         | Data layer exists as a route only                             | **No page**                                              | **High**   | **D2 resolved (option A)**: read-only queue, editor stays in assignments                       |
 
 ---
 
@@ -101,16 +101,64 @@ Twelve pages. "Backend" = does the read path exist and is it tested.
 
 Each of these blocks at least one page. None is a coding question.
 
-### D1 — Where does offering administration go? _(blocks `teacher/classes`)_
+### D1 — Where does offering administration go? _(RESOLVED — option A)_
 
-`TeacherClassesManager` owns `studentLimit`, registration windows, and publish-results (the
-retention anchor). The mockup roster design has no home for any of it.
+The route and the mockup only share a name. The real page administers **course offerings** —
+`studentLimit`, `registrationOpenAt`/`CloseAt`, and a "Publish results" button per offering. The
+mockup is a **student roster** (Student, Group, Average, Submitted, Last active, Standing). One is
+course configuration, the other is the people in the course.
 
-- **Option A (recommended):** split. `/teacher/classes` becomes the roster; move offering admin to
-  a new `/teacher/offerings` and add a nav entry. Preserves everything; costs one new route.
-- **Option B:** leave `/teacher/classes` as offering admin; put the roster on `/teacher/analytics`
-  or a new `/teacher/roster`. Cheapest, but contradicts the nav copy, which already describes
-  "Offerings, sections, and enrolled rosters".
+**Why it blocked rather than being a cosmetic choice:** "Publish results" sets
+`CourseOffering.resultsPublishedAt`, which the schema calls _"Retention anchor. Null means results
+not published, so no student work for this offering may be purged."_ It is the only way the retention
+purge clock ever starts, it is **set once and cannot be un-set**, and the nav copy already promises
+both halves ("Offerings, sections, and enrolled rosters"). Dropping the screen to fit the roster in
+would leave the retention policy with no way to trigger it from the UI.
+
+**Decision: A.** `/teacher/classes` becomes the roster; offering administration moves to a new
+`/teacher/offerings` with its own nav item. Both survive, each on a page that names what it is. Cost:
+one new route, one nav entry, and "Classes" loses the subtitle _"Manage enrollment limits and
+registration windows"_.
+
+#### What option A costs that the plan did not anticipate
+
+**The nav model has no concept of an app-only page.** `NavItem` is `{ label, href, icon, description }`
+and the nav is a single definition shared by both trees. `/teacher/offerings` would be the first page
+that exists in the real app with **no mockup counterpart**, which breaks three things unless the model
+is extended:
+
+1. `tests/nav-scope.test.ts` asserts _every mockup nav href has a mockup page on disk_. A new item
+   pointing at `/mockup/teacher/offerings` would fail it — correctly, since no such mockup exists.
+2. `app/mockup/page.tsx:67` derives the index's "total pages" from `allNavItems().length`, which would
+   be inflated by a page the mockup index cannot link to.
+3. The teacher app-nav arithmetic in the same test (`mockup - 2`) changes again.
+
+**The extension to make:** add `appOnly?: boolean` to `NavItem`, with the item's `href` set to the
+**real** path (`/teacher/offerings`) rather than a mockup one. Then:
+
+- `navSectionsFor(role, "mockup")` filters app-only items out, so no mockup page ever links to one;
+- `navSectionsFor(role, "app")` keeps them, and `navHref` passes a non-`/mockup` href through
+  unchanged — so it resolves with no override entry;
+- `allNavItems()` excludes them, which matches its documented meaning (_"Every page in the mockup
+  tree"_) and keeps the index count and the mockup-page assertion honest;
+- the teacher app-nav assertion becomes `mockup - 2 + 1`, i.e. `mockup - 1`.
+
+This is a genuine widening of the shared primitive, so it belongs in its own reviewed commit rather
+than folded into a page port.
+
+#### Two roster columns cannot be served
+
+Per the dossier (§3.3), of the mockup's six columns:
+
+| Column                             | Verdict                                                                                                                                                                                                                    |
+| ---------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Student, Group, Average, Submitted | **DERIVE** — roster and groups from existing reads; average from published marks (`studentAverage` already returns `null` for no marks, so the em-dash rule holds); submitted/missing needs one grouped `Submission` count |
+| **Last active**                    | **GAP** — no activity or login timestamp exists on any model                                                                                                                                                               |
+| **Standing**                       | **GAP** — real alerts are _offering-level_ (`lib/analytics/alerts.ts:36-38`), with no per-student flag and no column                                                                                                       |
+
+Both are dropped from the ported roster rather than faked, per the plan's rule that no page renders a
+number nothing derives. They can return when Wave 3 defines a per-student rule and a real activity
+source.
 
 ### D2 — Does `teacher/submissions` become a real page? _(RESOLVED — option A)_
 
