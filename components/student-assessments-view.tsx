@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { useEffect, useMemo, useState } from "react"
+import { useMemo, useState } from "react"
 import {
   BookOpenCheck,
   CalendarClock,
@@ -79,9 +79,15 @@ function submissionTone(state: StudentAssessmentItem["submissionState"]) {
   return "border-border bg-muted/20 text-foreground"
 }
 
-export function StudentAssessmentsView() {
-  const [payload, setPayload] = useState<StudentAssessmentsPayload | null>(null)
-  const [isLoading, setIsLoading] = useState(true)
+export function StudentAssessmentsView({
+  initialPayload,
+}: {
+  initialPayload: StudentAssessmentsPayload
+}) {
+  const [payload, setPayload] = useState<StudentAssessmentsPayload | null>(initialPayload)
+  // No initial fetch: the page is a server component that passes the payload in.
+  // `refresh` below stays for the explicit refresh path a submission triggers.
+  const [isLoading, setIsLoading] = useState(false)
   const [search, setSearch] = useState("")
   const [typeFilter, setTypeFilter] = useState<"all" | "Quiz" | "Assignment">("all")
   const [courseFilter, setCourseFilter] = useState<string>("all")
@@ -111,15 +117,18 @@ export function StudentAssessmentsView() {
     }
   }
 
+  /*
+   * The initial load used to run here in a `useEffect`, which is the deferred P1
+   * fetch-on-mount finding: the page rendered nothing until the browser had the
+   * data. The payload now arrives as a prop from the server component, so the
+   * first paint already has it. `refresh` keeps its own loading state for the
+   * refresh a submission triggers.
+   */
   const refresh = async () => {
     setError(null)
     setIsLoading(true)
     await load()
   }
-
-  useEffect(() => {
-    void load()
-  }, [])
 
   const allAssessments = useMemo(() => payload?.assessments ?? [], [payload])
 
