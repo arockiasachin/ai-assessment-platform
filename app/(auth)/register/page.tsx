@@ -3,12 +3,58 @@
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useState } from "react"
+import { UserPlus } from "lucide-react"
 
+import { AuthFeedback } from "@/components/auth-feedback"
 import { AuthPageShell } from "@/components/auth-page-shell"
-import { Button } from "@/components/ui/button"
+import { Button, buttonVariants } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import { cn } from "@/lib/utils"
 
+/**
+ * Only these two can self-register; `registerRequestSchema.role` is
+ * `z.enum(["teacher", "student"])` and the route rejects the reserved admin
+ * identifier separately.
+ */
+const ROLE_ITEMS = [
+  { value: "student", label: "Student" },
+  { value: "teacher", label: "Teacher" },
+]
+
+/**
+ * Create an account.
+ *
+ * Restyled onto the mockup's frame, with the role select upgraded from a native
+ * `<select>` to the shared `Select` (Base UI renders the raw value on the trigger
+ * unless the root receives the value→label map, so `items` is passed).
+ *
+ * The submission path is unchanged: same confirm-password check, same
+ * `POST /api/auth/register`, same `router.push("/login")`.
+ *
+ * Four mockup affordances are deliberately **not** carried over, each because it
+ * would describe or require something the backend does not do:
+ *
+ * - **A "Full name" field.** `registerRequestSchema` has no `name`, and the route
+ *   derives `fullName` from the email — so the field could not be submitted.
+ * - **A "pending verification" success screen.** Registration signs the user in
+ *   immediately (`createSessionResponse`); there is no verification step, so the
+ *   screen would be fiction. The existing redirect is the real completion.
+ * - **A required acceptable-use checkbox.** Nothing records acceptance, and
+ *   adding a required gate to a working registration flow is a behaviour change,
+ *   not a restyle. If the policy needs real acceptance, it needs a column first.
+ * - **A 12-character password minimum.** The mockup enforced this client-side
+ *   with copy claiming "the institution requires at least 12 characters", but the
+ *   contract accepts `min(1)`. A client-only rule would reject registrations the
+ *   server would accept — a restriction invented by a restyle.
+ */
 export default function RegisterPage() {
   const router = useRouter()
   const [email, setEmail] = useState("")
@@ -53,8 +99,8 @@ export default function RegisterPage() {
 
   return (
     <AuthPageShell
-      title="Create an account"
-      description="Register to access the gradebook and manage assessments as a student or teacher. Admin accounts are reserved."
+      title="Create your account"
+      description="Join Rubrix to sit assessments, submit work, and follow your feedback. Administrator accounts are created by invitation only."
       footer={
         <>
           <p className="text-sm text-muted-foreground">
@@ -66,10 +112,7 @@ export default function RegisterPage() {
               Sign in
             </Link>
           </p>
-          <Link
-            href="/"
-            className="inline-flex justify-center rounded-lg border border-border bg-muted/60 px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-muted"
-          >
+          <Link href="/" className={cn(buttonVariants({ variant: "outline" }), "w-full")}>
             Back to dashboard
           </Link>
         </>
@@ -81,11 +124,39 @@ export default function RegisterPage() {
           <Input
             id="email"
             type="email"
+            autoComplete="email"
             value={email}
             onChange={(event) => setEmail(event.target.value)}
             placeholder="name@example.com"
+            aria-invalid={error ? true : undefined}
+            aria-describedby={error ? "register-feedback" : undefined}
             required
           />
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="role">I am joining as</Label>
+          <Select
+            value={role}
+            items={ROLE_ITEMS}
+            onValueChange={(value) => {
+              if (value === "student" || value === "teacher") setRole(value)
+            }}
+          >
+            <SelectTrigger id="role" className="w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {ROLE_ITEMS.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <p className="text-xs text-muted-foreground">
+            Administrator accounts are created by invitation only.
+          </p>
         </div>
 
         <div className="space-y-2">
@@ -93,9 +164,12 @@ export default function RegisterPage() {
           <Input
             id="password"
             type="password"
+            autoComplete="new-password"
             value={password}
             onChange={(event) => setPassword(event.target.value)}
             placeholder="Choose a password"
+            aria-invalid={error ? true : undefined}
+            aria-describedby={error ? "register-feedback" : undefined}
             required
           />
         </div>
@@ -105,30 +179,27 @@ export default function RegisterPage() {
           <Input
             id="confirmPassword"
             type="password"
+            autoComplete="new-password"
             value={confirmPassword}
             onChange={(event) => setConfirmPassword(event.target.value)}
             placeholder="Re-enter password"
+            aria-invalid={error ? true : undefined}
+            aria-describedby={error ? "register-feedback" : undefined}
             required
           />
         </div>
 
-        <div className="space-y-2">
-          <Label htmlFor="role">Role</Label>
-          <select
-            id="role"
-            value={role}
-            onChange={(event) => setRole(event.target.value)}
-            className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
-          >
-            <option value="student">Student</option>
-            <option value="teacher">Teacher</option>
-          </select>
-        </div>
-
-        {error ? <p className="text-sm text-red-600">{error}</p> : null}
+        {error ? (
+          <div id="register-feedback">
+            <AuthFeedback tone="error" title="Could not create the account">
+              {error}
+            </AuthFeedback>
+          </div>
+        ) : null}
 
         <Button type="submit" className="w-full" disabled={isLoading}>
-          {isLoading ? "Creating account..." : "Create account"}
+          <UserPlus className="size-4" aria-hidden="true" />
+          {isLoading ? "Creating account…" : "Create account"}
         </Button>
       </form>
     </AuthPageShell>

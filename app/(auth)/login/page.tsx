@@ -2,12 +2,40 @@
 
 import Link from "next/link"
 import { useState } from "react"
+import { LogIn } from "lucide-react"
 
+import { AuthFeedback } from "@/components/auth-feedback"
 import { AuthPageShell } from "@/components/auth-page-shell"
-import { Button } from "@/components/ui/button"
+import { Button, buttonVariants } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { cn } from "@/lib/utils"
 
+/**
+ * Sign in.
+ *
+ * Restyled onto the mockup's frame. The submission path is unchanged: same
+ * `POST /api/auth/login`, same error surfacing, and the same
+ * `window.location.assign` afterwards — a **full** navigation is deliberate here
+ * because it disposes of all client state on a credential change
+ * (`docs/verification/phase-1-verification.md`).
+ *
+ * Three mockup affordances are deliberately **not** carried over:
+ *
+ * - **A "sign in as" role selector.** There is no backing for it — the role is
+ *   derived server-side from the account — and offering it would invite a user
+ *   to pick a workspace they have no account in.
+ * - **"Forgot password?"** There is no reset flow; the mockup's version resolved
+ *   to an error explaining its own absence.
+ * - **"Keep me signed in on this device."** The session lifetime is fixed
+ *   server-side (`SESSION_MAX_AGE_SECONDS`) and no remember-me parameter exists,
+ *   so the checkbox would change nothing.
+ *
+ * The identifier field stays a **username-or-email** `text` input, not the
+ * mockup's `type="email"`: `loginRequestSchema.email` is a non-empty string, and
+ * the seeded administrator's identifier is literally `admin`, which `type="email"`
+ * would refuse to submit.
+ */
 export default function LoginPage() {
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
@@ -50,7 +78,7 @@ export default function LoginPage() {
   return (
     <AuthPageShell
       title="Welcome back"
-      description="Sign in to continue to Gradebook and access assessment progress for teachers and students."
+      description="Sign in to review AI-assisted marks, author assessments, and follow your feedback."
       footer={
         <>
           <p className="text-sm text-muted-foreground">
@@ -62,10 +90,7 @@ export default function LoginPage() {
               Create one
             </Link>
           </p>
-          <Link
-            href="/"
-            className="inline-flex justify-center rounded-lg border border-border bg-muted/60 px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-muted"
-          >
+          <Link href="/" className={cn(buttonVariants({ variant: "outline" }), "w-full")}>
             Back to dashboard
           </Link>
         </>
@@ -77,9 +102,12 @@ export default function LoginPage() {
           <Input
             id="email"
             type="text"
+            autoComplete="username"
             value={email}
             onChange={(event) => setEmail(event.target.value)}
             placeholder="admin or name@example.com"
+            aria-invalid={error ? true : undefined}
+            aria-describedby={error ? "login-feedback" : undefined}
             required
           />
         </div>
@@ -89,17 +117,27 @@ export default function LoginPage() {
           <Input
             id="password"
             type="password"
+            autoComplete="current-password"
             value={password}
             onChange={(event) => setPassword(event.target.value)}
             placeholder="Enter your password"
+            aria-invalid={error ? true : undefined}
+            aria-describedby={error ? "login-feedback" : undefined}
             required
           />
         </div>
 
-        {error ? <p className="text-sm text-red-600">{error}</p> : null}
+        {error ? (
+          <div id="login-feedback">
+            <AuthFeedback tone="error" title="Could not sign in">
+              {error}
+            </AuthFeedback>
+          </div>
+        ) : null}
 
         <Button type="submit" className="w-full" disabled={isLoading}>
-          {isLoading ? "Signing in..." : "Sign in"}
+          <LogIn className="size-4" aria-hidden="true" />
+          {isLoading ? "Signing in…" : "Sign in"}
         </Button>
       </form>
     </AuthPageShell>
