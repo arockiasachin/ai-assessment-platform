@@ -23,7 +23,7 @@ import {
 } from "@/lib/mock"
 
 import { ASSESSMENT_KIND_LABEL } from "../_lib/labels"
-import { TeacherProgress } from "../_lib/teacher-progress"
+import { ProgressBar } from "@/components/ui/progress-bar"
 
 export const metadata: Metadata = {
   title: "Assignments",
@@ -89,7 +89,7 @@ export default function TeacherAssignmentsPage() {
       header: "Submitted",
       hideBelow: "md",
       cell: (row) => (
-        <TeacherProgress
+        <ProgressBar
           className="w-36"
           label="Submitted"
           value={row.submissionCount}

@@ -4,7 +4,7 @@ import { Users } from "lucide-react"
 import { PageHeader } from "@/components/shell/page-header"
 import { EmptyState } from "@/components/ui/empty-state"
 import { KeyValueList, MetricRow } from "@/components/ui/metric-row"
-import { ProgressBar } from "../_lib/progress-bar"
+import { ProgressBar } from "@/components/ui/progress-bar"
 import { SectionCard } from "@/components/ui/section-card"
 import { StatusPill } from "@/components/ui/status-pill"
 import {

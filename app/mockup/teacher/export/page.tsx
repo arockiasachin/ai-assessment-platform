@@ -17,7 +17,7 @@ import {
   formatRelativeTime,
   type ExportRow,
 } from "@/lib/mock"
-import { TeacherProgress } from "../_lib/teacher-progress"
+import { ProgressBar } from "@/components/ui/progress-bar"
 
 export const metadata: Metadata = {
   title: "Export",
@@ -58,7 +58,7 @@ export default function TeacherExportPage() {
       id: "mapped",
       header: "Mapped users",
       cell: (row) => (
-        <TeacherProgress
+        <ProgressBar
           className="w-36"
           label={`Mapped users — ${row.target}`}
           value={row.mappedUsers}

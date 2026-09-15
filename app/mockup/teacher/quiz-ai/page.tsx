@@ -20,7 +20,7 @@ import {
   type MaterialView,
   type QuizQuestion,
 } from "@/lib/mock"
-import { TeacherProgress } from "../_lib/teacher-progress"
+import { ProgressBar } from "@/components/ui/progress-bar"
 
 export const metadata: Metadata = {
   title: "Quiz AI",
@@ -348,7 +348,7 @@ export default function TeacherQuizAiPage() {
                       <StatusPill status="insufficient-data" dot />
                     </div>
                   ) : (
-                    <TeacherProgress
+                    <ProgressBar
                       value={topic.mastery}
                       max={100}
                       label={`${topic.topic} — mastery across ${topic.responses} responses`}

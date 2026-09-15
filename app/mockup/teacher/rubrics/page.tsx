@@ -20,7 +20,7 @@ import {
 } from "@/lib/mock"
 
 import { AUTO_ACCEPT_CONFIDENCE_FLOOR } from "../_lib/labels"
-import { TeacherProgress } from "../_lib/teacher-progress"
+import { ProgressBar } from "@/components/ui/progress-bar"
 
 export const metadata: Metadata = {
   title: "Rubrics",
@@ -208,7 +208,7 @@ export default function TeacherRubricsPage() {
                     />
                   </div>
 
-                  <TeacherProgress
+                  <ProgressBar
                     value={criterion.weight * 100}
                     max={100}
                     label={`Weight towards the final mark — ${criterion.label}`}

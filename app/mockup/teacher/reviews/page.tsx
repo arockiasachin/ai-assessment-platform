@@ -41,7 +41,7 @@ import {
   REVIEW_STATE_TO_STATUS,
   priorityToStatus,
 } from "../_lib/labels"
-import { TeacherProgress } from "../_lib/teacher-progress"
+import { ProgressBar } from "@/components/ui/progress-bar"
 
 export const metadata: Metadata = {
   title: "Reviews",
@@ -557,7 +557,7 @@ function CriterionCard({ criterion }: { criterion: GradeSuggestion }) {
             {formatPoints(criterion.suggestedPoints, criterion.maxPoints)}
           </span>
         </p>
-        <TeacherProgress
+        <ProgressBar
           className="mt-1.5"
           value={criterion.suggestedPoints}
           max={criterion.maxPoints}

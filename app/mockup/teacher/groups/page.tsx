@@ -35,7 +35,7 @@ import {
   MILESTONE_STATE_TO_STATUS,
   PEER_STATE_TO_STATUS,
 } from "../_lib/labels"
-import { TeacherProgress } from "../_lib/teacher-progress"
+import { ProgressBar } from "@/components/ui/progress-bar"
 
 export const metadata: Metadata = {
   title: "Groups",
@@ -156,7 +156,7 @@ export default function TeacherGroupsPage() {
       id: "share",
       header: "Contribution share",
       cell: (row) => (
-        <TeacherProgress
+        <ProgressBar
           className="w-40"
           label={`Contribution share — ${row.name}`}
           value={row.contributionShare}

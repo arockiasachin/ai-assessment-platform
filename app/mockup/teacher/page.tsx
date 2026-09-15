@@ -46,7 +46,7 @@ import {
   REVIEW_STATE_LABEL,
   REVIEW_STATE_TO_STATUS,
 } from "./_lib/labels"
-import { TeacherProgress } from "./_lib/teacher-progress"
+import { ProgressBar } from "@/components/ui/progress-bar"
 
 export const metadata: Metadata = {
   title: "Dashboard",
@@ -180,7 +180,7 @@ export default function TeacherDashboardPage() {
       id: "graded",
       header: "Marked",
       cell: (row) => (
-        <TeacherProgress
+        <ProgressBar
           className="w-36"
           label="Marked"
           value={row.gradedCount}

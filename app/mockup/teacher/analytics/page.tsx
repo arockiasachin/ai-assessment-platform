@@ -27,7 +27,7 @@ import {
   type ItemAnalysis,
   type Student,
 } from "@/lib/mock"
-import { TeacherProgress } from "../_lib/teacher-progress"
+import { ProgressBar } from "@/components/ui/progress-bar"
 
 export const metadata: Metadata = {
   title: "Analytics",
@@ -291,7 +291,7 @@ export default function TeacherAnalyticsPage() {
                     <StatusPill status="insufficient-data" dot />
                   </div>
                 ) : (
-                  <TeacherProgress
+                  <ProgressBar
                     value={topic.mastery}
                     max={100}
                     label={`${topic.topic} — mastery across ${topic.responses} responses`}
