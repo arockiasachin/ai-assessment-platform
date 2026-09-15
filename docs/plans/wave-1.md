@@ -1,12 +1,11 @@
 # Wave 1 — per-page port dossiers
 
-Status: **research complete. Eleven of the thirteen Wave 1 rows have shipped** — Wave 0's scope-aware
-shell, `teacher/reviews` (pilot), `teacher/submissions` (D2), the `teacher/classes` / `teacher/offerings`
-split (D1), the auth re-skin, `student/peer-evaluation`, `student/quizzes`, `teacher/reports`,
-`teacher/rubrics`, `student/assessments`, `teacher/code-tasks` and `student/courses`. Remaining:
-`teacher/groups` (D6 pair matrix) and `student/code-submissions`. Written against `dev` @ `a177868`
-(Wave 0 landed). Companion to [`mockup-to-backend.md`](./mockup-to-backend.md), which this document
-corrects in two places.
+Status: **Wave 1 complete — all thirteen rows shipped.** Wave 0's scope-aware shell, `teacher/reviews`
+(pilot), `teacher/submissions` (D2), the `teacher/classes` / `teacher/offerings` split (D1), the auth
+re-skin, `student/peer-evaluation`, `student/quizzes`, `teacher/reports`, `teacher/rubrics`,
+`student/assessments`, `teacher/code-tasks`, `student/courses`, `teacher/groups` (with the D6 pair
+matrix), and `student/code-submissions`. Written against `dev` @ `a177868` (Wave 0 landed). Companion
+to [`mockup-to-backend.md`](./mockup-to-backend.md), which this document corrects in two places.
 
 Three read-only research passes produced field-by-field dossiers for all twelve Wave 1 pages
 (grading/rubrics, code-eval/groups, student-learning/auth). This consolidates them into an
@@ -92,7 +91,7 @@ Twelve pages. "Backend" = does the read path exist and is it tested.
 | `teacher/rubrics`             | Complete; `listRubricsForTeacher` **untested**                | Mockup read-only vs real **editor**                      | Low        | Add a read-only summary panel; render weight as relative, no sum claim (D8)                       |
 | `auth/login`, `auth/register` | Working, tested                                               | Pure re-skin                                             | **Lowest** | **SHIPPED** (`08ac76a`, fixes `46a4a58`)                                                          |
 | `teacher/code-tasks`          | Complete, tested                                              | Real = list + client detail; mockup = single-task detail | Med        | **SHIPPED** (`2aba04b`) — detail server-fetched; mutations stay a client island                   |
-| `student/code-submissions`    | Complete, tested                                              | Mockup read-only vs real **editor**                      | Med        | Merge, don't replace; one small contract extension                                                |
+| `student/code-submissions`    | Complete, tested                                              | Mockup read-only vs real **editor**                      | Med        | **SHIPPED** (`ea93ace`, contract `1c28f5c`) — merged; runs server-fetched; marks/limits carried   |
 | `student/courses`             | Complete, **GET untested**                                    | Rebuild presentation                                     | Med        | **SHIPPED** (`bc19afe`) — query extracted; distribution aggregate added; peer ratings not ported  |
 | `teacher/groups`              | Complete, tested                                              | Rebuild presentation                                     | Med        | **SHIPPED** (`2f73979`, pair matrix `f4d2ffb`) — server-selected detail; four client fetches gone |
 | `student/assessments`         | Complete, **GET untested**                                    | Rebuild presentation                                     | Med        | Preserve the submission editor; expose `published`                                                |
