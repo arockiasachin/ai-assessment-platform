@@ -6,10 +6,9 @@ import { LogIn } from "lucide-react"
 
 import { AuthFeedback } from "@/components/auth-feedback"
 import { AuthPageShell } from "@/components/auth-page-shell"
-import { Button, buttonVariants } from "@/components/ui/button"
+import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { cn } from "@/lib/utils"
 
 /**
  * Sign in.
@@ -80,20 +79,15 @@ export default function LoginPage() {
       title="Welcome back"
       description="Sign in to review AI-assisted marks, author assessments, and follow your feedback."
       footer={
-        <>
-          <p className="text-sm text-muted-foreground">
-            Don’t have an account yet?{" "}
-            <Link
-              href="/register"
-              className="font-medium text-primary underline-offset-4 hover:underline"
-            >
-              Create one
-            </Link>
-          </p>
-          <Link href="/" className={cn(buttonVariants({ variant: "outline" }), "w-full")}>
-            Back to dashboard
+        <p className="text-sm text-muted-foreground">
+          Don’t have an account yet?{" "}
+          <Link
+            href="/register"
+            className="font-medium text-primary underline-offset-4 hover:underline"
+          >
+            Create one
           </Link>
-        </>
+        </p>
       }
     >
       <form onSubmit={handleSubmit} className="space-y-4">

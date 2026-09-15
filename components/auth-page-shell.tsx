@@ -1,4 +1,3 @@
-import Link from "next/link"
 import type { ReactNode } from "react"
 
 import { BRAND } from "@/components/shell/nav-config"
@@ -23,17 +22,20 @@ type AuthPageShellProps = {
  * of which were retired when the product became Rubrix. Reading the name from
  * `BRAND` means the auth screens and the app shell cannot disagree about it.
  *
- * Deliberately no footnote: the mockup's "no credentials are checked and nothing
- * is sent anywhere" line is false here, because these forms really do
+ * It is deliberately **not a link**. The only sensible destination would be the
+ * signed-in home, which does not exist for the anonymous visitor — the only
+ * person who can see this page. (The pages previously offered a "Back to
+ * dashboard" link to `/`, which redirects to `/login`: a labelled control that
+ * returned the user to where they already were.)
+ *
+ * Deliberately no footnote either: the mockup's "no credentials are checked and
+ * nothing is sent anywhere" line is false here, because these forms really do
  * authenticate.
  */
 export function AuthPageShell({ title, description, footer, children }: AuthPageShellProps) {
   return (
     <div className="flex min-h-screen flex-col items-center justify-center gap-6 bg-background px-4 py-10 text-foreground sm:px-6">
-      <Link
-        href="/"
-        className="flex items-center gap-2.5 rounded-lg outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
-      >
+      <div className="flex items-center gap-2.5">
         <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground">
           <BRAND.icon className="size-5" aria-hidden="true" />
         </span>
@@ -43,7 +45,7 @@ export function AuthPageShell({ title, description, footer, children }: AuthPage
           </span>
           <span className="mt-1 block text-xs text-muted-foreground">{BRAND.tagline}</span>
         </span>
-      </Link>
+      </div>
 
       <main className="w-full max-w-md">
         <Card>

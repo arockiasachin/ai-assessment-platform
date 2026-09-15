@@ -1,6 +1,6 @@
 # Wave 1 — per-page port dossiers
 
-Status: **research complete. The first slice (`teacher/submissions`, D2) has shipped** — see §D2.
+Status: **research complete. Slices 1 (`teacher/submissions`, D2) and 2 (the auth re-skin) have shipped.** — see §D2.
 Written against `dev` @ `a177868` (Wave 0 landed). Companion to
 [`mockup-to-backend.md`](./mockup-to-backend.md), which this document corrects in two places.
 

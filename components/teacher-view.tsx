@@ -180,7 +180,13 @@ export function TeacherView() {
             <CardContent className="pt-6">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>
-                  <h3 className="text-base font-semibold tracking-tight">Gradebook</h3>
+                  {/*
+                   * "Marks", not "Gradebook": this card is the marks grid, and its
+                   * own description already says so. The old product name was
+                   * retired (the header reads `BRAND.name`), so leaving it here
+                   * made /teacher show "Rubrix" and "Gradebook" stacked.
+                   */}
+                  <h3 className="text-base font-semibold tracking-tight">Marks</h3>
                   <p className="text-xs text-muted-foreground">
                     Filter by course and search students to quickly update marks.
                   </p>
