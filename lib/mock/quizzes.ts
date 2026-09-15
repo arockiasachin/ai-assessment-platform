@@ -1,5 +1,12 @@
-import { MOCK_MARKS, MOCK_STUDENTS } from "./course"
-import type { ItemAnalysis, QuizAttemptSummary, QuizQuestion } from "./types"
+import { MOCK_ASSESSMENT_BY_ID, MOCK_MARKS, MOCK_STUDENTS } from "./course"
+import { MOCK_NOW } from "./format"
+import type {
+  ItemAnalysis,
+  QuizAttemptSummary,
+  QuizInProgressAttempt,
+  QuizQuestion,
+  QuizResponse,
+} from "./types"
 
 /**
  * Quiz domain: the published question set for Quiz 1, its attempts, and the
@@ -221,12 +228,16 @@ export const MOCK_QUIZ_QUESTIONS: QuizQuestion[] = [
 ]
 
 /** Finalized Quiz 1 attempts. Scores come from the shared marks table. */
+const QUIZ_1 = MOCK_ASSESSMENT_BY_ID["asm_quiz1"]
+
 export const MOCK_QUIZ_ATTEMPTS: QuizAttemptSummary[] = MOCK_STUDENTS.filter(
   (student) => MOCK_MARKS.quiz1[student.id] !== null,
 ).map((student, index) => {
   const score = MOCK_MARKS.quiz1[student.id]
   return {
     id: `att_quiz1_${student.id}`,
+    assessmentId: QUIZ_1.id,
+    assessmentTitle: QUIZ_1.title,
     studentId: student.id,
     studentName: student.name,
     attemptNumber: student.id === "stu_ethan" ? 2 : 1,
@@ -321,6 +332,115 @@ export const MOCK_DRAFT_QUESTIONS = MOCK_QUIZ_QUESTIONS.filter(
 )
 
 /** The demo student's own attempt history. */
-export const MOCK_MY_QUIZ_ATTEMPTS = MOCK_QUIZ_ATTEMPTS.filter(
+export const MOCK_MY_QUIZ_ATTEMPTS: QuizAttemptSummary[] = MOCK_QUIZ_ATTEMPTS.filter(
   (attempt) => attempt.studentId === "stu_aarav",
 )
+
+/**
+ * The demo student's selections on the submitted Quiz 1 attempt.
+ *
+ * This is the raw student input the post-submission payload is built from, so
+ * the awarded points are derived (see `scoreSelection`) instead of typed in
+ * twice: five questions fully correct and one multi-select answered partially,
+ * which is exactly the 18 / 20 in the shared marks table.
+ */
+const MY_QUIZ_1_SELECTIONS: Record<string, string[]> = {
+  q_linear_1: ["q1_a"],
+  q_linear_2: ["q2_a"],
+  q_linear_3: ["q3_a"],
+  q_linear_4: ["q4_a"],
+  q_linear_5: ["q5_a"],
+  // Two options are correct; the student picked one, so partial credit applies.
+  q_linear_6: ["q6_a"],
+}
+
+function scoreSelection(
+  question: QuizQuestion,
+  selected: string[] | undefined,
+): Pick<QuizResponse, "outcome" | "selectedOptionIds" | "pointsAwarded"> {
+  if (!selected || selected.length === 0) {
+    // Unanswered is its own outcome — never reported as incorrect.
+    return { outcome: "UNANSWERED", selectedOptionIds: [], pointsAwarded: 0 }
+  }
+
+  const correctOptionIds = question.options.filter((option) => option.isCorrect).map((o) => o.id)
+  const correctSelected = selected.filter((id) => correctOptionIds.includes(id)).length
+  const wrongSelected = selected.length - correctSelected
+
+  if (question.type === "MULTIPLE_SELECT") {
+    const ratio = (correctSelected - wrongSelected) / correctOptionIds.length
+    const pointsAwarded = Math.max(0, Math.floor(question.points * ratio))
+    const outcome =
+      pointsAwarded === question.points
+        ? "CORRECT"
+        : pointsAwarded > 0
+          ? "PARTIALLY_CORRECT"
+          : "INCORRECT"
+    return { outcome, selectedOptionIds: selected, pointsAwarded }
+  }
+
+  const isCorrect = correctSelected === correctOptionIds.length && wrongSelected === 0
+  return {
+    outcome: isCorrect ? "CORRECT" : "INCORRECT",
+    selectedOptionIds: selected,
+    pointsAwarded: isCorrect ? question.points : 0,
+  }
+}
+
+/**
+ * Per-question results the student sees AFTER submitting Quiz 1.
+ *
+ * Every question in the sitting has a row, including the one answered
+ * partially. Summing `pointsAwarded` gives 18, the same figure as
+ * `MOCK_MY_QUIZ_ATTEMPTS[0].score`.
+ */
+export const MOCK_MY_QUIZ_RESPONSES: QuizResponse[] = MOCK_QUIZ_QUESTIONS.map((question) => ({
+  id: `resp_quiz1_${question.id}`,
+  questionId: question.id,
+  ...scoreSelection(question, MY_QUIZ_1_SELECTIONS[question.id]),
+}))
+
+/** Points earned across the responses above. Equals the attempt score (18). */
+export const MOCK_MY_QUIZ_RESPONSE_TOTAL = MOCK_MY_QUIZ_RESPONSES.reduce(
+  (total, response) => total + response.pointsAwarded,
+  0,
+)
+
+/**
+ * The sitting the student is part-way through: an adaptive practice retake of
+ * Quiz 1, drawn from the weakest subtopics. It carries the student's own
+ * selections and nothing about correctness, so the pre-submission surface has
+ * no answer key to leak — see `QuizInProgressAttempt`.
+ */
+export const MOCK_MY_IN_PROGRESS_ATTEMPT: QuizInProgressAttempt = (() => {
+  const startedAt = "2026-09-15T13:00:00.000Z"
+  const expiresAt = "2026-09-15T13:45:00.000Z"
+  const questionIds = ["q_linear_1", "q_linear_2", "q_linear_4", "q_linear_6"]
+  const selections: Record<string, string[]> = {
+    q_linear_1: ["q1_a"],
+    q_linear_4: ["q4_b"],
+  }
+  const pointsFor = (id: string) => MOCK_QUIZ_QUESTIONS.find((q) => q.id === id)?.points ?? 0
+
+  return {
+    id: "att_quiz1_practice_stu_aarav",
+    assessmentId: "asm_quiz1",
+    title: "Quiz 1 — Linear Equations",
+    kind: "PRACTICE",
+    attemptNumber: 2,
+    maxScore: questionIds.reduce((total, id) => total + pointsFor(id), 0),
+    startedAt,
+    expiresAt,
+    questionIds,
+    answeredQuestionIds: Object.keys(selections),
+    flaggedQuestionIds: ["q_linear_4"],
+    selections,
+    timeSpentMs: Date.parse(MOCK_NOW) - Date.parse(startedAt),
+    timeRemainingMs: Date.parse(expiresAt) - Date.parse(MOCK_NOW),
+  }
+})()
+
+/** The in-progress sitting's questions, in the order the student sees them. */
+export const MOCK_MY_IN_PROGRESS_QUESTIONS: QuizQuestion[] = MOCK_MY_IN_PROGRESS_ATTEMPT.questionIds
+  .map((id) => MOCK_QUIZ_QUESTIONS.find((question) => question.id === id))
+  .filter((question): question is QuizQuestion => question !== undefined)

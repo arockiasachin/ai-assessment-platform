@@ -9,7 +9,10 @@ import type { CodeTask, SimilarityRow, TestCase, TestRun, TestRunState } from ".
  *  - a run that ERRORED with real `stderr`, and one that TIMED OUT;
  *  - a run still QUEUED (so `finishedAt`, `coverage` and `runtimeMs` are null);
  *  - one test case that has never been run (`lastResult: null`);
- *  - a FLAGGED similarity pair, a CLEARED pair, and one still PENDING.
+ *  - a FLAGGED similarity pair, a CLEARED pair, and one still PENDING;
+ *  - two runs by the demo student (an ERROR then a FAILED), so the student's
+ *    own Runs panel has history and shows stderr without borrowing another
+ *    student's rows.
  */
 
 const SKELETON = `def sort_records(records):
@@ -184,6 +187,30 @@ const RUN_SEEDS: RunSeed[] = [
     coverage: null,
     runtimeMs: null,
     finishedAt: null,
+    stderr: null,
+  },
+  // The demo student's own two attempts: a crash they then fixed the syntax of,
+  // leaving the two logic failures in MOCK_TEST_CASES (tc_3, tc_4) still red.
+  // Without these rows the student's own Runs panel would be empty.
+  {
+    studentId: "stu_aarav",
+    state: "ERROR",
+    passed: 0,
+    failed: 0,
+    coverage: null,
+    runtimeMs: 180,
+    finishedAt: "2026-09-14T20:05:00.000Z",
+    stderr:
+      'TypeError: sort_records() got an unexpected keyword argument "key"\n  at line 12 of submission.py',
+  },
+  {
+    studentId: "stu_aarav",
+    state: "FAILED",
+    passed: 4,
+    failed: 2,
+    coverage: 0.74,
+    runtimeMs: 1_060,
+    finishedAt: "2026-09-15T09:40:00.000Z",
     stderr: null,
   },
 ]

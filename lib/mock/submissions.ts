@@ -158,8 +158,11 @@ export const MOCK_STUDENT_ASSESSMENTS: StudentAssessmentRow[] = [
     title: "Descriptive — Modelling with Functions",
     kind: "DESCRIPTIVE",
     dueAt: "2026-09-09T13:30:00.000Z",
-    state: "pending",
-    points: null,
+    // Graded internally (26/30) but NOT released: the assessment is still in
+    // review, so the student sees the state and never the number. This mirrors
+    // the teacher's submission row for the same student.
+    state: "graded",
+    points: MOCK_MARKS.descriptive["stu_aarav"],
     maxPoints: 30,
     submittedAt: "2026-09-09T12:15:00.000Z",
     feedback: null,
