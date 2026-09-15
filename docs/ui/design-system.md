@@ -23,7 +23,7 @@ The rebuild fixes structural problems, not just colours:
 | Title nested in a card, then content in more cards                            | `PageHeader` sits on the background; content lives in `SectionCard`s  |
 | Header `max-w-6xl`, main `max-w-7xl`                                          | One content width: `max-w-7xl`, provided by `AppShell`                |
 | "Gradebook / Assessment & marks tracker"                                      | **Rubrix — AI-assisted assessment & feedback**                        |
-| Three placeholder stub pages                                                  | Thirty-four mockup stubs, each documenting its own build guide        |
+| Three placeholder stub pages                                                  | Thirty-eight mockup routes, each documenting its own build guide      |
 
 ---
 
@@ -56,16 +56,25 @@ Files:
 | `components/shell/nav-config.ts`    | `NAV_SECTIONS`, `ROLE_META`, `BRAND`, `roleFromPathname`, `isActiveHref`, `findNavItem`, `allNavItems` | Single source of truth for navigation, the mockup index, and role detection.                           |
 
 **Landmarks**: one `<header>` (banner), one `<nav aria-label="Primary">`, one
-`<main>`. Section headings are real `<h2>`s; pages start at `<h1>` (from
-`PageHeader`), so the outline is `h1 → h2 → h3`.
+`<main>`. The outline starts at `<h1>` on every page (`PageHeader`), and the
+first `<h2>` a screen reader meets is the page's own first `SectionCard` title.
+The side rail therefore uses **`<p>` for its group labels, not headings**: the
+rail is the first thing in the document, so an `<h2>` there would land _before_
+the page `<h1>` on every route and break the outline. Each nav list is still
+named for assistive tech via `aria-labelledby`, so nothing is lost. The outline
+is `h1 → h2 → h3`.
 
 **Responsive behaviour**
 
-| Width     | Rail                                                                                     |
-| --------- | ---------------------------------------------------------------------------------------- |
-| `< md`    | Hidden. `MobileNav` slide-over from the top bar.                                         |
-| `md`–`lg` | Icon-only rail (`w-16`). Labels stay in the DOM as `sr-only`; `title` gives the tooltip. |
-| `≥ lg`    | Full rail (`w-64`), collapsible to `w-16` with the toggle in the rail header.            |
+| Width     | Rail                                                                                                            |
+| --------- | --------------------------------------------------------------------------------------------------------------- |
+| `< md`    | Hidden. `MobileNav` slide-over from the top bar.                                                                |
+| `md`–`lg` | Icon-only rail (`w-16`), led by the brand mark. Labels stay in the DOM as `sr-only`; `title` gives the tooltip. |
+| `≥ lg`    | Full rail (`w-64`), with the role label in the header; collapsible to `w-16` with the toggle.                   |
+
+Below `lg` the role label is `sr-only` and the collapse toggle does not render,
+so the rail's 56px header carries the brand mark instead of an empty band. It is
+`aria-hidden` — the label still names the workspace for assistive tech.
 
 The rail is a `sticky top-0 h-screen` flex column with its own `overflow-y-auto`,
 so the page scrolls without moving the chrome and there is no layout shift.
@@ -133,20 +142,24 @@ Rules:
 All new primitives live in `components/ui/`. All are prop-driven and pure — **no
 primitive fetches data or reads a fixture**.
 
-| Primitive                    | Import                         | Purpose                                                                                                                          |
-| ---------------------------- | ------------------------------ | -------------------------------------------------------------------------------------------------------------------------------- |
-| `StatCard`                   | `@/components/ui/stat-card`    | Metric tile: label, value, hint, delta, icon, sparkline slot.                                                                    |
-| `SectionCard`                | `@/components/ui/section-card` | The one content frame: optional `h2` title, description, header action, footer.                                                  |
-| `DataTable`                  | `@/components/ui/data-table`   | Column-driven `<table>` with `<caption>`, `<th scope>`, sticky header, hover rows, integrated empty state, optional row actions. |
-| `EmptyState`                 | `@/components/ui/empty-state`  | Standard "nothing here": icon, title, description, action.                                                                       |
-| `StatusPill` / `StatusDot`   | `@/components/ui/status-pill`  | Semantic status chip / bare tone dot (`StatusKey` union).                                                                        |
-| `MetricRow` / `KeyValueList` | `@/components/ui/metric-row`   | Label–value line for a detail panel / `<dl>` for record metadata.                                                                |
-| `PageTabs` / `PageTabPanel`  | `@/components/ui/page-tabs`    | Accessible in-page tab row (+ panel wrapper).                                                                                    |
-| `FilterBar`                  | `@/components/ui/filter-bar`   | Search + labelled selects + result count for list pages.                                                                         |
-| `ProgressBar`                | `@/components/ui/progress-bar` | Labelled progress with a semantic tone.                                                                                          |
-| `Timeline`                   | `@/components/ui/timeline`     | Vertical milestone/audit list (`<ol>`).                                                                                          |
-| `Sparkline`                  | `@/components/ui/sparkline`    | Compact trend shape for a `StatCard` slot.                                                                                       |
-| `GradeDonut`                 | `@/components/ui/grade-donut`  | Donut split with a centre figure and a readable legend.                                                                          |
+| Primitive                     | Import                           | Purpose                                                                                                                          |
+| ----------------------------- | -------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| `StatCard`                    | `@/components/ui/stat-card`      | Metric tile: label, value, hint, delta, icon, sparkline slot.                                                                    |
+| `SectionCard`                 | `@/components/ui/section-card`   | The one content frame: optional `h2` title, description, header action, footer.                                                  |
+| `DataTable`                   | `@/components/ui/data-table`     | Column-driven `<table>` with `<caption>`, `<th scope>`, sticky header, hover rows, integrated empty state, optional row actions. |
+| `EmptyState`                  | `@/components/ui/empty-state`    | Standard "nothing here": icon, title, description, action, hint.                                                                 |
+| `StatusPill` / `StatusDot`    | `@/components/ui/status-pill`    | Semantic status chip / bare tone dot (`StatusKey` union).                                                                        |
+| `Callout`                     | `@/components/ui/callout`        | Toned notice panel ("read this before you trust the numbers"). `tone`, optional `icon`/`title`/`action`, `titleAs`, `role`.      |
+| `TONE_PANEL` / `SUCCESS_TEXT` | `@/components/ui/tone`           | The audited tone→classes map. The only place a tinted panel's foreground is decided — never `text-*-foreground` on a tint.       |
+| `MetricRow` / `KeyValueList`  | `@/components/ui/metric-row`     | Label–value line for a detail panel / `<dl>` for record metadata.                                                                |
+| `PageTabs` / `PageTabPanel`   | `@/components/ui/page-tabs`      | Accessible in-page tab row (+ panel wrapper), owns narrow-width horizontal scrolling.                                            |
+| `FilterBar`                   | `@/components/ui/filter-bar`     | Search + labelled selects + result count for list pages. `resultNounPlural` for multi-word nouns.                                |
+| `ProgressBar`                 | `@/components/ui/progress-bar`   | Labelled progress with a semantic tone.                                                                                          |
+| `CodeBlock`                   | `@/components/ui/code-block`     | Monospaced block for code and captured `stderr`; `wrap`, `dense`, `maxHeight`.                                                   |
+| `TruncatedText`               | `@/components/ui/truncated-text` | Single-line ellipsis with `title` (and `width` presets) for long names and IDs, so one row cannot stretch a whole column.        |
+| `Timeline`                    | `@/components/ui/timeline`       | Vertical milestone/audit list (`<ol>`).                                                                                          |
+| `Sparkline`                   | `@/components/ui/sparkline`      | Compact trend shape for a `StatCard` slot.                                                                                       |
+| `GradeDonut`                  | `@/components/ui/grade-donut`    | Donut split with a centre figure and a readable legend.                                                                          |
 
 Reuse these base primitives rather than rebuilding them: `card`, `badge`,
 `button`, `dialog`, `input`, `label`, `select`, `separator`, `table`, `tabs`,
@@ -157,6 +170,24 @@ prefer them for the bigger charts.
 
 > `components/stat-card.tsx` is the **legacy** tile used by the real pages. The
 > mockups use `@/components/ui/stat-card`. Import path matters.
+
+### `Select` needs its `items` prop to show a label
+
+Base UI's `Select.Value` renders the **raw value** unless the `Select` root is
+given the value→label map:
+
+```tsx
+<Select defaultValue={value} items={options}>
+  <SelectTrigger>
+    <SelectValue />
+  </SelectTrigger>
+  <SelectContent>{/* the same options */}</SelectContent>
+</Select>
+```
+
+Without `items`, a filter trigger reads `below-floor` (or `asm_descriptive`)
+instead of `Below 78%`. `FilterBar` passes `items` for every select it renders,
+so list pages get this for free; hand-rolled selects on a page must do the same.
 
 ### Usage examples
 
@@ -218,6 +249,11 @@ const columns: Column<ReviewQueueItem>[] = [
 `StatusKey` is a string union in `components/ui/status-pill.tsx`. Colour never
 carries meaning alone — the label is always rendered, and `dot` adds a second
 cue.
+
+The tint+foreground pairs those pills are built from live in
+`components/ui/tone.ts` as `TONE_PANEL`, and `Callout` paints from the same map.
+That file is the single place a toned panel's text colour is decided, and its
+docblock records the two rules that keep the measured ratios true:
 
 | Key                                       | Label                   | Tone                                | Typical use                                        |
 | ----------------------------------------- | ----------------------- | ----------------------------------- | -------------------------------------------------- |
@@ -400,7 +436,7 @@ Non-negotiable rules:
 | `lib/mock/format.ts`      | `formatPercent`, `formatPoints`, `formatConfidence`, `formatDate`, `formatDateTime`, `formatShortDate`, `formatRelativeTime`, `daysUntil`, `formatDueLabel`, `formatDuration`, `initialsFromName`, `MOCK_NOW` |
 | `lib/mock/session.ts`     | `MOCK_CURRENT_USER` (per role), `MOCK_NOTIFICATIONS`                                                                                                                                                          |
 | `lib/mock/course.ts`      | `MOCK_COURSE`, `MOCK_STUDENTS`, `MOCK_STUDENT_BY_ID`, `MOCK_MARKS`, `MOCK_ASSESSMENTS`, `MOCK_ASSESSMENT_BY_ID`, `MOCK_RUBRIC`, `MOCK_COHORT_AVERAGE`, `MOCK_DEMO_STUDENT`                                    |
-| `lib/mock/quizzes.ts`     | `MOCK_QUIZ_QUESTIONS`, `MOCK_DRAFT_QUESTIONS`, `MOCK_QUIZ_ATTEMPTS`, `MOCK_MY_QUIZ_ATTEMPTS`, `MOCK_ITEM_ANALYSIS`                                                                                            |
+| `lib/mock/quizzes.ts`     | `MOCK_QUIZ_QUESTIONS`, `MOCK_QUIZ_QUESTION_BY_ID`, `MOCK_DRAFT_QUESTIONS`, `MOCK_QUIZ_ATTEMPTS`, `MOCK_MY_QUIZ_ATTEMPTS`, `MOCK_MY_QUIZ_RESPONSES`, `MOCK_MY_QUIZ_RESPONSE_TOTAL`, `MOCK_ITEM_ANALYSIS`       |
 | `lib/mock/submissions.ts` | `MOCK_SUBMISSIONS`, `MOCK_STUDENT_ASSESSMENTS`                                                                                                                                                                |
 | `lib/mock/reviews.ts`     | `MOCK_GRADE_SUGGESTIONS`, `MOCK_REVIEW_QUEUE`, `MOCK_PENDING_REVIEWS`, `MOCK_REVIEW_SUMMARY`, `MOCK_GRADES`                                                                                                   |
 | `lib/mock/groups.ts`      | `MOCK_GROUPS`, `MOCK_GROUP_BY_ID`, `MOCK_MY_PEER_EVALUATIONS`, `MOCK_UNASSIGNED_STUDENTS`                                                                                                                     |
@@ -416,20 +452,31 @@ Import everything from the barrel: `import { MOCK_REVIEW_QUEUE } from "@/lib/moc
 **Consistency guarantees already in the fixtures** (do not work around them):
 
 - `MOCK_MARKS` is the single marks table; student averages, assessment means and
-  the cohort average are derived from it.
+  the cohort average are derived from it. It holds **final** marks, so a grade a
+  teacher changed is recorded as `source: "TEACHER_OVERRIDE"` with its reason
+  rather than as arithmetic the marks table does not reflect.
 - Every `GradeSuggestion.suggestedPoints` is ≤ its criterion's `maxPoints`.
 - Weights in `MOCK_ASSESSMENTS` sum to 100%; rubric weights sum to 1.
+- A dashboard tile is derived from the same list it summarises — e.g. the
+  "Awaiting review" KPI counts `MOCK_PENDING_REVIEWS` and splits that same array
+  for its hint, so the number and the words cannot describe different queues.
+- A KPI whose unit is not obvious says which unit it is: the reviews tile counts
+  **auto-accepted criteria**, because an item whose criteria all clear the floor
+  stays in the queue and an item-level count would always be zero.
+- Aggregates are `formatPercent`-ready: ratios stay 0..1 in the fixtures and are
+  scaled once, in one place (`meanPercent` in `code-tasks.ts`), never twice.
 
 ### 8.5 Edge cases the mockups must exercise
 
-| Case                     | Where it lives                                                                                         |
-| ------------------------ | ------------------------------------------------------------------------------------------------------ |
-| Empty list               | `Team Graphs.peerEvaluations: []`, `Team Scalars` (no members), `ABANDONED_ITEM.criteria: []`          |
-| Very long name           | `Alexandria Catherine Montgomery-Worthington` (`stu_alexandria`)                                       |
-| Missing / absent value   | `stu_ravi` (`avgPercent: null`, `lastActiveAt: null`), `MOCK_ADMIN_USERS` "never signed in"            |
-| Unpublished vs published | `MOCK_GRADES` (`published: false` for descriptive + assignment)                                        |
-| Insufficient data        | `MOCK_ITEM_ANALYSIS` questions 5–6, `MOCK_TOPIC_MASTERY` "Inequalities", `MOCK_RETAKE_RECOMMENDATIONS` |
-| Failed / errored work    | `MOCK_TEST_RUNS` TIMEOUT + ERROR (with `stderr`)                                                       |
+| Case                     | Where it lives                                                                                                       |
+| ------------------------ | -------------------------------------------------------------------------------------------------------------------- |
+| Empty list               | `Team Graphs.peerEvaluations: []`, `Team Scalars` (no members), `ABANDONED_ITEM.criteria: []`                        |
+| Very long name           | `Alexandria Catherine Montgomery-Worthington` (`stu_alexandria`) — rendered through `TruncatedText`                  |
+| Missing / absent value   | `stu_ravi` (`avgPercent: null`, `lastActiveAt: null`), `MOCK_ADMIN_USERS` "never signed in"                          |
+| Unpublished vs published | `MOCK_GRADES` (`published: false` for descriptive + assignment)                                                      |
+| Insufficient data        | `MOCK_ITEM_ANALYSIS` questions 5–6, `MOCK_TOPIC_MASTERY` "Inequalities", `MOCK_RETAKE_RECOMMENDATIONS`               |
+| Failed / errored work    | `MOCK_TEST_RUNS` TIMEOUT + ERROR (with `stderr`)                                                                     |
+| Never administered       | `MOCK_DRAFT_QUESTIONS` — a draft question has 0 responses and must not appear in a sitting or in any released result |
 
 ---
 
