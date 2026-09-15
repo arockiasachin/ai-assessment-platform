@@ -8,9 +8,14 @@ const geistSans = Geist({ subsets: ["latin"], variable: "--font-geist-sans" })
 const geistMono = Geist_Mono({ subsets: ["latin"], variable: "--font-geist-mono" })
 
 export const metadata: Metadata = {
-  title: "Gradebook — Assessment & Marks Tracker",
+  title: {
+    default: "Rubrix — AI-assisted assessment & feedback",
+    // Pages set a short title; this appends the brand so a tab never reads as a
+    // bare page name. The mockup tree has its own template ("· Rubrix mockups").
+    template: "%s · Rubrix",
+  },
   description:
-    "An interactive student & teacher dashboard for tracking assessments, entering marks, and visualizing academic progress.",
+    "An AI-assisted assessment and feedback platform: generate quizzes from your own material, grade against rubrics with human review, and evaluate code in a sandbox.",
   generator: "v0.app",
   icons: {
     icon: [

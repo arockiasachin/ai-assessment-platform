@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation"
+import type { Metadata } from "next"
 
 import { RoleGuard } from "@/components/role-guard"
 import { AppShell, PageHeader } from "@/components/shell"
@@ -6,6 +7,9 @@ import { TeacherReviewQueue } from "@/components/teacher-review-queue"
 import { getSessionUser } from "@/lib/auth"
 import { listEvaluationCandidatesForTeacher, listReviewQueueForTeacher } from "@/lib/rubric-grading"
 import { initialsFromEmail, roleLabelFromRole } from "@/lib/user-identity"
+
+// The root layout supplies the "· Rubrix" suffix.
+export const metadata: Metadata = { title: "Review queue" }
 
 export default async function TeacherReviewsPage() {
   const user = await getSessionUser()

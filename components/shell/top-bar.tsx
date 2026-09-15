@@ -55,8 +55,10 @@ export function TopBar({
   scope?: NavScope
   user?: TopBarUser
 }) {
-  const unread = MOCK_NOTIFICATIONS.filter((notification) => !notification.read).length
-  const searchId = scope === "mockup" ? "mockup-search" : "app-search"
+  // Search is mockup-only until it is wired up, so this id only ever renders
+  // there. Keeping the name scope-specific means an app-scope search can be
+  // added later without colliding with the mockup one.
+  const searchId = "mockup-search"
 
   return (
     <header className="sticky top-0 z-30 border-b border-border bg-background/80 backdrop-blur-md">
@@ -80,34 +82,48 @@ export function TopBar({
           </span>
         </Link>
 
-        <form
-          role="search"
-          onSubmit={(event) => event.preventDefault()}
-          className="relative ml-auto hidden w-full max-w-sm md:block"
-        >
-          <label htmlFor={searchId} className="sr-only">
-            Search assessments, students and questions
-          </label>
-          <Search
-            className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground"
-            aria-hidden="true"
-          />
-          <Input
-            id={searchId}
-            type="search"
-            placeholder="Search assessments, students, questions…"
-            className="pl-8 pr-12"
-          />
-          <kbd
-            aria-hidden="true"
-            className="pointer-events-none absolute top-1/2 right-2 -translate-y-1/2 rounded border border-border bg-muted px-1.5 py-0.5 font-mono text-[0.65rem] text-muted-foreground"
+        {/*
+         * The search field is a deliberately inert placeholder in the mockups —
+         * it has no submit handler and the ⌘K hint is decorative. That is fine on
+         * a design screen, but shipping a labelled `role="search"` landmark that
+         * silently swallows keystrokes onto a real authenticated page is a
+         * dangling affordance, so it is mockup-only until search is wired up.
+         * The old real header had no search at all, so this is not a regression.
+         */}
+        {scope === "mockup" && (
+          <form
+            role="search"
+            onSubmit={(event) => event.preventDefault()}
+            className="relative ml-auto hidden w-full max-w-sm md:block"
           >
-            ⌘K
-          </kbd>
-        </form>
+            <label htmlFor={searchId} className="sr-only">
+              Search assessments, students and questions
+            </label>
+            <Search
+              className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground"
+              aria-hidden="true"
+            />
+            <Input
+              id={searchId}
+              type="search"
+              placeholder="Search assessments, students, questions…"
+              className="pl-8 pr-12"
+            />
+            <kbd
+              aria-hidden="true"
+              className="pointer-events-none absolute top-1/2 right-2 -translate-y-1/2 rounded border border-border bg-muted px-1.5 py-0.5 font-mono text-[0.65rem] text-muted-foreground"
+            >
+              ⌘K
+            </kbd>
+          </form>
+        )}
 
         <div className="ml-auto flex items-center gap-1 md:ml-2">
-          {scope === "mockup" && <NotificationsMenu unread={unread} />}
+          {scope === "mockup" && (
+            <NotificationsMenu
+              unread={MOCK_NOTIFICATIONS.filter((notification) => !notification.read).length}
+            />
+          )}
           <ThemeToggle />
           <UserMenu role={role} scope={scope} user={user} />
         </div>
@@ -267,35 +283,57 @@ function UserMenu({
 }
 
 /**
- * Real sign-out, for `app` scope only. Posts to the existing logout endpoint and
- * then navigates client-side — `window.location` is deliberately avoided because
- * the repo lints against assigning an internal path to it.
+ * Real sign-out, for `app` scope only.
+ *
+ * Deliberately does **not** navigate on failure. An earlier version swallowed the
+ * error and pushed to `/login` regardless, which is the worst outcome on a shared
+ * machine: the cookie survives, `proxy.ts` bounces the still-signed-in user off
+ * `/login` back to their workspace, and they believe they signed out. So the
+ * failure is surfaced instead, and the redirect only happens once the server has
+ * confirmed the session was cleared.
+ *
+ * `router.replace` (not `push`) so Back does not return to the protected page.
+ * `window.location` is avoided because the repo lints against assigning an
+ * internal path to it.
  */
 function SignOutButton() {
   const router = useRouter()
   const [pending, setPending] = useState(false)
+  const [failed, setFailed] = useState(false)
+
+  async function signOut() {
+    if (pending) return
+    setPending(true)
+    setFailed(false)
+    try {
+      const response = await fetch("/api/auth/logout", { method: "POST" })
+      if (!response.ok) throw new Error(`logout failed: ${response.status}`)
+      router.replace("/login")
+      router.refresh()
+    } catch {
+      setFailed(true)
+      setPending(false)
+    }
+  }
 
   return (
-    <button
-      type="button"
-      disabled={pending}
-      aria-busy={pending}
-      onClick={async () => {
-        setPending(true)
-        try {
-          await fetch("/api/auth/logout", { method: "POST" })
-        } catch {
-          // Fall through to the redirect: an expired session should still land
-          // the user on the login screen rather than trapping them here.
-        } finally {
-          router.push("/login")
-          router.refresh()
-        }
-      }}
-      className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-muted disabled:opacity-60"
-    >
-      <LogOut className="size-4 text-muted-foreground" aria-hidden="true" />
-      {pending ? "Signing out…" : "Sign out"}
-    </button>
+    <>
+      <button
+        type="button"
+        // `aria-disabled` rather than `disabled`: a disabled button drops out of
+        // the tab order mid-request, which loses the user's focus position.
+        aria-disabled={pending}
+        onClick={signOut}
+        className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-muted aria-disabled:opacity-60"
+      >
+        <LogOut className="size-4 text-muted-foreground" aria-hidden="true" />
+        {pending ? "Signing out…" : "Sign out"}
+      </button>
+      {failed && (
+        <p role="alert" className="px-2 py-1 text-xs text-destructive">
+          Could not sign out. Check your connection and try again.
+        </p>
+      )}
+    </>
   )
 }

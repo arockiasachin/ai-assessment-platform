@@ -431,9 +431,17 @@ export function navHref(href: string, scope: NavScope): string | null {
   return href.replace(/^\/mockup/, "")
 }
 
-/** The landing page for a role in the given scope. */
+/**
+ * The landing page for a role in the given scope.
+ *
+ * Derived through `navHref` rather than hardcoded, so this cannot drift from the
+ * href the nav actually renders: if an override ever changes a role's home, both
+ * the nav item and the `isActiveHref` home set move together. Hardcoding
+ * `/${role}` here would let them disagree, and the symptom would be a role home
+ * wrongly matching its own children.
+ */
 export function roleHome(role: MockupRole, scope: NavScope): string {
-  return scope === "mockup" ? ROLE_META[role].home : `/${role}`
+  return navHref(ROLE_META[role].home, scope) ?? `/${role}`
 }
 
 /** The brand block's target: the mockup index, or the signed-in role's home. */

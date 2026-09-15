@@ -31,6 +31,12 @@ type AppShellProps = {
    * mockup routes and keeps the mockup-only affordances; `app` links to the real
    * authenticated routes and drops the mockup chrome. Defaulting to `mockup`
    * keeps every existing mockup page byte-identical.
+   *
+   * In `app` scope always pass `role` explicitly, or ensure the first path
+   * segment is a role. `defaultRole` still applies as a fallback, so a real page
+   * at a role-less path would silently render the teacher chrome — `proxy.ts`
+   * makes that unreachable today (it only lets `/teacher|/student|/admin`
+   * through), but the fallback is retained rather than throwing during render.
    */
   scope?: NavScope
   /** Real signed-in user, shown in `app` scope. Falls back to the mock identity. */

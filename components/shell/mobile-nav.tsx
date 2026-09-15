@@ -44,7 +44,9 @@ export function MobileNav({ role, scope = "mockup" }: { role: MockupRole; scope?
             {ROLE_META[role].label} workspace
           </DialogTitle>
           <DialogDescription className="sr-only">
-            Mockup navigation for the {ROLE_META[role].label.toLowerCase()} workspace.
+            {scope === "mockup"
+              ? `Mockup navigation for the ${ROLE_META[role].label.toLowerCase()} workspace.`
+              : `Navigation for the ${ROLE_META[role].label.toLowerCase()} workspace.`}
           </DialogDescription>
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto px-2 py-3">
