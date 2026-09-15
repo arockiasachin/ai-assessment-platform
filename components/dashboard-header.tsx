@@ -2,7 +2,9 @@
 
 import { useEffect, useState } from "react"
 import Link from "next/link"
-import { GraduationCap, User, LogOut } from "lucide-react"
+import { LogOut, User } from "lucide-react"
+
+import { BRAND } from "@/components/shell/nav-config"
 import { useGradebook } from "@/components/gradebook-provider"
 
 export function DashboardHeader() {
@@ -41,11 +43,18 @@ export function DashboardHeader() {
       <div className="mx-auto flex max-w-6xl flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-6">
         <div className="flex items-center gap-3">
           <div className="flex size-9 items-center justify-center rounded-xl bg-primary text-primary-foreground">
-            <GraduationCap className="size-5" />
+            <BRAND.icon className="size-5" aria-hidden="true" />
           </div>
           <div>
-            <h1 className="text-base font-semibold leading-none tracking-tight">Gradebook</h1>
-            <p className="mt-1 text-xs text-muted-foreground">Assessment &amp; marks tracker</p>
+            {/*
+             * Read from `BRAND`, not literals: this header serves the ~25 pages
+             * still on `RolePageShell`, and it carried the retired "Gradebook —
+             * Assessment & marks tracker" wordmark while the design system, the
+             * app shell and the auth screens had all moved to Rubrix. One source
+             * means the old and new chrome cannot disagree about the name.
+             */}
+            <h1 className="text-base leading-none font-semibold tracking-tight">{BRAND.name}</h1>
+            <p className="mt-1 text-xs text-muted-foreground">{BRAND.tagline}</p>
           </div>
         </div>
 
