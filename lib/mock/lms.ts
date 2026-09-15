@@ -82,11 +82,11 @@ export const MOCK_AUDIT_EVENTS: AuditEvent[] = [
     id: "aud_01",
     action: "grade.override",
     entityType: "Grade",
-    entityId: "grade_descriptive_stu_gabriela",
+    entityId: "grade_descriptive_stu_chen",
     actorName: "Dr. Meera Raman",
     actorRole: "TEACHER",
     summary:
-      "Lowered AI suggestion from 24.0 to 22.0 (notation errors). Reason stored for calibration.",
+      "Lowered the AI suggestion from 27.5 to 27.0 (notation error in the final paragraph). Reason stored for calibration.",
     createdAt: "2026-09-15T06:40:00.000Z",
     tone: "overridden",
   },

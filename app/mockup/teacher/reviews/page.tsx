@@ -27,7 +27,6 @@ import {
   MOCK_GRADE_SUGGESTIONS,
   MOCK_REVIEW_QUEUE,
   MOCK_REVIEW_SUMMARY,
-  MOCK_RUBRIC,
   formatConfidence,
   formatDateTime,
   formatPoints,
@@ -53,10 +52,6 @@ const HREF = "/mockup/teacher/reviews"
 
 /** The auto-accept threshold the model cleared these criteria against. */
 const FLOOR = AUTO_ACCEPT_CONFIDENCE_FLOOR
-
-const CRITERIA_AUTO_ACCEPTED = MOCK_GRADE_SUGGESTIONS.filter(
-  (suggestion) => suggestion.state === "AUTO_ACCEPTED",
-).length
 
 const PROJECT_LABEL: Record<ReviewQueueItem["kind"], string> = {
   QUIZ: "Quiz",
@@ -206,7 +201,7 @@ export default async function TeacherReviewsPage({
   return (
     <>
       <PageHeader
-        eyebrow={`${MOCK_REVIEW_SUMMARY.assessmentTitle} · ${MOCK_RUBRIC.title}`}
+        eyebrow={MOCK_REVIEW_SUMMARY.assessmentTitle}
         title="Reviews"
         description={findNavItem(HREF)?.item.description}
         breadcrumbs={[
@@ -258,9 +253,9 @@ export default async function TeacherReviewsPage({
             icon={TriangleAlert}
           />
           <StatCard
-            label="Auto-accepted"
-            value={String(MOCK_REVIEW_SUMMARY.autoAccepted)}
-            hint={`${CRITERIA_AUTO_ACCEPTED} criteria cleared at ≥ ${formatConfidence(FLOOR)}`}
+            label="Auto-accepted criteria"
+            value={String(MOCK_REVIEW_SUMMARY.autoAcceptedCriteria)}
+            hint={`Across ${MOCK_REVIEW_SUMMARY.autoAcceptedSubmissions} submissions · floor ${formatConfidence(FLOOR)}`}
             icon={Sparkles}
           />
           <StatCard
@@ -281,19 +276,23 @@ export default async function TeacherReviewsPage({
             {
               id: "filter-assessment",
               label: "Assessment",
-              value: MOCK_REVIEW_SUMMARY.assessmentId,
+              // The queue holds every kind of submission, so the default has to
+              // be "all" — a specific assessment would contradict the row count
+              // printed at the end of the bar.
+              value: "all",
               options: [
+                { value: "all", label: "All assessments" },
                 { value: MOCK_REVIEW_SUMMARY.assessmentId, label: "Descriptive — Modelling" },
                 { value: "asm_assignment", label: "Assignment — Inequalities" },
                 { value: "asm_code", label: "Code Task — Sorting & Big-O" },
-                { value: "all", label: "All assessments" },
               ],
             },
             {
               id: "filter-state",
               label: "Status",
-              value: "open",
+              value: "all",
               options: [
+                { value: "all", label: "All states" },
                 { value: "open", label: "Open (pending + needs review)" },
                 { value: "PENDING", label: "Pending" },
                 { value: "NEEDS_REVIEW", label: "Needs review" },
@@ -304,11 +303,11 @@ export default async function TeacherReviewsPage({
             {
               id: "filter-confidence",
               label: "Confidence",
-              value: "below-floor",
+              value: "any",
               options: [
+                { value: "any", label: "Any confidence" },
                 { value: "below-floor", label: `Below ${formatConfidence(FLOOR)}` },
                 { value: "high", label: `At or above ${formatConfidence(FLOOR)}` },
-                { value: "any", label: "Any confidence" },
               ],
             },
           ]}

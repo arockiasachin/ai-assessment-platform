@@ -16,6 +16,18 @@ import type { Grade, GradeSuggestion, ReviewQueueItem, ReviewState } from "./typ
  *    submitted.
  */
 
+/**
+ * The team a submission came from.
+ *
+ * The queue row prints the group next to the assessment kind, so leaving the
+ * field off would make every row claim the student is in no team — which is
+ * false for every student in this fixture except `stu_ravi`. Derived from the
+ * roster rather than typed in, so it cannot drift from the groups pages.
+ */
+function groupOf(studentId: string): string | undefined {
+  return MOCK_STUDENTS.find((student) => student.id === studentId)?.groupName ?? undefined
+}
+
 const CRITERION_RATIONALE: Record<string, string> = {
   crit_reasoning:
     "The response isolates the variable and justifies each rearrangement. One step (dividing by a negative coefficient) is stated without comment.",
@@ -38,6 +50,22 @@ const CRITERION_EVIDENCE: Record<string, string | null> = {
 const WOBBLE = [1, 0.98, 1.02, 0.95, 1.0, 1.03]
 
 /**
+ * The one descriptive submission whose mark a teacher lowered.
+ *
+ * `MOCK_MARKS` holds the FINAL mark, so the model's proposal derived below sits
+ * slightly above it: the criterion in `OVERRIDDEN_CRITERION_ID` is recorded as
+ * OVERRIDDEN with the deduction and the reason, and `MOCK_GRADES` plus the
+ * `grade.override` audit event report the same final mark. Before this was tied
+ * together, the grade fixture subtracted two marks from a value the marks table
+ * never held, so the grade and the spine disagreed and no fixture grade was
+ * ever `TEACHER_OVERRIDE`.
+ */
+const OVERRIDDEN_DESCRIPTIVE_STUDENT_ID = "stu_chen"
+const OVERRIDDEN_CRITERION_ID = "crit_communication"
+const OVERRIDE_DEDUCTION = 0.5
+const OVERRIDE_REASON = "0.5 marks deducted: the notation slip repeats in the final paragraph."
+
+/**
  * Build the four per-criterion suggestions for one descriptive submission,
  * scaled to the student's marks-table total.
  */
@@ -49,7 +77,14 @@ function buildSuggestions(studentIndex: number): GradeSuggestion[] {
     const raw = (criterion.maxPoints * total * wobble) / MOCK_RUBRIC.maxPoints
     const suggestedPoints = Math.min(criterion.maxPoints, Math.round(raw * 10) / 10)
     const lowConfidence = studentIndex === 4 && criterionIndex === 2
-    const state: ReviewState = studentIndex < 4 ? "AUTO_ACCEPTED" : "NEEDS_REVIEW"
+    const isOverridden =
+      student.id === OVERRIDDEN_DESCRIPTIVE_STUDENT_ID && criterion.id === OVERRIDDEN_CRITERION_ID
+    const state: ReviewState = isOverridden
+      ? "OVERRIDDEN"
+      : studentIndex < 4
+        ? "AUTO_ACCEPTED"
+        : "NEEDS_REVIEW"
+    const decided = state === "AUTO_ACCEPTED" || state === "OVERRIDDEN"
     return {
       id: `sug_desc_${student.id}_${criterion.id}`,
       assessmentId: "asm_descriptive",
@@ -67,9 +102,18 @@ function buildSuggestions(studentIndex: number): GradeSuggestion[] {
       promptVersion: "rubric-grader-v3",
       latencyMs: 1_180 + criterionIndex * 140,
       state,
-      decidedBy: state === "AUTO_ACCEPTED" ? "auto-threshold" : undefined,
-      decidedAt: state === "AUTO_ACCEPTED" ? "2026-09-10T08:05:00.000Z" : undefined,
-      finalPoints: state === "AUTO_ACCEPTED" ? suggestedPoints : undefined,
+      decidedBy: isOverridden ? "Dr. Meera Raman" : decided ? "auto-threshold" : undefined,
+      decidedAt: decided
+        ? isOverridden
+          ? "2026-09-15T06:40:00.000Z"
+          : "2026-09-10T08:05:00.000Z"
+        : undefined,
+      finalPoints: isOverridden
+        ? Math.round((suggestedPoints - OVERRIDE_DEDUCTION) * 10) / 10
+        : state === "AUTO_ACCEPTED"
+          ? suggestedPoints
+          : undefined,
+      overrideReason: isOverridden ? OVERRIDE_REASON : undefined,
     }
   })
 }
@@ -113,6 +157,7 @@ const DESCRIPTIVE_REVIEW_ITEMS: ReviewQueueItem[] = descriptiveQueueStudents.map
       kind: "DESCRIPTIVE",
       studentId: student.id,
       studentName: student.name,
+      groupName: student.groupName ?? undefined,
       submittedAt: "2026-09-09T12:15:00.000Z",
       state,
       suggestedPoints: Math.round(suggested * 10) / 10,
@@ -137,6 +182,7 @@ const OVERRIDE_ITEM: ReviewQueueItem = {
   kind: "ASSIGNMENT",
   studentId: "stu_farah",
   studentName: "Farah Al-Rashid",
+  groupName: groupOf("stu_farah"),
   submittedAt: "2026-09-14T11:10:00.000Z",
   state: "OVERRIDDEN",
   suggestedPoints: 12.5,
@@ -180,6 +226,7 @@ const CODE_REVIEW_ITEM: ReviewQueueItem = {
   kind: "CODE",
   studentId: "stu_ethan",
   studentName: "Ethan Brooks",
+  groupName: groupOf("stu_ethan"),
   submittedAt: "2026-09-14T10:30:00.000Z",
   state: "NEEDS_REVIEW",
   suggestedPoints: 18,
@@ -219,6 +266,7 @@ const ABANDONED_ITEM: ReviewQueueItem = {
   kind: "ASSIGNMENT",
   studentId: "stu_diya",
   studentName: "Diya Nair",
+  groupName: groupOf("stu_diya"),
   submittedAt: null,
   state: "REJECTED",
   suggestedPoints: 0,
@@ -267,9 +315,10 @@ const descriptiveGrades: Grade[] = MOCK_STUDENTS.filter(
 )
   .slice(0, 6)
   .map((student) => {
-    const marks = MOCK_MARKS.descriptive[student.id]
-    const overridden = student.id === "stu_gabriela"
-    const points = overridden && marks !== null ? marks - 2 : marks
+    // The marks table already holds the FINAL mark, so an override needs no
+    // arithmetic here — it only changes the source and adds the stored reason.
+    const points = MOCK_MARKS.descriptive[student.id]
+    const overridden = student.id === OVERRIDDEN_DESCRIPTIVE_STUDENT_ID
     return {
       id: `grade_descriptive_${student.id}`,
       assessmentId: "asm_descriptive",
@@ -283,9 +332,7 @@ const descriptiveGrades: Grade[] = MOCK_STUDENTS.filter(
       // Accepted by the teacher, but the assessment is not published yet.
       published: false,
       publishedAt: null,
-      overrideReason: overridden
-        ? "Rubric applied correctly; 2 marks deducted for repeated notation errors."
-        : undefined,
+      overrideReason: overridden ? OVERRIDE_REASON : undefined,
       approvedBy: "Dr. Meera Raman",
     }
   })
@@ -307,11 +354,23 @@ const assignmentGrades: Grade[] = MOCK_STUDENTS.slice(0, 3).map((student, index)
 
 export const MOCK_GRADES: Grade[] = [...quizGrades, ...descriptiveGrades, ...assignmentGrades]
 
-/** KPI-style summary used by the reviews page header. */
+/**
+ * KPI-style summary used by the reviews page header.
+ *
+ * Auto-accept is a CRITERION-level outcome: an item whose criteria all clear the
+ * floor stays in the queue for a spot check, so an item-level count would always
+ * be zero. The last two fields count criteria and the submissions they belong
+ * to instead of pretending there is a `AUTO_ACCEPTED` queue row to count.
+ */
+const autoAcceptedCriteria = MOCK_GRADE_SUGGESTIONS.filter(
+  (suggestion) => suggestion.state === "AUTO_ACCEPTED",
+)
+
 export const MOCK_REVIEW_SUMMARY = {
   pending: MOCK_REVIEW_QUEUE.filter((item) => item.state === "PENDING").length,
   needsReview: MOCK_REVIEW_QUEUE.filter((item) => item.state === "NEEDS_REVIEW").length,
-  autoAccepted: MOCK_REVIEW_QUEUE.filter((item) => item.state === "AUTO_ACCEPTED").length,
+  autoAcceptedCriteria: autoAcceptedCriteria.length,
+  autoAcceptedSubmissions: new Set(autoAcceptedCriteria.map((s) => s.studentId)).size,
   overridden: MOCK_REVIEW_QUEUE.filter((item) => item.state === "OVERRIDDEN").length,
   rejected: MOCK_REVIEW_QUEUE.filter((item) => item.state === "REJECTED").length,
   assessmentTitle: "Descriptive — Modelling with Functions",
