@@ -82,18 +82,18 @@ Twelve pages. "Backend" = does the read path exist and is it tested.
 
 | Page                          | Backend                                                       | Shape                                                    | Risk       | Verdict                                                                                        |
 | ----------------------------- | ------------------------------------------------------------- | -------------------------------------------------------- | ---------- | ---------------------------------------------------------------------------------------------- |
-| `student/peer-evaluation`     | Complete, tested                                              | Mockup read-only, real is a **form**                     | Low        | **Merge** — keep the form, add the reporting cards                                             |
-| `student/quizzes`             | Complete, tested                                              | Rebuild presentation                                     | Low        | **Best-backed.** One payload gap (`getStudentAttempt` must surface draft responses)            |
-| `teacher/reports`             | Ratings half complete + tested; report-card half **no query** | Re-skin + new work                                       | Low/Med    | **Ship the ratings half first**                                                                |
-| `teacher/rubrics`             | Complete; `listRubricsForTeacher` **untested**                | Mockup read-only vs real **editor**                      | Low        | Add a read-only summary panel beside the editor                                                |
-| `auth/login`, `auth/register` | Working, tested                                               | Pure re-skin                                             | **Lowest** | **Do first** — the only page pair that is purely presentational                                |
+| `student/peer-evaluation`     | Complete, tested                                              | Mockup read-only, real is a **form**                     | Low        | **Merge** — keep the form, add the reporting cards; use the server's 3-rater threshold (D5)    |
+| `student/quizzes`             | Complete, tested                                              | Rebuild presentation                                     | Low        | **Best-backed.** Sitting renders from the read-only retake (D4); no persisted practice attempt |
+| `teacher/reports`             | Ratings half complete + tested; report-card half **no query** | Re-skin + new work                                       | Low/Med    | **Ship the ratings half first**; drop "At risk" and "Completion" (D3)                          |
+| `teacher/rubrics`             | Complete; `listRubricsForTeacher` **untested**                | Mockup read-only vs real **editor**                      | Low        | Add a read-only summary panel; render weight as relative, no sum claim (D8)                    |
+| `auth/login`, `auth/register` | Working, tested                                               | Pure re-skin                                             | **Lowest** | **SHIPPED** (`08ac76a`, fixes `46a4a58`)                                                       |
 | `teacher/code-tasks`          | Complete, tested                                              | Real = list + client detail; mockup = single-task detail | Med        | Server-fetch the detail; keep mutations as a client island                                     |
 | `student/code-submissions`    | Complete, tested                                              | Mockup read-only vs real **editor**                      | Med        | Merge, don't replace; one small contract extension                                             |
-| `student/courses`             | Complete, **GET untested**                                    | Rebuild presentation                                     | Med        | Drop the Materials card (no reader); drop/anon peer ratings                                    |
-| `teacher/groups`              | Complete, tested                                              | Rebuild presentation                                     | Med        | Keep all five queries; one contract extension                                                  |
+| `student/courses`             | Complete, **GET untested**                                    | Rebuild presentation                                     | Med        | Drop the Materials card (no reader); rating **distribution only** (D7) needs a new aggregate   |
+| `teacher/groups`              | Complete, tested                                              | Rebuild presentation                                     | Med        | Keep all five queries; pair matrix becomes a reviewed contract addition (D6)                   |
 | `student/assessments`         | Complete, **GET untested**                                    | Rebuild presentation                                     | Med        | Preserve the submission editor; expose `published`                                             |
-| `teacher/classes`             | Complete, tested                                              | **Different screen**                                     | **High**   | **D1 resolved (option A)**: classes becomes the roster, offerings move to a new app-only route |
-| `teacher/submissions`         | Data layer exists as a route only                             | **No page**                                              | **High**   | **D2 resolved (option A)**: read-only queue, editor stays in assignments                       |
+| `teacher/classes`             | Complete, tested                                              | **Different screen**                                     | **High**   | **SHIPPED** (`a11c73c`, fixes `04f698b`)                                                       |
+| `teacher/submissions`         | Data layer exists as a route only                             | **No page**                                              | **High**   | **SHIPPED** (`6069f08`, fixes `d293685`)                                                       |
 
 ---
 
@@ -225,11 +225,17 @@ build 78/78, all 38 mockup routes still 200.
 the mockup's behaviour. If the tiles should track the filters, that is a small change to the same
 component.
 
-### D3 — "At risk" has no per-student backing _(blocks 2 pages: classes, reports)_
+### D3 — "At risk" has no per-student backing _(RESOLVED — keep it dropped)_
 
 Real alerts are **offering-level** (`lib/analytics/alerts.ts:36-38`: class-average-below-threshold,
-contribution-imbalance, pending-reviews). There is no per-student flag and no column. Either define
-a per-student rule (Wave 3 work) or drop the column and the KPI from both pages.
+contribution-imbalance, pending-reviews). There is no per-student flag and no column.
+
+**Decision: keep it dropped.** The classes roster already ships without it, and the reports page
+takes the same treatment. A per-student rule would have to invent a threshold and choose between
+marks, submissions and contribution as the signal — none of which the product has agreed — so
+rendering one would be exactly the "number nothing derives" failure the plan forbids.
+
+It returns in Wave 3 as a real feature if wanted: a definition, a threshold, and its own tests.
 
 ### D4 — `QuizAttempt.kind` (GRADED vs PRACTICE) _(RESOLVED — practice does not consume a graded attempt)_
 
@@ -271,25 +277,43 @@ The server says **3** (`MIN_RATERS_FOR_DISCLOSURE`, `lib/groups/student-service.
 `tests/groups-peer-evaluation.test.ts` asserts 3. **The server wins** — the mockup number must not
 be ported, and its copy must be regenerated from the server constant rather than hardcoded.
 
-### D6 — May a teacher see the evaluator↔evaluatee pair matrix? _(blocks `teacher/groups`)_
+### D6 — May a teacher see the evaluator↔evaluatee pair matrix? _(RESOLVED — yes, for teachers)_
 
-The mockup groups ratings under an evaluator's name. No teacher contract exposes that pair matrix
-today, and the student-facing confidentiality copy says a teammate never sees who rated them. The
-student rule is not the instructor rule, so this is a **product** decision, not a leak — but it must
-be a deliberate contract addition, not an accident of the port.
+**Decision: teachers may see who rated whom.** Standard CATME practice: an instructor needs the pair
+matrix to spot collusion and free-riding, and the anonymity promise is **student-to-student**, not
+student-to-instructor.
 
-### D7 — May a student see peers' course ratings? _(blocks `student/courses`)_
+This is a **contract addition, not an accident of the port**. `GroupAnalysisResponse` carries only
+aggregates (`withoutSelf` / `withSelf` / `freeRiders` / `completion` / `contributionEvidence`), while
+the raw `PeerEvaluation` rows are already read inside `getOfferingAnalysisForTeacher` and consumed by
+`analyzeGroup` — so the work is serializing them, not querying them. It touches a confidentiality
+surface, so it gets its own reviewed change rather than riding along with a page port.
 
-The mockup shows every classmate's name and comment. `docs/features/course-ratings.md:88-89`
-documents the opposite as deliberate: students see aggregate + own only. Recommendation:
-distribution only, no names, no comments.
+Note the distinction the implementation must keep: the **teacher** payload gains the pair matrix; the
+**student** payload must not (`tests/groups-peer-evaluation.test.ts` stringifies `received` to prove
+it carries no rater identity — that assertion stays).
 
-### D8 — Rubric weight unit _(blocks `teacher/rubrics`)_
+### D7 — May a student see peers' course ratings? _(RESOLVED — distribution only)_
 
-The mockup asserts "weights total 100%" with fractional weights. The schema fixes no unit:
-`RubricCriterion.weight` is `Float @default(1)` and validation only requires positive, finite,
-≤1000. Rendering a validity claim the backend does not enforce is exactly the "number nothing
-derives" failure. Either enforce the sum or drop the claim.
+**Decision: no names, no comments.** `student/courses` ports with the rating **distribution** and the
+student's own rating, which is what `docs/features/course-ratings.md:88-89` already documents as
+deliberate ("students see aggregate + own only"). Porting the mockup's peer table would have widened
+an existing privacy decision by accident.
+
+**Cost to note:** the mockup's distribution donut is fed by `MOCK_COURSE_RATINGS`, and the student
+payload returns only `averageRating` plus the caller's own row — so the distribution needs a new
+aggregate (counts per rating value) before that donut can render. Without it, the card shows the
+average and the student's own rating only.
+
+### D8 — Rubric weight unit _(RESOLVED — drop the sum claim)_
+
+**Decision: drop "weights total 100%".** `RubricCriterion.weight` is `Float @default(1)` and
+validation only requires positive, finite, ≤1000 — no unit is fixed and no sum is enforced, so the
+mockup's validity claim would assert a rule the backend does not have.
+
+The port renders weight as a **relative** number and drops the "100%" framing and the validity pill.
+Enforcing a sum would need new validation plus a migration for existing rubrics; that is a real
+option, but it is a schema decision under a presentation task, so it is not taken here.
 
 ### D9 — Smaller GAPs to drop or migrate
 
