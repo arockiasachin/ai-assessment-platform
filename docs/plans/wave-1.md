@@ -93,7 +93,7 @@ Twelve pages. "Backend" = does the read path exist and is it tested.
 | `teacher/groups`              | Complete, tested                                              | Rebuild presentation                                     | Med        | Keep all five queries; one contract extension                                       |
 | `student/assessments`         | Complete, **GET untested**                                    | Rebuild presentation                                     | Med        | Preserve the submission editor; expose `published`                                  |
 | `teacher/classes`             | Complete, tested                                              | **Different screen**                                     | **High**   | **Decision D1 required**                                                            |
-| `teacher/submissions`         | Data layer exists as a route only                             | **No page**                                              | **High**   | **Decision D2 required**; needs a new route + Wave 0 test update                    |
+| `teacher/submissions`         | Data layer exists as a route only                             | **No page**                                              | **High**   | **D2 resolved (option A)**: read-only queue, editor stays in assignments            |
 
 ---
 
@@ -112,11 +112,47 @@ retention anchor). The mockup roster design has no home for any of it.
   or a new `/teacher/roster`. Cheapest, but contradicts the nav copy, which already describes
   "Offerings, sections, and enrolled rosters".
 
-### D2 — Does `teacher/submissions` become a real page? _(blocks it)_
+### D2 — Does `teacher/submissions` become a real page? _(RESOLVED — option A)_
 
-If yes: create the route, and **decide where the grading editor lives**. `components/teacher-submissions-manager.tsx`
-is the only client of `PUT /api/teacher/assessments/submissions`. A read-only table would strand it.
-Also: what happens to `/teacher/assignments`, which currently renders that manager?
+**Decision: yes, as a read-only queue.** `/teacher/submissions` becomes a browse-and-filter view
+over the same rows; the grading editor (`components/teacher-submissions-manager.tsx`) **stays where
+it works**, inside `/teacher/assignments`, and the queue's per-row action links into it. Nothing
+moves on the write path, so `PUT /api/teacher/assessments/submissions` keeps its only client and the
+partial-update guard (`tests/teacher-submissions-partial-update.test.ts` + the custom ESLint rule)
+keeps covering it.
+
+Known wart, accepted deliberately: submissions then appear in two places — browse on one page, grade
+on another. Fixing that is an information-architecture change, not a presentation port, and deserves
+its own reviewed commit. Revisit once the page exists.
+
+Mechanical consequence: `tests/nav-scope.test.ts` must change. The href leaves the `null` orphan
+list, and the teacher app nav goes from `mockupCount - 3` to `mockupCount - 2`.
+
+**Slice plan (files):**
+
+| File                                               | Change                                                                                                                                                                                                                                                                                   |
+| -------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `lib/labels.ts`                                    | **New** — the canonical home. Moves `ASSESSMENT_KIND_LABEL`, `SUBMISSION_STATE_TO_STATUS` and their 16 siblings out of `app/mockup/teacher/_lib/labels.ts`, which becomes a re-export shim. This is prerequisite **P1**; a real page must not import from a tree scheduled for deletion. |
+| `lib/teacher-submissions.ts`                       | **New** — `listSubmissionsForTeacher(user)`, plus a **pure** `toTeacherSubmissionRow(row)` so the projection is unit-testable without a database.                                                                                                                                        |
+| `app/api/teacher/assessments/submissions/route.ts` | Refactor `GET` to use the service, then **project back to its current response shape** — its existing consumer must not start seeing unpublished marks where it previously saw `null`. Service is truth; the route is a legacy projection.                                               |
+| `app/(dashboard)/teacher/submissions/page.tsx`     | **New** — guard, `AppShell scope="app"`, `PageHeader`, `force-dynamic`. Server-fetches; no client fetch.                                                                                                                                                                                 |
+| `components/teacher-submissions-table.tsx`         | **New** — KPI row + table, client component receiving rows as props (filters loaded rows locally, fetches nothing).                                                                                                                                                                      |
+| `components/shell/nav-config.ts`                   | `/mockup/teacher/submissions` → `/teacher/submissions`; delete the orphan comment.                                                                                                                                                                                                       |
+| `tests/nav-scope.test.ts`                          | `-3` → `-2`; drop the href from the null-assertion list.                                                                                                                                                                                                                                 |
+| `tests/teacher-submissions-mapping.test.ts`        | **New** — pure, no database. The GET read path has **no test today**; this is where it gets one.                                                                                                                                                                                         |
+
+**Blocker found while building it — the filter bar.** `FilterBar` is documented as _"Inert by
+design — there is no state and no submit handler"_. Its search box and four selects do nothing. That
+is fine on a design screen, and it is exactly the **dangling-affordance** problem already fixed once
+in Wave 0 (the top-bar search was hidden in app scope for the same reason). Two ways forward, and
+this is not a silent choice because it changes a primitive 13 pages depend on:
+
+- **Extend `FilterBar`** with optional controlled props (search value/onChange, per-select
+  value/onChange), defaulting to today's inert behaviour so the mockup pages are unchanged. Keeps one
+  visual definition; touches the shared primitive.
+- **Omit filters from this slice** and ship the KPI row + table, then add filtering as its own step.
+
+Everything else in the slice is mechanical.
 
 ### D3 — "At risk" has no per-student backing _(blocks 2 pages: classes, reports)_
 
