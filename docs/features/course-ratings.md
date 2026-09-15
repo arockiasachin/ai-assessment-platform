@@ -17,16 +17,19 @@ zod contracts).
 - A signed-in **teacher** sees every offering they own, including offerings with
   no ratings yet, with each offering's average rating, rating count, and the
   individual ratings (student name, register number, score, comment, timestamp).
-- The student courses view shows the course's average rating, the student's own
-  rating, and — once the course is completed — a rating control that posts to the
-  API. The teacher menu links to a Reports page that renders the aggregates.
+- The student courses view shows the course's average rating, the rating
+  **distribution** (counts per star value, carried as `ratingDistribution`), the
+  student's own rating, and — once the course is completed — a rating control
+  that posts to the API. The teacher menu links to a Reports page that renders
+  the aggregates.
 
 ## API surface
 
-| Method + path                      | Auth      | Body / query                            | Response                                                                                                                                                 |
-| ---------------------------------- | --------- | --------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `POST /api/student/courses/rating` | `student` | `{ offeringId, rating: 1-5, comment? }` | `{ success: true, message }`; `400` invalid body, `403` not enrolled, `409` not completed, `404` no profile                                              |
-| `GET /api/teacher/reports/ratings` | `teacher` | —                                       | `{ offerings: [{ offeringId, courseCode, courseName, className, term, academicYear, ratingsCount, averageRating, ratings[] }] }`; `404` no staff profile |
+| Method + path                      | Auth      | Body / query                            | Response                                                                                                                                                                                                                                                 |
+| ---------------------------------- | --------- | --------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /api/student/courses`         | `student` | —                                       | `{ now, enrolledCourses[], offeredCourses[] }`; each item carries `averageRating` (`null` when unrated), `ratingsCount`, `ratingDistribution` (counts per star value, 1–5) and the caller's own `studentRating`/`studentRatingComment`; `404` no profile |
+| `POST /api/student/courses/rating` | `student` | `{ offeringId, rating: 1-5, comment? }` | `{ success: true, message }`; `400` invalid body, `403` not enrolled, `409` not completed, `404` no profile                                                                                                                                              |
+| `GET /api/teacher/reports/ratings` | `teacher` | —                                       | `{ offerings: [{ offeringId, courseCode, courseName, className, term, academicYear, ratingsCount, averageRating, ratings[] }] }`; `404` no staff profile                                                                                                 |
 
 The request body is validated by `courseRatingRequestSchema`
 (`lib/contracts/gradebook.ts`); `rating` is coerced to an integer in `[1, 5]`
@@ -91,3 +94,8 @@ internals.
   the datasets are class-sized.
 - **The completion rule is fixed.** There is no way to rate an in-progress
   offering, and no scheduled job that opens ratings at `endsOn`.
+- **The student's view is aggregate-only.** `GET /api/student/courses` returns
+  the average, a `ratingDistribution` of counts per star value, and the caller's
+  own rating and comment. A classmate's name or comment is never in that payload;
+  peer identities stay in the teacher report only
+  (`docs/plans/wave-1.md` D7).

@@ -1,11 +1,18 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
-import { BookOpenCheck, Calendar, ChevronDown, Search, Sparkles, Star, Users } from "lucide-react"
-import type { CourseCatalogItem, StudentCoursesPayload } from "@/lib/student-courses"
+import { useMemo, useState } from "react"
+import { useRouter } from "next/navigation"
+import { BookOpenCheck, CalendarClock, CheckCheck, Search, Star, UserPlus } from "lucide-react"
+
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Input } from "@/components/ui/input"
+import { Callout } from "@/components/ui/callout"
+import { DataTable, type Column } from "@/components/ui/data-table"
+import { EmptyState } from "@/components/ui/empty-state"
+import { FilterBar } from "@/components/ui/filter-bar"
+import { GradeDonut } from "@/components/ui/grade-donut"
+import { Label } from "@/components/ui/label"
+import { KeyValueList, MetricRow } from "@/components/ui/metric-row"
+import { SectionCard } from "@/components/ui/section-card"
 import {
   Select,
   SelectContent,
@@ -13,446 +20,551 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { StatCard } from "@/components/ui/stat-card"
+import { StatusPill, type StatusKey } from "@/components/ui/status-pill"
+import type {
+  CourseCatalogItem,
+  CourseRegistrationStatus,
+  StudentCoursesPayload,
+} from "@/lib/student-courses"
 
-function formatDate(value: string | null) {
-  if (!value) return "Not set"
-  return new Date(value).toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  })
+/**
+ * Student course workspace.
+ *
+ * Every row comes from the server: the page passes the payload in as a prop and
+ * this component never fetches on mount. The two writes it does own — enrolling
+ * and rating — call `router.refresh()` afterwards, so the page's `force-dynamic`
+ * server component re-runs and the updated catalog arrives as fresh props. There
+ * is deliberately no client re-fetch of data the server already has.
+ *
+ * Ratings are shown in aggregate only (average + distribution + the student's
+ * own row); a classmate's name and comment are never requested or rendered
+ * (`docs/plans/wave-1.md` D7, `docs/features/course-ratings.md`).
+ */
+
+type Props = { initialPayload: StudentCoursesPayload }
+
+/**
+ * Dates are formatted in UTC with an explicit locale, matching `lib/mock/format.ts`.
+ * Without the pinned time zone the server render (UTC) and the browser render
+ * (the visitor's zone) can disagree about the day, which is a hydration error —
+ * this repo has already shipped one.
+ */
+const dateFormatter = new Intl.DateTimeFormat("en-GB", {
+  day: "numeric",
+  month: "short",
+  year: "numeric",
+  timeZone: "UTC",
+})
+
+function formatDate(iso: string | null): string {
+  return iso ? dateFormatter.format(new Date(iso)) : "—"
 }
 
-function statusLabel(course: CourseCatalogItem) {
-  if (course.registrationStatus === "enrolled") return "Enrolled"
-  if (course.registrationStatus === "waitlisted") return "Waitlisted"
-  if (course.registrationStatus === "open") return "Registration open"
-  if (course.registrationStatus === "upcoming") return "Registration opens soon"
-  if (course.registrationStatus === "full") return "Class full"
-  return "Registration closed"
+/** `null` is "not rated yet", so it renders as an em dash — never as `0`. */
+function formatAverageRating(value: number | null): string {
+  return value === null ? "—" : `${value.toFixed(1)} / 5`
 }
 
-// The app themes via `prefers-color-scheme`, so the `.dark`-scoped Tailwind
-// `dark:` variant never activates; the explicit media variant keeps the status
-// chip readable on a dark page.
-function statusClass(status: CourseCatalogItem["registrationStatus"]) {
-  if (status === "open")
-    return "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 [@media(prefers-color-scheme:dark)]:text-emerald-400"
-  if (status === "enrolled") return "border-primary/40 bg-primary/10 text-primary"
-  if (status === "waitlisted")
-    return "border-orange-500/30 bg-orange-500/10 text-orange-700 [@media(prefers-color-scheme:dark)]:text-orange-400"
-  if (status === "upcoming")
-    return "border-sky-500/30 bg-sky-500/10 text-sky-700 [@media(prefers-color-scheme:dark)]:text-sky-400"
-  if (status === "full")
-    return "border-amber-500/30 bg-amber-500/10 text-amber-700 [@media(prefers-color-scheme:dark)]:text-amber-400"
-  return "border-border bg-muted text-muted-foreground"
+function formatOwnRating(value: number | null): string {
+  return value === null ? "—" : `${value} / 5`
 }
 
-export function StudentCoursesView() {
-  const [payload, setPayload] = useState<StudentCoursesPayload | null>(null)
-  const [isLoading, setIsLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+const RATING_OPTIONS = [5, 4, 3, 2, 1].map((value) => ({
+  value: String(value),
+  label: `${value} / 5`,
+}))
+
+/**
+ * Registration state → the shared status vocabulary.
+ *
+ * The vocabulary is closed, so the keys are chosen for their tone and the label
+ * is always the course-domain word: `graded` carries the success tone an open
+ * window should read as, and `pending` covers both "waiting for a seat" and
+ * "class full".
+ */
+const REGISTRATION_STATUS: Record<CourseRegistrationStatus, { key: StatusKey; label: string }> = {
+  enrolled: { key: "active", label: "Enrolled" },
+  waitlisted: { key: "pending", label: "Waitlisted" },
+  open: { key: "graded", label: "Registration open" },
+  upcoming: { key: "published", label: "Opens soon" },
+  full: { key: "pending", label: "Class full" },
+  closed: { key: "archived", label: "Closed" },
+}
+
+const STATUS_FILTER_OPTIONS = [
+  { value: "all", label: "All statuses" },
+  { value: "open", label: "Registration open" },
+  { value: "upcoming", label: "Opens soon" },
+  { value: "full", label: "Class full" },
+  { value: "closed", label: "Closed" },
+  { value: "enrolled", label: "Enrolled" },
+  { value: "waitlisted", label: "Waitlisted" },
+]
+
+const CATALOG_COLUMNS: Column<CourseCatalogItem>[] = [
+  {
+    id: "course",
+    header: "Course",
+    className: "whitespace-normal",
+    cell: (course) => (
+      <div className="min-w-0">
+        <p className="font-medium">{course.courseName}</p>
+        <p className="text-xs text-muted-foreground">
+          <span className="font-mono">{course.courseCode}</span> · {course.term}{" "}
+          {course.academicYear} · {course.className}
+        </p>
+      </div>
+    ),
+  },
+  {
+    id: "teacher",
+    header: "Teacher",
+    hideBelow: "sm",
+    cell: (course) => course.teacherName,
+  },
+  {
+    id: "seats",
+    header: "Seats",
+    align: "right",
+    hideBelow: "sm",
+    cell: (course) => (
+      <span className="font-mono tabular-nums">
+        {course.enrolledCount} / {course.studentLimit}
+      </span>
+    ),
+  },
+  {
+    id: "registration",
+    header: "Registration",
+    cell: (course) => {
+      const meta = REGISTRATION_STATUS[course.registrationStatus]
+      return <StatusPill status={meta.key} label={meta.label} dot />
+    },
+  },
+  {
+    id: "window",
+    header: "Window",
+    hideBelow: "lg",
+    cell: (course) => (
+      <span className="font-mono text-xs tabular-nums">
+        {formatDate(course.registrationOpenAt)} → {formatDate(course.registrationCloseAt)}
+      </span>
+    ),
+  },
+]
+
+export function StudentCoursesView({ initialPayload }: Props) {
+  const router = useRouter()
   const [search, setSearch] = useState("")
-  const [expanded, setExpanded] = useState<Record<string, boolean>>({})
-  const [message, setMessage] = useState<string | null>(null)
-  const [pendingOffer, setPendingOffer] = useState<string | null>(null)
+  const [statusFilter, setStatusFilter] = useState<CourseRegistrationStatus | "all">("all")
   const [ratingDrafts, setRatingDrafts] = useState<Record<string, number>>({})
   const [commentDrafts, setCommentDrafts] = useState<Record<string, string>>({})
+  const [pendingId, setPendingId] = useState<string | null>(null)
+  const [message, setMessage] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
 
-  const loadCourses = async () => {
-    try {
-      const response = await fetch("/api/student/courses", { cache: "no-store" })
-      if (!response.ok) {
-        setError("Unable to load courses right now.")
-        return
-      }
-      const data = (await response.json()) as StudentCoursesPayload
-      setPayload(data)
-    } catch {
-      setError("Unable to load courses right now.")
-    } finally {
-      setIsLoading(false)
-    }
-  }
+  const enrolled = initialPayload.enrolledCourses
+  const offered = initialPayload.offeredCourses
 
-  const refreshCourses = async () => {
-    setError(null)
-    setIsLoading(true)
-    await loadCourses()
-  }
-
-  useEffect(() => {
-    void loadCourses()
-  }, [])
-
-  const offeredFiltered = useMemo(() => {
-    const list = payload?.offeredCourses ?? []
+  const filteredOffered = useMemo(() => {
     const query = search.trim().toLowerCase()
-    if (!query) return list
-    return list.filter((course) => {
-      const text = `${course.courseCode} ${course.courseName} ${course.teacherName}`.toLowerCase()
-      return text.includes(query)
+    return offered.filter((course) => {
+      if (statusFilter !== "all" && course.registrationStatus !== statusFilter) return false
+      if (!query) return true
+      const text = `${course.courseCode} ${course.courseName} ${course.teacherName} ${course.className}`
+      return text.toLowerCase().includes(query)
     })
-  }, [payload, search])
+  }, [offered, search, statusFilter])
 
-  const enrolled = useMemo(() => payload?.enrolledCourses ?? [], [payload])
+  const activeCount = enrolled.filter((course) => course.isEnrolled).length
+  const waitlistedCount = enrolled.filter((course) => course.isWaitlisted).length
+  const openCount = offered.filter((course) => course.registrationStatus === "open").length
+  // Rateable means finished *and* actively enrolled: the rating route rejects a
+  // waitlisted enrollment with 403, so the form must not appear for one.
+  const rateable = enrolled.filter((course) => course.isEnrolled && course.isCompleted)
 
-  const summary = useMemo(
-    () => ({
-      enrolledCount: enrolled.length,
-      openCount: (payload?.offeredCourses ?? []).filter(
-        (course) => course.registrationStatus === "open",
-      ).length,
-      completedCount: enrolled.filter((course) => course.isCompleted).length,
-    }),
-    [enrolled, payload],
-  )
-
-  const toggleExpanded = (offeringId: string) => {
-    setExpanded((prev) => ({ ...prev, [offeringId]: !prev[offeringId] }))
-  }
-
-  const enroll = async (offeringId: string) => {
-    setPendingOffer(offeringId)
+  async function enroll(offeringId: string) {
+    setPendingId(offeringId)
     setMessage(null)
+    setError(null)
     try {
       const response = await fetch("/api/student/courses/enroll", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ offeringId }),
       })
-      const data = (await response.json()) as { success?: boolean; message?: string }
-      setMessage(data.message ?? (response.ok ? "Enrollment updated." : "Unable to enroll."))
-      if (response.ok) {
-        await refreshCourses()
+      const data = (await response.json().catch(() => ({}))) as { message?: string }
+      if (!response.ok) {
+        setError(data.message ?? "Unable to enroll right now.")
+        return
       }
+      setMessage(data.message ?? "Enrollment updated.")
+      router.refresh()
     } catch {
-      setMessage("Unable to enroll right now.")
+      setError("Unable to enroll right now.")
     } finally {
-      setPendingOffer(null)
+      setPendingId(null)
     }
   }
 
-  const submitRating = async (offeringId: string) => {
-    const rating = ratingDrafts[offeringId]
-    const comment = (commentDrafts[offeringId] ?? "").trim()
-    if (!rating || rating < 1 || rating > 5) return
+  async function submitRating(course: CourseCatalogItem) {
+    const rating = ratingDrafts[course.offeringId] ?? course.studentRating
+    if (rating === null || rating === undefined || rating < 1 || rating > 5) {
+      setError("Choose a rating from 1 to 5 before saving.")
+      return
+    }
+    const comment = (commentDrafts[course.offeringId] ?? course.studentRatingComment ?? "").trim()
 
-    setPendingOffer(offeringId)
+    setPendingId(course.offeringId)
     setMessage(null)
+    setError(null)
     try {
       const response = await fetch("/api/student/courses/rating", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ offeringId, rating, comment }),
+        body: JSON.stringify({ offeringId: course.offeringId, rating, comment }),
       })
-      const data = (await response.json()) as { success?: boolean; message?: string }
-      setMessage(data.message ?? (response.ok ? "Rating saved." : "Unable to save rating."))
-      if (response.ok) {
-        await refreshCourses()
+      const data = (await response.json().catch(() => ({}))) as { message?: string }
+      if (!response.ok) {
+        setError(data.message ?? "Unable to save rating right now.")
+        return
       }
+      setMessage(data.message ?? "Rating saved.")
+      router.refresh()
     } catch {
-      setMessage("Unable to save rating right now.")
+      setError("Unable to save rating right now.")
     } finally {
-      setPendingOffer(null)
+      setPendingId(null)
     }
-  }
-
-  if (isLoading) {
-    return <p className="py-10 text-center text-sm text-muted-foreground">Loading courses…</p>
-  }
-
-  if (error || !payload) {
-    return (
-      <p className="py-10 text-center text-sm text-destructive">
-        {error ?? "Unable to load courses."}
-      </p>
-    )
   }
 
   return (
     <div className="space-y-6">
-      <Card className="border-primary/20 bg-gradient-to-br from-primary/10 via-background to-background shadow-sm">
-        <CardContent className="flex flex-col gap-3 pt-6 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <div className="mb-2 inline-flex items-center gap-1.5 rounded-md border border-primary/30 bg-background/70 px-2 py-1 text-xs font-medium text-primary">
-              <Sparkles className="size-3.5" />
-              Course workspace
-            </div>
-            <p className="text-sm font-semibold">
-              Manage enrollments, monitor class capacity, and rate completed courses
-            </p>
-            <p className="text-xs text-muted-foreground">
-              Everything here updates directly from your student record.
-            </p>
-          </div>
-          <div className="grid grid-cols-3 gap-2 text-xs sm:gap-3">
-            <div className="rounded-md border border-border/70 bg-background/80 px-2 py-1.5 text-center">
-              <p className="text-muted-foreground">Enrolled</p>
-              <p className="font-semibold text-foreground">{summary.enrolledCount}</p>
-            </div>
-            <div className="rounded-md border border-border/70 bg-background/80 px-2 py-1.5 text-center">
-              <p className="text-muted-foreground">Open now</p>
-              <p className="font-semibold text-foreground">{summary.openCount}</p>
-            </div>
-            <div className="rounded-md border border-border/70 bg-background/80 px-2 py-1.5 text-center">
-              <p className="text-muted-foreground">Completed</p>
-              <p className="font-semibold text-foreground">{summary.completedCount}</p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+      {/* Every tile derives from the payload the server sent, so none can
+          contradict the lists below. */}
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <StatCard
+          label="Enrolled"
+          value={String(activeCount)}
+          hint="Active registrations"
+          icon={BookOpenCheck}
+        />
+        <StatCard
+          label="Waitlisted"
+          value={String(waitlistedCount)}
+          hint="Waiting for a seat"
+          icon={UserPlus}
+        />
+        <StatCard
+          label="Open to register"
+          value={String(openCount)}
+          hint="Registration window is open"
+          icon={CalendarClock}
+        />
+        <StatCard
+          label="Completed"
+          value={String(rateable.length)}
+          hint="Ready to rate"
+          icon={CheckCheck}
+        />
+      </div>
 
       {message && (
-        <div className="rounded-lg border border-border bg-muted/40 px-3 py-2 text-sm">
-          {message}
+        <div role="status">
+          <Callout tone="success" title="Saved">
+            {message}
+          </Callout>
+        </div>
+      )}
+      {error && (
+        <div role="alert">
+          <Callout tone="destructive" title="Something went wrong">
+            {error}
+          </Callout>
         </div>
       )}
 
-      <Card className="border-border/70 shadow-sm">
-        <CardHeader>
-          <CardTitle className="inline-flex items-center gap-2 text-base">
-            <BookOpenCheck className="size-4 text-primary" />
-            My course registrations
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          {enrolled.map((course) => {
-            const isExpanded = Boolean(expanded[course.offeringId])
-            const ratingValue = ratingDrafts[course.offeringId] ?? course.studentRating
-            const commentValue =
-              commentDrafts[course.offeringId] ?? course.studentRatingComment ?? ""
-
-            return (
-              <div
-                key={course.offeringId}
-                className="rounded-xl border border-border/70 bg-background shadow-sm"
-              >
-                <button
-                  type="button"
-                  className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left"
-                  onClick={() => toggleExpanded(course.offeringId)}
-                >
-                  <div className="min-w-0">
-                    <p className="truncate font-medium">{course.courseName}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {course.courseCode} · {course.term} {course.academicYear}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span
-                      className={[
-                        "rounded-md border px-2 py-1 text-xs font-medium",
-                        statusClass(course.registrationStatus),
-                      ].join(" ")}
-                    >
-                      {statusLabel(course)}
-                    </span>
-                    <ChevronDown
-                      className={[
-                        "size-4 transition-transform",
-                        isExpanded ? "rotate-180" : "",
-                      ].join(" ")}
-                    />
-                  </div>
-                </button>
-
-                {isExpanded && (
-                  <div className="border-t border-border/70 px-4 py-3 text-sm">
-                    <p className="mb-3 text-muted-foreground">
-                      {course.description ?? "No description available."}
-                    </p>
-                    <div className="grid gap-2 text-[13px] sm:grid-cols-2 sm:text-sm">
-                      <p>
-                        <span className="font-medium">Teacher:</span> {course.teacherName}
-                      </p>
-                      <p>
-                        <span className="font-medium">Credits:</span> {course.credits}
-                      </p>
-                      <p>
-                        <span className="font-medium">Students enrolled:</span>{" "}
-                        {course.enrolledCount}/{course.studentLimit}
-                      </p>
-                      <p>
-                        <span className="font-medium">Waitlist:</span> {course.waitlistedCount}
-                      </p>
-                      <p>
-                        <span className="font-medium">Class:</span> {course.className}
-                      </p>
-                      <p>
-                        <span className="font-medium">Start date:</span>{" "}
-                        {formatDate(course.startsOn)}
-                      </p>
-                      <p>
-                        <span className="font-medium">End date:</span> {formatDate(course.endsOn)}
-                      </p>
-                      <p>
-                        <span className="font-medium">Registration opens:</span>{" "}
-                        {formatDate(course.registrationOpenAt)}
-                      </p>
-                      <p>
-                        <span className="font-medium">Registration closes:</span>{" "}
-                        {formatDate(course.registrationCloseAt)}
-                      </p>
-                      <p>
-                        <span className="font-medium">Average rating:</span>{" "}
-                        {course.averageRating !== null
-                          ? `${course.averageRating.toFixed(1)} / 5`
-                          : "No ratings"}
-                      </p>
-                      <p>
-                        <span className="font-medium">Your rating:</span>{" "}
-                        {course.studentRating !== null
-                          ? `${course.studentRating} / 5`
-                          : "Not rated"}
+      <SectionCard
+        title="My courses"
+        description="Every offering you are enrolled in or waitlisted for, current term and past."
+      >
+        {enrolled.length === 0 ? (
+          <EmptyState
+            icon={BookOpenCheck}
+            title="No registrations yet"
+            description="Register for an offering from the catalog below and it will appear here."
+          />
+        ) : (
+          <div className="grid gap-4">
+            {enrolled.map((course) => {
+              const registration = REGISTRATION_STATUS[course.registrationStatus]
+              return (
+                <div key={course.offeringId} className="rounded-xl border border-border p-4">
+                  <div className="flex flex-wrap items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <h3 className="text-base font-medium">{course.courseName}</h3>
+                      <p className="mt-0.5 text-xs text-muted-foreground">
+                        <span className="font-mono">{course.courseCode}</span> · {course.term}{" "}
+                        {course.academicYear} · {course.className}
                       </p>
                     </div>
+                    <StatusPill status={registration.key} label={registration.label} dot />
+                  </div>
 
-                    {course.isCompleted && (
-                      <div className="mt-4 space-y-2 rounded-lg border border-border/70 bg-muted/20 p-3">
-                        <div className="space-y-1">
-                          <label
-                            className="text-xs font-medium text-muted-foreground"
-                            htmlFor={`rating-${course.offeringId}`}
-                          >
-                            Rate this course
-                          </label>
-                          <Select
-                            value={ratingValue === null ? null : String(ratingValue)}
-                            onValueChange={(value) =>
+                  {course.description && (
+                    <p className="mt-3 text-sm text-muted-foreground text-pretty">
+                      {course.description}
+                    </p>
+                  )}
+
+                  <KeyValueList
+                    className="mt-2"
+                    items={[
+                      { label: "Teacher", value: course.teacherName },
+                      { label: "Credits", value: `${course.credits} credits` },
+                      {
+                        label: "Runs",
+                        value: (
+                          <span className="font-mono text-xs tabular-nums">
+                            {formatDate(course.startsOn)} → {formatDate(course.endsOn)}
+                          </span>
+                        ),
+                      },
+                      {
+                        label: "Enrollment",
+                        value: (
+                          <span className="font-mono tabular-nums">
+                            {course.enrolledCount} / {course.studentLimit}
+                          </span>
+                        ),
+                        hint:
+                          course.waitlistedCount > 0
+                            ? `${course.waitlistedCount} on the waitlist`
+                            : undefined,
+                      },
+                    ]}
+                  />
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </SectionCard>
+
+      <SectionCard
+        title="Course feedback"
+        description="How each finished course was rated, in aggregate."
+      >
+        <div className="grid gap-4">
+          <Callout tone="info" title="Ratings stay anonymous">
+            You see the average, the distribution, and your own rating. A classmate&apos;s name and
+            comment are never shown to students.
+          </Callout>
+
+          {rateable.length === 0 ? (
+            <EmptyState
+              icon={Star}
+              title="Nothing to rate yet"
+              description="A course can be rated once it has finished and you were enrolled in it."
+            />
+          ) : (
+            rateable.map((course) => {
+              const slices = course.ratingDistribution
+                .map((bucket) => ({
+                  id: `stars-${bucket.stars}`,
+                  label: bucket.stars === 1 ? "1 star" : `${bucket.stars} stars`,
+                  value: bucket.count,
+                }))
+                .filter((slice) => slice.value > 0)
+              const draftRating = ratingDrafts[course.offeringId]
+              const ratingValue = draftRating ?? course.studentRating
+              const commentValue =
+                commentDrafts[course.offeringId] ?? course.studentRatingComment ?? ""
+              const isSaving = pendingId === course.offeringId
+
+              return (
+                <div key={course.offeringId} className="rounded-xl border border-border p-4">
+                  <div className="flex flex-wrap items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <h3 className="text-base font-medium">{course.courseName}</h3>
+                      <p className="mt-0.5 text-xs text-muted-foreground">
+                        <span className="font-mono">{course.courseCode}</span> · {course.term}{" "}
+                        {course.academicYear}
+                      </p>
+                    </div>
+                    <StatusPill status="completed" />
+                  </div>
+
+                  <div className="mt-4 grid gap-4">
+                    {course.ratingsCount === 0 ? (
+                      <EmptyState
+                        size="sm"
+                        title="No ratings yet"
+                        description="No student has rated this course so far."
+                      />
+                    ) : (
+                      <GradeDonut
+                        slices={slices}
+                        centerValue={formatAverageRating(course.averageRating)}
+                        centerLabel="average"
+                        label={`Distribution of ratings for ${course.courseName}, from 1 to 5 stars`}
+                      />
+                    )}
+
+                    <div className="space-y-0.5">
+                      <MetricRow
+                        label="Ratings submitted"
+                        value={
+                          <span className="font-mono tabular-nums">{course.ratingsCount}</span>
+                        }
+                      />
+                      <MetricRow
+                        label="Your rating"
+                        value={
+                          <span className="font-mono tabular-nums">
+                            {formatOwnRating(course.studentRating)}
+                          </span>
+                        }
+                        hint={
+                          course.studentRating === null
+                            ? "You have not rated this course yet."
+                            : undefined
+                        }
+                      />
+                    </div>
+
+                    <div className="grid gap-3 rounded-lg border border-border p-3">
+                      <div className="space-y-1">
+                        <Label htmlFor={`rating-${course.offeringId}`}>Rate this course</Label>
+                        <Select
+                          value={ratingValue === null ? null : String(ratingValue)}
+                          onValueChange={(value) => {
+                            const next = Number(value)
+                            if (Number.isInteger(next) && next >= 1 && next <= 5) {
                               setRatingDrafts((prev) => ({
                                 ...prev,
-                                [course.offeringId]: Number(value),
+                                [course.offeringId]: next,
                               }))
                             }
+                          }}
+                          items={RATING_OPTIONS}
+                        >
+                          <SelectTrigger
+                            id={`rating-${course.offeringId}`}
+                            className="w-full sm:w-44"
                           >
-                            <SelectTrigger
-                              id={`rating-${course.offeringId}`}
-                              aria-label={`Rating for ${course.courseName}`}
-                            >
-                              <SelectValue placeholder="Select a rating" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {[1, 2, 3, 4, 5].map((value) => (
-                                <SelectItem key={value} value={String(value)}>
-                                  {value} / 5
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
+                            <SelectValue placeholder="Select a rating" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {RATING_OPTIONS.map((option) => (
+                              <SelectItem key={option.value} value={option.value}>
+                                {option.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div className="space-y-1">
+                        <Label htmlFor={`comment-${course.offeringId}`}>
+                          Comment{" "}
+                          <span className="font-normal text-muted-foreground">(optional)</span>
+                        </Label>
                         <textarea
+                          id={`comment-${course.offeringId}`}
                           value={commentValue}
-                          onChange={(e) =>
+                          onChange={(event) =>
                             setCommentDrafts((prev) => ({
                               ...prev,
-                              [course.offeringId]: e.target.value,
+                              [course.offeringId]: event.target.value,
                             }))
                           }
-                          aria-label={`Comment about ${course.courseName}`}
-                          placeholder="Optional comment about the course"
+                          placeholder="Anything you want the course team to know"
                           className="min-h-16 w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm"
                           maxLength={500}
                         />
+                      </div>
+
+                      <div>
                         <Button
                           type="button"
                           variant="outline"
                           size="sm"
-                          onClick={() => submitRating(course.offeringId)}
-                          disabled={pendingOffer === course.offeringId}
+                          onClick={() => void submitRating(course)}
+                          disabled={isSaving}
                         >
-                          <Star className="size-4" />
-                          Save rating
+                          <Star className="size-4" aria-hidden="true" />
+                          <span className="ml-1">Save rating</span>
                         </Button>
                       </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            )
-          })}
-
-          {enrolled.length === 0 && (
-            <p className="text-sm text-muted-foreground">
-              You are not enrolled in any courses yet.
-            </p>
-          )}
-        </CardContent>
-      </Card>
-
-      <Card className="border-border/70 shadow-sm">
-        <CardHeader>
-          <CardTitle className="text-base">Explore all offered courses</CardTitle>
-          <div className="relative mt-2">
-            <Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              className="pl-8"
-              aria-label="Search courses"
-              placeholder="Search by course name, code, or teacher"
-            />
-          </div>
-        </CardHeader>
-
-        <CardContent className="space-y-3">
-          {offeredFiltered.map((course) => (
-            <div
-              key={course.offeringId}
-              className="rounded-xl border border-border/70 bg-background px-4 py-3 shadow-sm"
-            >
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                <div>
-                  <p className="font-medium">{course.courseName}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {course.courseCode} · {course.term} {course.academicYear} · {course.teacherName}
-                  </p>
-                  <div className="mt-2 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
-                    <span className="inline-flex items-center gap-1">
-                      <Users className="size-3.5" /> {course.enrolledCount}/{course.studentLimit}
-                    </span>
-                    <span className="inline-flex items-center gap-1">
-                      <Calendar className="size-3.5" /> {formatDate(course.registrationOpenAt)} to{" "}
-                      {formatDate(course.registrationCloseAt)}
-                    </span>
+                    </div>
                   </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  <span
-                    className={[
-                      "rounded-md border px-2 py-1 text-xs font-medium",
-                      statusClass(course.registrationStatus),
-                    ].join(" ")}
-                  >
-                    {statusLabel(course)}
-                  </span>
-                  {!course.isEnrolled && (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() => enroll(course.offeringId)}
-                      disabled={
-                        course.isWaitlisted ||
-                        (!course.canRegister && course.registrationStatus !== "full") ||
-                        pendingOffer === course.offeringId
-                      }
-                    >
-                      {course.registrationStatus === "full"
-                        ? "Join waitlist"
-                        : course.isWaitlisted
-                          ? "Waitlisted"
-                          : "Register"}
-                    </Button>
-                  )}
-                </div>
-              </div>
-            </div>
-          ))}
-          {offeredFiltered.length === 0 && (
-            <p className="text-sm text-muted-foreground">No courses match your search.</p>
+              )
+            })
           )}
-        </CardContent>
-      </Card>
+        </div>
+      </SectionCard>
+
+      <SectionCard
+        title="Explore offered courses"
+        description="Registration windows are set by the teacher; when a course is full you can join the waitlist."
+      >
+        <div className="grid gap-4">
+          <FilterBar
+            searchLabel="Search offered courses"
+            searchPlaceholder="Search by course, code, class, or teacher"
+            searchValue={search}
+            onSearchChange={setSearch}
+            selects={[
+              {
+                id: "student-courses-registration",
+                label: "Registration",
+                value: statusFilter,
+                options: STATUS_FILTER_OPTIONS,
+                onValueChange: (value) =>
+                  setStatusFilter((value as CourseRegistrationStatus | "all") || "all"),
+              },
+            ]}
+            resultCount={filteredOffered.length}
+            resultNoun="course"
+          />
+
+          <DataTable
+            caption="Offered courses"
+            columns={CATALOG_COLUMNS}
+            rows={filteredOffered}
+            getRowId={(course) => course.offeringId}
+            empty={
+              <EmptyState
+                size="sm"
+                icon={Search}
+                title="No courses match"
+                description="Try a different search term or registration status."
+              />
+            }
+            rowActions={(course) => {
+              // The registration pill already names the state; only an offering
+              // you can act on needs a control.
+              if (course.isEnrolled || course.isWaitlisted) return null
+              const canJoinWaitlist = course.registrationStatus === "full"
+              return (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => void enroll(course.offeringId)}
+                  disabled={
+                    (!course.canRegister && !canJoinWaitlist) || pendingId === course.offeringId
+                  }
+                >
+                  {canJoinWaitlist ? "Join waitlist" : "Register"}
+                </Button>
+              )
+            }}
+          />
+        </div>
+      </SectionCard>
     </div>
   )
 }
