@@ -1,6 +1,9 @@
-import { MOCK_COHORT_AVERAGE, MOCK_STUDENTS } from "./course"
+import { MOCK_ASSESSMENTS, MOCK_COHORT_AVERAGE, MOCK_STUDENTS } from "./course"
 import { MOCK_ANALYTICS_SUMMARY } from "./analytics"
+import { daysUntil } from "./format"
+import { MOCK_GROUP_BY_ID, MOCK_MY_PEER_EVALUATIONS } from "./groups"
 import { MOCK_PENDING_REVIEWS } from "./reviews"
+import { MOCK_STUDENT_ASSESSMENTS } from "./submissions"
 import { MOCK_ADMIN_SUMMARY } from "./admin"
 import type { CalendarEventView, Kpi } from "./types"
 
@@ -10,10 +13,33 @@ import type { CalendarEventView, Kpi } from "./types"
  * Kept separate from the domain modules so a page can render a dashboard header
  * without importing the whole fixture graph, and so the KPIs have one obvious
  * place to change when a real endpoint replaces them.
+ *
+ * The student KPIs are DERIVED from the assessment, quiz and group fixtures
+ * rather than typed in, so a dashboard tile can never disagree with the list
+ * page that shows the same work.
  */
 
 const demoStudent = MOCK_STUDENTS.find((student) => student.id === "stu_aarav")
-const outstandingPeerEvaluations = 3
+const demoTeam = MOCK_GROUP_BY_ID["grp_matrices"]
+
+/** Work the student still owes on an assessment that has been released. */
+const studentOutstanding = MOCK_STUDENT_ASSESSMENTS.filter(
+  (row) => row.submittedAt === null && row.state !== "draft",
+)
+const studentDueThisWeek = studentOutstanding.filter(
+  (row) => daysUntil(row.dueAt) >= 0 && daysUntil(row.dueAt) <= 7,
+)
+const studentSubmittedCount = MOCK_STUDENT_ASSESSMENTS.filter(
+  (row) => row.submittedAt !== null,
+).length
+const studentRequiredPeerEvaluations =
+  demoStudent === undefined
+    ? 0
+    : demoTeam.members.filter((member) => member.studentId !== demoStudent.id).length
+const studentSubmittedPeerEvaluations = MOCK_MY_PEER_EVALUATIONS.filter(
+  (evaluation) => evaluation.state === "SUBMITTED",
+).length
+const outstandingPeerEvaluations = studentRequiredPeerEvaluations - studentSubmittedPeerEvaluations
 
 export const MOCK_TEACHER_KPIS: Kpi[] = [
   {
@@ -53,30 +79,32 @@ export const MOCK_STUDENT_KPIS: Kpi[] = [
     id: "kpi_overall",
     label: "Overall",
     value: demoStudent?.avgPercent === null ? "—" : `${demoStudent?.avgPercent ?? "—"}%`,
-    hint: "Across published work",
+    hint: "Across work released so far",
     delta: { value: "+3 pts", direction: "up", sentiment: "positive" },
     tone: "completed",
   },
   {
     id: "kpi_due",
     label: "Due this week",
-    value: "2",
-    hint: "Code task · Quiz 2",
+    value: String(studentDueThisWeek.length),
+    hint:
+      studentDueThisWeek.map((row) => row.title).join(" · ") || "Nothing due in the next 7 days",
     tone: "pending",
   },
   {
     id: "kpi_submitted",
     label: "Submitted",
-    value: "4 of 6",
-    hint: "2 never submitted",
+    value: `${studentSubmittedCount} of ${MOCK_STUDENT_ASSESSMENTS.length}`,
+    hint: `${MOCK_STUDENT_ASSESSMENTS.length - studentSubmittedCount} not submitted`,
     tone: "active",
   },
   {
     id: "kpi_peer",
     label: "Peer evaluations",
-    value: `${outstandingPeerEvaluations} to do`,
-    hint: "Team Matrices",
-    tone: "needs-review",
+    value:
+      outstandingPeerEvaluations <= 0 ? "All submitted" : `${outstandingPeerEvaluations} to do`,
+    hint: `${studentSubmittedPeerEvaluations} of ${studentRequiredPeerEvaluations} · ${demoTeam.name}`,
+    tone: outstandingPeerEvaluations <= 0 ? "completed" : "needs-review",
   },
 ]
 
@@ -201,3 +229,23 @@ export const MOCK_CALENDAR_EVENTS: CalendarEventView[] = [
 
 /** Convenience: the next few events from the fixed mock clock. */
 export const MOCK_UPCOMING_EVENTS = MOCK_CALENDAR_EVENTS.slice(0, 4)
+
+/**
+ * The calendar a STUDENT sees.
+ *
+ * A draft assessment has not been released, so neither its due date nor its
+ * details may appear on the student calendar. `CalendarEventView` carries no
+ * assessment id, so the title is the join key the fixtures provide.
+ */
+const draftAssessmentTitles = new Set(
+  MOCK_ASSESSMENTS.filter((assessment) => assessment.state === "draft").map(
+    (assessment) => assessment.title,
+  ),
+)
+
+export const MOCK_STUDENT_CALENDAR_EVENTS: CalendarEventView[] = MOCK_CALENDAR_EVENTS.filter(
+  (event) => event.kind !== "ASSESSMENT" || !draftAssessmentTitles.has(event.title),
+)
+
+/** The student's next few events, with unreleased assessments already removed. */
+export const MOCK_STUDENT_UPCOMING_EVENTS = MOCK_STUDENT_CALENDAR_EVENTS.slice(0, 4)

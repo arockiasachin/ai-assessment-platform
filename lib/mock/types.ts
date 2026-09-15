@@ -162,6 +162,9 @@ export type QuizQuestion = {
 
 export type QuizAttemptSummary = {
   id: string
+  /** The assessment this sitting belongs to — the title is shown on attempts tables. */
+  assessmentId: string
+  assessmentTitle: string
   studentId: string
   studentName: string
   attemptNumber: number
@@ -170,6 +173,54 @@ export type QuizAttemptSummary = {
   maxScore: number
   submittedAt: string | null
   timeSpentMs: number | null
+}
+
+/**
+ * Outcome of one question in a **submitted** attempt.
+ *
+ * This is a state union rather than a bare `isCorrect` boolean on purpose: a
+ * question the student never answered is neither correct nor incorrect, and the
+ * student surface must be able to say so without inventing a `false`.
+ */
+export type QuizResponseOutcome = "CORRECT" | "PARTIALLY_CORRECT" | "INCORRECT" | "UNANSWERED"
+
+/** One question as the student's own submission reports it. */
+export type QuizResponse = {
+  id: string
+  questionId: string
+  outcome: QuizResponseOutcome
+  /** Option ids the student selected. Empty when the question was not answered. */
+  selectedOptionIds: string[]
+  pointsAwarded: number
+}
+
+/**
+ * A quiz sitting the student has started but not submitted.
+ *
+ * Deliberately holds the student's own selections and nothing else: there is no
+ * correctness flag, no answer key and no explanation anywhere in this shape,
+ * which is exactly what the pre-submission student payload must never contain.
+ * The key is only reachable through `QuizResponse` after submission.
+ */
+export type QuizInProgressAttempt = {
+  id: string
+  assessmentId: string
+  title: string
+  /** `GRADED` counts against the attempt cap; `PRACTICE` is adaptive retake. */
+  kind: "GRADED" | "PRACTICE"
+  attemptNumber: number
+  maxScore: number
+  startedAt: string
+  expiresAt: string
+  /** Ordered question ids in the sitting. */
+  questionIds: string[]
+  answeredQuestionIds: string[]
+  flaggedQuestionIds: string[]
+  /** Current selections, keyed by question id — no key, no correctness. */
+  selections: Record<string, string[]>
+  /** Elapsed and remaining time, measured against the fixed mock clock. */
+  timeSpentMs: number
+  timeRemainingMs: number
 }
 
 export type ItemAnalysis = {
