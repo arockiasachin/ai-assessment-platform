@@ -124,6 +124,7 @@ export const MOCK_SPARKLINES = {
   submissions: [2, 5, 6, 9, 11, 12],
   exports: [1, 2, 2, 3, 4, 5],
   users: [4, 5, 5, 6, 6, 6],
+  atRisk: [1, 1, 1, 2, 2, MOCK_ANALYTICS_SUMMARY.atRiskCount],
 } as const
 
 export const MOCK_CALENDAR_EVENTS: CalendarEventView[] = [
