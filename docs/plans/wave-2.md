@@ -13,22 +13,27 @@ rather than in the composition.
 
 **Wave 2 = the three "no reader at all" pages, plus an optional trailing re-skin.**
 
-| Slice  | Content                                                              | Ships independently |
-| ------ | -------------------------------------------------------------------- | ------------------- |
-| **S1** | `lib/materials.ts` + pure mapper + tests + seed top-up. **No page.** | yes                 |
-| **S2** | `student/resources` page                                             | yes                 |
-| **S3** | `lib/calendar.ts` + pure mapper + tests + seed top-up. **No page.**  | yes                 |
-| **S4** | `student/events` page                                                | yes                 |
-| **S5** | `teacher/planner` page                                               | yes                 |
-| **S6** | `teacher/observability` re-skin (optional, droppable)                | yes                 |
+| Slice  | Content                                                    | Ships independently |
+| ------ | ---------------------------------------------------------- | ------------------- |
+| **S1** | `lib/materials.ts` + pure mapper + tests. **No page.**     | yes                 |
+| **S2** | **Seed: materials** — the 8 rows in §2.2, indexed for real | yes                 |
+| **S3** | `student/resources` page                                   | yes                 |
+| **S4** | `lib/calendar.ts` + pure mapper + tests. **No page.**      | yes                 |
+| **S5** | **Seed: calendar** — the 10 rows in §2.3                   | yes                 |
+| **S6** | `student/events` page                                      | yes                 |
+| **S7** | `teacher/planner` page                                     | yes                 |
+| **S8** | `teacher/observability` re-skin (optional, droppable)      | yes                 |
 
 The three pages are the only ones where a **reader must be written that does not exist**. The parent
 plan warned about under-budgeting exactly this: _"'Missing reader' is not 'missing model' … budget
 Wave 2 properly"_ (`mockup-to-backend.md:215`).
 
-**S1 and S3 carry no page on purpose.** The risk here is the query and the derivation, not the JSX.
+**S1 and S4 carry no page on purpose.** The risk here is the query and the derivation, not the JSX.
 Proving the reader with a pure mapper test and a DB test before any page exists keeps the composition
 slices trivially reviewable.
+
+**S2 and S5 are seed slices, and they are not padding** — see §2.1. Without them the three pages render
+monotonous data and every branch they contain goes untaken, which means unreviewed.
 
 ### Excluded, and why
 
@@ -43,7 +48,7 @@ slices trivially reviewable.
 
 ---
 
-## 2. What is actually in the database
+## 2. What is in the database, and what the seed must become
 
 This is the finding that decides whether these pages are demoable, and it is the **same class as the
 three seed bugs Wave 1 found**: the data technically exists, so the page is not _empty_ — it is
@@ -82,6 +87,85 @@ provider explicitly. It becomes a dependency only if a create/upload path indexe
 
 **No test touches the three stub pages**, and no doc claims they work. A port has no safety net and no
 stale claim to correct — the entire risk is in the new query.
+
+### 2.1 The seed is part of the deliverable, not an afterthought
+
+**Writing these rows properly is a Wave 2 task in its own right**, because without them S2, S4 and S5
+cannot be demonstrated or meaningfully reviewed. This is not padding: **each row below exists to
+exercise a branch that would otherwise be dead code.** A page whose every branch is never taken is a
+page nobody has actually reviewed.
+
+Enums, for reference: `MaterialKind` is `DOCUMENT | SLIDE_DECK | VIDEO | TRANSCRIPT | LINK | OTHER`;
+`EventType` is `CLASS | ASSESSMENT | HOLIDAY | REMINDER`. `CalendarEvent` carries
+`classId? offeringId? assessmentId? title description? eventType startAt endAt? isUpcoming`.
+
+### 2.2 Materials — target 8 rows (currently 2)
+
+Two offerings already exist (`demo-offering-active`, `demo-offering-past`), so both scopes are
+reachable without adding one.
+
+| #   | title                               | kind         | scope                                | `sourceUrl`     | chunks | the branch it exists to exercise                                                              |
+| --- | ----------------------------------- | ------------ | ------------------------------------ | --------------- | ------ | --------------------------------------------------------------------------------------------- |
+| 1   | Linear equations — lecture notes    | `DOCUMENT`   | active offering                      | `null`          | 5      | exists today. The **"no file attached"** case                                                 |
+| 2   | Graphing and interpreting lines     | `SLIDE_DECK` | active offering                      | `null`          | 4      | exists today                                                                                  |
+| 3   | Course syllabus and assessment plan | `DOCUMENT`   | **course-wide** (`offeringId: null`) | a URL           | 0      | the **course-wide branch** of the reader, a **real file link**, and an **unindexed** row      |
+| 4   | Khan Academy — systems of equations | `LINK`       | **course-wide**                      | an external URL | 0      | the `LINK` kind: a resource with no file of our own                                           |
+| 5   | Solving systems by substitution     | `VIDEO`      | active offering                      | a URL           | 3      | the `VIDEO` kind, **and indexed**                                                             |
+| 6   | Lecture transcript — week 2         | `TRANSCRIPT` | active offering                      | `null`          | 2      | the `TRANSCRIPT` kind                                                                         |
+| 7   | Practice set — slope and intercepts | `DOCUMENT`   | active offering                      | a URL           | 0      | a second linked-but-unindexed row, so "Not searchable yet" is not a one-off                   |
+| 8   | Revision handout (2025)             | `DOCUMENT`   | **past offering**                    | `null`          | 0      | **cross-offering isolation** — a student enrolled only in the active offering must not see it |
+
+**Chunks are produced the real way.** The seed calls `indexMaterial` for rows 1, 2, 5 and 6, and simply
+does not for the rest. That is what makes "indexed" and "unindexed" genuine states rather than a column
+someone sets by hand — and it exercises the retrieval pipeline at the same time.
+
+Covers every `MaterialKind` worth showing except `OTHER`, which has no sensible demo meaning.
+
+### 2.3 Calendar — target 10 rows (currently 4)
+
+All four existing rows are in the future, so the "Upcoming" panel and the table below it render **the
+same rows** — which means **a broken upcoming filter would be invisible.**
+
+| #   | title                                     | `eventType`  | scope                     | `startAt`                | `endAt`        | `description`             | the branch it exists to exercise                                              |
+| --- | ----------------------------------------- | ------------ | ------------------------- | ------------------------ | -------------- | ------------------------- | ----------------------------------------------------------------------------- |
+| 1–4 | `Due: <assessment>` (the four that exist) | `ASSESSMENT` | active                    | the assessment due dates | `null`         | a real sentence           | keep, but give them descriptions                                              |
+| 5   | Lecture — graphing linear functions       | `CLASS`      | active + class            | +3 days                  | +3 days + 90m  | "Bring the practice set." | the `CLASS` kind, **with an `endAt`**                                         |
+| 6   | Lecture — solving systems                 | `CLASS`      | active + class            | +10 days                 | +10 days + 90m | `null`                    | a class **without** a description                                             |
+| 7   | Mid-term break                            | `HOLIDAY`    | **no offering, no class** | +21 days                 | +28 days       | "No classes this week."   | the `HOLIDAY` kind, and the **no-location** case → renders `—`                |
+| 8   | Quiz 1 closes this Friday                 | `REMINDER`   | active + class            | +5 days                  | `null`         | `null`                    | the `REMINDER` kind, **no `endAt`**                                           |
+| 9   | Lecture — slope recap                     | `CLASS`      | active + class            | **−7 days**              | −7 days + 90m  | `null`                    | **a past event, `isUpcoming: false`** — so "Upcoming" visibly omits something |
+| 10  | Revision session                          | `CLASS`      | **past offering**         | **−30 days**             | …              | `null`                    | **past, and a different offering** — calendar cross-offering isolation        |
+
+**Rows 9 and 10 are the important ones.** Without a past event, "Upcoming" and "All events" are the
+same list, and neither a test nor a reviewer can tell whether the filter works.
+
+If **E2** resolves to "derive location as `classRoom.name`", rows 5, 6, 8 and 9 render a class while row
+7 renders `—` — the em-dash rule demonstrated on live data rather than only in a mapper test.
+
+### 2.4 What the seed must not do
+
+- **Do not set `chunks` or `indexed` directly.** They are derived. Write through `indexMaterial`.
+- **Do not set `isUpcoming: true` on past events.** Set it `false` on rows 9–10 — and note that nothing
+  else in the repo maintains this flag, which is precisely why the reader must filter on `startAt` and
+  not on it. The seed is where that gets documented by example.
+- **Do not invent a `topic` or a `sizeLabel`** to fill the mockup's columns (decisions M1, M3).
+- **Do not add a second offering just for this.** One active and one past already exist, which is
+  exactly what cross-scope isolation needs.
+
+### 2.5 Seed tests
+
+The seed is now load-bearing, so it needs a guard — this is the lesson from Wave 1's three seed bugs,
+all of which passed their own tests because the assertions only counted rows.
+
+- `tests/demo-seed-shape.test.ts` — assert **legibility, not existence**:
+  - every `MaterialKind` the pages render has at least one row;
+  - at least one material is course-wide (`offeringId: null`) and at least one is offering-scoped;
+  - at least one material has `sourceUrl: null` and at least one has a URL;
+  - at least one has zero chunks (so the unindexed branch renders) and at least one has chunks;
+  - every `EventType` has at least one row;
+  - at least one event is in the past (so the upcoming filter is exercised) and at least one is future;
+  - at least one event has `endAt: null` and at least one has an `endAt`;
+  - at least one event has no `offeringId` and no `classId`.
 
 ---
 
@@ -123,7 +207,7 @@ Field verdicts, `MaterialView` (`lib/mock/types.ts:555`):
 The em-dash rule does **not** apply to chunks: `0` is a real, knowable fact, and the mockup already
 says so ("Not searchable yet").
 
-### 3.2 `lib/calendar.ts` (S3) — shared by two pages
+### 3.2 `lib/calendar.ts` (S4) — shared by two pages
 
 There **is** an existing `CalendarEvent` read, and reusing it would be a trap:
 `lib/gradebook-db.ts:242-278` is a _dashboard_ projection — it filters `isUpcoming: true`, takes 100,
@@ -149,7 +233,7 @@ Field verdicts, `CalendarEventView` (`lib/mock/types.ts:543`): everything **EXIS
 `location` (**DERIVE-as-className or DROP** → decision E2). `EventType`'s four names match the view
 union verbatim, so no translation table is needed.
 
-### 3.3 `teacher/planner` (S5) — plus an assessment-deadline query
+### 3.3 `teacher/planner` (S7) — plus an assessment-deadline query
 
 Same calendar reader, plus a second query for the mockup's "Assessment deadlines" table.
 `Assessment.dueDate` exists, and `lib/analytics/service.ts:403-420` is a working precedent for
@@ -172,7 +256,7 @@ Two things that will be visible in the first render and are **decisions, not bug
   `"Due: <title>"` with `startAt = dueDate` (`prisma/seed-demo.ts:442-451`), and the design has both
   an "All events" table and an "Assessment deadlines" table. One row per fact → decision E3.
 
-### 3.4 `teacher/observability` (S6, droppable)
+### 3.4 `teacher/observability` (S8, droppable)
 
 The **only** Group C row verified as a true Wave-1-shaped re-skin. The read path exists and is tested
 (`getRecentGradeActivityForTeacher`, `lib/observability/audit-view.ts:70`). Two small additions:
@@ -191,14 +275,19 @@ before. Pass one server `generatedAt` and format explicitly.
 | #      | Prerequisite                                                           | Blocks                                                 |
 | ------ | ---------------------------------------------------------------------- | ------------------------------------------------------ |
 | **P1** | `lib/materials.ts` + mapper (S1)                                       | `student/resources`; later the quiz-ai materials panel |
-| **P2** | **Seed: material coverage**                                            | any meaningful demo of S2                              |
-| **P3** | `lib/calendar.ts` + mapper (S3)                                        | both calendar pages                                    |
-| **P4** | **Seed: calendar kinds**                                               | any meaningful demo of S4/S5                           |
-| **P5** | Decision E1 (how a student calendar knows an assessment is unreleased) | S4                                                     |
-| **P6** | Decisions E2 (location), E3 (duplicate rows)                           | S5                                                     |
-| **P7** | Decisions M1 (topic), M3 (drop `state`/`sizeLabel`)                    | S2                                                     |
+| **P2** | **Seed: materials (S2)** — §2.2                                        | any meaningful demo or review of S3                    |
+| **P3** | `lib/calendar.ts` + mapper (S4)                                        | both calendar pages                                    |
+| **P4** | **Seed: calendar (S5)** — §2.3                                         | any meaningful demo or review of S6/S7                 |
+| **P5** | Decision E1 (how a student calendar knows an assessment is unreleased) | S6                                                     |
+| **P6** | Decisions E2 (location), E3 (duplicate rows)                           | S7                                                     |
+| **P7** | Decisions M1 (topic), M3 (drop `state`/`sizeLabel`)                    | S3                                                     |
+| **P8** | Decision M2 (does a Material need a creation path?)                    | decides whether S2/S3 are a demo or a product          |
 
-**Order:** P1 → P2 → P7 → S2 → P3 → P4 → P5/P6 → S4 → S5 → S6.
+**Order:** P1 → P2 → P7 → S3 → P3 → P4 → P5/P6 → S6 → S7 → S8.
+
+The seed slices sit **before** their pages deliberately: a page built against two monotonous rows
+teaches nothing about whether its branches work, and the seed guard (`§2.5`) establishes the fixture
+shape before anything renders it.
 
 Note the shell swap (`getSessionUser` + `redirect` + `AppShell scope="app"` + `force-dynamic`) rides
 along with each page. The app-scope nav already covers all three routes, so `tests/nav-scope.test.ts`
@@ -283,11 +372,12 @@ The read paths are new, so they need tests — this is where Wave 1's untested-G
 
 | Slice | Test                                                                                                                                                                                                                                  | Kind        |
 | ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------- |
+| S2/S5 | `tests/demo-seed-shape.test.ts` — **legibility, not existence** (full list in §2.5). The lesson from Wave 1's three seed bugs, all of which passed their own tests because the assertions only counted rows                           | DB          |
 | S1    | `tests/material-mapping.test.ts` — all six kinds; `sourceUrl: null` stays null; `chunks: 0` → `indexed: false` (not `undefined`)                                                                                                      | pure, no DB |
 | S1    | `tests/materials-read.test.ts` — a student sees their offering's materials **and** course-wide ones, not another offering's; an unenrolled student sees nothing; `chunks` matches the real count; a zero-chunk material still appears | DB          |
-| S3    | `tests/calendar-mapping.test.ts` — all four kinds; `endAt`/`description` null (never `""`); `selectUpcoming` orders and drops past events                                                                                             | pure        |
-| S3    | `tests/calendar-read.test.ts` — cross-offering isolation both ways; a course-wide event visible to the enrolled student and the owning teacher only                                                                                   | DB          |
-| S5    | an assessment-deadline projection test that **drops** `weightPercent`/`published`, so a future migration has to change the test deliberately                                                                                          | pure        |
+| S4    | `tests/calendar-mapping.test.ts` — all four kinds; `endAt`/`description` null (never `""`); `selectUpcoming` orders and drops past events                                                                                             | pure        |
+| S4    | `tests/calendar-read.test.ts` — cross-offering isolation both ways; a course-wide event visible to the enrolled student and the owning teacher only                                                                                   | DB          |
+| S7    | an assessment-deadline projection test that **drops** `weightPercent`/`published`, so a future migration has to change the test deliberately                                                                                          | pure        |
 
 ---
 
