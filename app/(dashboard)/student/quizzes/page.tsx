@@ -1,13 +1,27 @@
+import type { Metadata } from "next"
 import { redirect } from "next/navigation"
 
 import { RoleGuard } from "@/components/role-guard"
-import { RolePageShell } from "@/components/role-page-shell"
+import { AppShell, PageHeader } from "@/components/shell"
 import { StudentQuizAttempts } from "@/components/student-quiz-attempts"
 import { getSessionUser } from "@/lib/auth"
 import { listStudentQuizzes } from "@/lib/quiz-attempts"
+import { initialsFromEmail, roleLabelFromRole } from "@/lib/user-identity"
 
 export const dynamic = "force-dynamic"
 
+export const metadata: Metadata = { title: "Quizzes" }
+
+/**
+ * Quizzes.
+ *
+ * The attempt flow is the write path — it starts a sitting, saves answers and
+ * submits — so it is kept as it is and the shell and chrome are ported around it.
+ * The mockup's sitting card also shows a countdown, per-question flags and a
+ * practice/graded distinction; none of those are servable (`docs/plans/wave-1.md`
+ * §D4: `QuizAttempt` has no `kind`, `expiresAt` is never written, and no flag
+ * column exists), so they are omitted rather than faked.
+ */
 export default async function StudentQuizzesPage() {
   const user = await getSessionUser()
   if (!user || user.role !== "student") redirect("/login")
@@ -16,13 +30,22 @@ export default async function StudentQuizzesPage() {
 
   return (
     <RoleGuard role="student">
-      <RolePageShell
+      <AppShell
+        scope="app"
         role="student"
-        title="Quizzes"
-        description="Take your quizzes and review your attempt history. Answers are scored on the server; a teacher approves every score before it is published."
+        user={{
+          name: user.email,
+          email: user.email,
+          initials: initialsFromEmail(user.email),
+          roleLabel: roleLabelFromRole(user.role),
+        }}
       >
+        <PageHeader
+          title="Quizzes"
+          description="Take your quizzes and review your attempt history. Answers are scored on the server; a teacher approves every score before it is published."
+        />
         <StudentQuizAttempts initialQuizzes={quizzes} />
-      </RolePageShell>
+      </AppShell>
     </RoleGuard>
   )
 }

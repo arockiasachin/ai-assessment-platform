@@ -1,11 +1,13 @@
 "use client"
 
 import { useState } from "react"
-import { Loader2, Play, Send } from "lucide-react"
+import { CheckCheck, ClipboardCheck, History, Loader2, Play, Send } from "lucide-react"
 
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Callout } from "@/components/ui/callout"
+import { SectionCard } from "@/components/ui/section-card"
+import { StatCard } from "@/components/ui/stat-card"
+import { StatusPill, type StatusKey } from "@/components/ui/status-pill"
 import type {
   QuizAttemptSummary,
   QuizAttemptView,
@@ -37,10 +39,23 @@ async function call<T>(url: string, init?: RequestInit): Promise<T> {
   return body as T
 }
 
-function statusVariant(status: string): "default" | "secondary" | "destructive" | "outline" {
-  if (status === "SUBMITTED" || status === "GRADED") return "default"
-  if (status === "EXPIRED" || status === "ABANDONED") return "destructive"
-  return "secondary"
+/**
+ * Attempt status → the shared status vocabulary.
+ *
+ * `EXPIRED` and `ABANDONED` map onto `missed`: both mean the sitting will not be
+ * scored, and the design system's vocabulary is closed, so inventing a key for
+ * each would be drift rather than detail.
+ */
+const ATTEMPT_STATUS: Record<string, { key: StatusKey; label: string }> = {
+  IN_PROGRESS: { key: "in-progress", label: "In progress" },
+  SUBMITTED: { key: "submitted", label: "Submitted" },
+  GRADED: { key: "graded", label: "Scored" },
+  EXPIRED: { key: "missed", label: "Expired" },
+  ABANDONED: { key: "missed", label: "Abandoned" },
+}
+
+function attemptStatus(status: string) {
+  return ATTEMPT_STATUS[status] ?? { key: "pending" as StatusKey, label: status }
 }
 
 /**
@@ -183,16 +198,43 @@ export function StudentQuizAttempts({ initialQuizzes }: Props) {
   )
 
   return (
-    <div className="grid gap-4">
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base">Your quizzes</CardTitle>
-          <p className="text-xs text-muted-foreground">
-            Answers are scored on the server. Your score is a suggestion that your teacher approves
-            before it is published.
-          </p>
-        </CardHeader>
-        <CardContent className="grid gap-2">
+    <div className="grid gap-6">
+      {/* Every tile derives from the quiz list the server sent, so none can
+          contradict the rows below. */}
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <StatCard
+          label="Quizzes"
+          value={String(quizzes.length)}
+          hint="Assigned to you"
+          icon={ClipboardCheck}
+        />
+        <StatCard
+          label="Open to attempt"
+          value={String(quizzes.filter((quiz) => quiz.canStart).length)}
+          hint="Attempts remaining and within the deadline"
+          icon={Play}
+        />
+        <StatCard
+          label="Attempts used"
+          value={String(quizzes.reduce((sum, quiz) => sum + quiz.attemptsUsed, 0))}
+          hint={`Across ${quizzes.length} quiz${quizzes.length === 1 ? "" : "zes"}`}
+          icon={History}
+        />
+        <StatCard
+          label="Scored"
+          value={String(
+            quizzes.filter((quiz) => (quiz.latestAttempt?.score ?? null) !== null).length,
+          )}
+          hint="With a score on the latest attempt"
+          icon={CheckCheck}
+        />
+      </div>
+
+      <SectionCard
+        title="Your quizzes"
+        description="Answers are scored on the server. Your score is a suggestion that your teacher approves before it is published."
+      >
+        <div className="grid gap-2">
           {quizzes.length === 0 && (
             <p className="text-sm text-muted-foreground">No quizzes are assigned to you yet.</p>
           )}
@@ -201,8 +243,9 @@ export function StudentQuizAttempts({ initialQuizzes }: Props) {
               key={quiz.assessmentId}
               type="button"
               onClick={() => void selectQuiz(quiz.assessmentId)}
+              aria-current={quiz.assessmentId === selectedId ? "true" : undefined}
               className={[
-                "rounded-lg border px-3 py-2 text-left text-sm transition-colors",
+                "rounded-lg border px-3 py-2 text-left text-sm transition-colors outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
                 quiz.assessmentId === selectedId
                   ? "border-primary/40 bg-primary/10"
                   : "border-border bg-background hover:bg-muted",
@@ -225,77 +268,92 @@ export function StudentQuizAttempts({ initialQuizzes }: Props) {
               </div>
             </button>
           ))}
-        </CardContent>
-      </Card>
+        </div>
+      </SectionCard>
 
-      {message && <p className="text-sm text-emerald-600">{message}</p>}
-      {error && <p className="text-sm text-destructive">{error}</p>}
+      {message && (
+        <div role="status">
+          <Callout tone="success" title="Saved">
+            {message}
+          </Callout>
+        </div>
+      )}
+      {error && (
+        <div role="alert">
+          <Callout tone="destructive" title="Something went wrong">
+            {error}
+          </Callout>
+        </div>
+      )}
 
       {selected && (
-        <Card>
-          <CardHeader className="pb-3">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <CardTitle className="text-base">{selected.title}</CardTitle>
-              <Button
-                size="sm"
-                disabled={busy || !selected.canStart}
-                onClick={() => void startAttempt()}
-              >
-                {busy ? <Loader2 className="size-4 animate-spin" /> : <Play className="size-4" />}
-                <span className="ml-1">Start attempt</span>
-              </Button>
-            </div>
-          </CardHeader>
-          <CardContent className="grid gap-2">
-            <p className="text-xs text-muted-foreground">Attempt history</p>
+        <SectionCard
+          title={selected.title}
+          description="Attempt history. The attempt cap and the deadline are enforced on the server."
+          action={
+            <Button
+              size="sm"
+              disabled={busy || !selected.canStart}
+              onClick={() => void startAttempt()}
+            >
+              {busy ? (
+                <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+              ) : (
+                <Play className="size-4" aria-hidden="true" />
+              )}
+              <span className="ml-1">Start attempt</span>
+            </Button>
+          }
+        >
+          <div className="grid gap-2">
             {attempts.length === 0 && (
               <p className="text-sm text-muted-foreground">No attempts yet.</p>
             )}
-            {attempts.map((attempt) => (
-              <button
-                key={attempt.id}
-                type="button"
-                onClick={() => void openAttempt(attempt.id)}
-                className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border px-3 py-2 text-left text-sm hover:bg-muted"
-              >
-                <span>
-                  Attempt {attempt.attemptNumber}
-                  {attempt.submittedAt && (
-                    <span className="ml-2 text-xs text-muted-foreground">
-                      submitted {formatDateTime(attempt.submittedAt)}
-                    </span>
-                  )}
-                </span>
-                <span className="flex items-center gap-2">
-                  {attempt.isLate && <Badge variant="outline">late</Badge>}
-                  {attempt.score !== null && (
-                    <span className="text-xs text-muted-foreground">
-                      {attempt.score}/{attempt.maxScore ?? selected.maxMarks}
-                    </span>
-                  )}
-                  <Badge variant={statusVariant(attempt.status)}>{attempt.status}</Badge>
-                </span>
-              </button>
-            ))}
-          </CardContent>
-        </Card>
+            {attempts.map((attempt) => {
+              const state = attemptStatus(attempt.status)
+              return (
+                <button
+                  key={attempt.id}
+                  type="button"
+                  onClick={() => void openAttempt(attempt.id)}
+                  className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border px-3 py-2 text-left text-sm outline-none hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50"
+                >
+                  <span>
+                    Attempt {attempt.attemptNumber}
+                    {attempt.submittedAt && (
+                      <span className="ml-2 text-xs text-muted-foreground">
+                        submitted {formatDateTime(attempt.submittedAt)}
+                      </span>
+                    )}
+                  </span>
+                  <span className="flex items-center gap-2">
+                    {attempt.isLate && <StatusPill status="late" label="Late" dot />}
+                    {attempt.score !== null && (
+                      <span className="text-xs text-muted-foreground">
+                        {attempt.score}/{attempt.maxScore ?? selected.maxMarks}
+                      </span>
+                    )}
+                    <StatusPill status={state.key} label={state.label} dot />
+                  </span>
+                </button>
+              )
+            })}
+          </div>
+        </SectionCard>
       )}
 
       {view && (
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base">
-              Attempt {view.attemptNumber}
-              <span className="ml-2 text-xs font-normal text-muted-foreground">
-                {view.status === "IN_PROGRESS"
-                  ? "In progress — answer all questions, then submit."
-                  : view.score !== null
-                    ? `Scored ${view.score}/${view.maxScore ?? ""}`
-                    : "Submitted"}
-              </span>
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="grid gap-4">
+        <SectionCard
+          title={`Attempt ${view.attemptNumber}`}
+          description={
+            view.status === "IN_PROGRESS"
+              ? "In progress — answer all questions, then submit."
+              : view.score !== null
+                ? `Scored ${view.score}/${view.maxScore ?? ""}`
+                : "Submitted"
+          }
+        >
+          <div className="grid gap-4">
             {view.questions.map((question) => {
               const result = resultByQuestion.get(question.id)
               const chosen = answers[question.id] ?? null
@@ -382,13 +440,17 @@ export function StudentQuizAttempts({ initialQuizzes }: Props) {
             {view.status === "IN_PROGRESS" && (
               <div>
                 <Button disabled={busy} onClick={() => void submit()}>
-                  {busy ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
+                  {busy ? (
+                    <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+                  ) : (
+                    <Send className="size-4" aria-hidden="true" />
+                  )}
                   <span className="ml-1">Submit quiz</span>
                 </Button>
               </div>
             )}
-          </CardContent>
-        </Card>
+          </div>
+        </SectionCard>
       )}
     </div>
   )
