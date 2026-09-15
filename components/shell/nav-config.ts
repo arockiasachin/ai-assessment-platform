@@ -94,6 +94,25 @@ export const ROLE_META: Record<MockupRole, { label: string; blurb: string; home:
 
 export const MOCKUP_ROLES: readonly MockupRole[] = ["teacher", "student", "admin"]
 
+/**
+ * Roles the shell **advertises** — the top bar's preview-role switcher and the
+ * mockup index's role sections. `admin` is deliberately excluded.
+ *
+ * Administrators are provisioned by invitation: the register screen says so, and
+ * the real app already behaves that way — `proxy.ts` redirects non-admins away
+ * from `/admin`, and `navSectionsFor` returns only the signed-in role's
+ * sections, so a teacher never sees an admin link. The design must not advertise
+ * an entry point the product deliberately does not offer.
+ *
+ * The admin workspace stays **reachable** rather than removed: by URL, and from
+ * a low-emphasis link in the mockup index footer. That is the "hidden link" —
+ * discoverable by someone who knows it is there, invisible to a casual reader.
+ *
+ * `MOCKUP_ROLES` remains the complete set, because nav iteration and the
+ * active-href home set must still know admin exists.
+ */
+export const PREVIEW_ROLES: readonly MockupRole[] = ["teacher", "student"]
+
 export const NAV_SECTIONS: Record<MockupRole, NavSection[]> = {
   teacher: [
     {

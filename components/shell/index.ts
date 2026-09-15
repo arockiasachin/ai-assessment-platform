@@ -27,6 +27,7 @@ export {
   BRAND,
   MOCKUP_ROLES,
   NAV_SECTIONS,
+  PREVIEW_ROLES,
   ROLE_META,
   allNavItems,
   brandHref,

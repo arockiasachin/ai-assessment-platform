@@ -467,6 +467,18 @@ real page carry a `null` target and are dropped from the app nav rather than
 rendered as broken links. `tests/nav-scope.test.ts` asserts that every app-scope
 href has a page on disk.
 
+**Roles are advertised from `PREVIEW_ROLES`, not `MOCKUP_ROLES`.** `admin` is
+deliberately excluded from `PREVIEW_ROLES`, so the preview-role switcher and the
+mockup index never offer an admin workspace. Administrators are provisioned by
+invitation — the register screen says so — and the real app already behaves that
+way (`proxy.ts` redirects non-admins away from `/admin`, and the nav is
+role-scoped, so a teacher never sees an admin link). The admin workspace stays
+**reachable** rather than removed: by URL, and from a low-emphasis footer link on
+the mockup index. That is the intended "hidden link" — findable by someone who
+knows it is there, invisible to a casual reader. `MOCKUP_ROLES` keeps all three
+roles because nav iteration and the active-href home set must know admin exists.
+The distinction is asserted in `tests/nav-scope.test.ts`.
+
 **Identity.** The `User` model (the signed-in account) has no name column, so an app-scope shell
 shows the email and derives initials from it (`lib/user-identity.ts`). Do not invent a name for the
 current user.

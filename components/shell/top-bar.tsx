@@ -13,7 +13,7 @@ import { Separator } from "@/components/ui/separator"
 import { StatusDot, StatusPill } from "@/components/ui/status-pill"
 import {
   BRAND,
-  MOCKUP_ROLES,
+  PREVIEW_ROLES,
   ROLE_META,
   brandHref,
   type MockupRole,
@@ -241,7 +241,13 @@ function UserMenu({
                     Preview role
                   </p>
                   <ul>
-                    {MOCKUP_ROLES.map((previewRole) => (
+                    {/*
+                     * `PREVIEW_ROLES`, not `MOCKUP_ROLES`: the admin workspace is
+                     * unadvertised (provisioned by invitation), so it is not
+                     * offered here. It stays reachable by URL and from the
+                     * mockup index footer.
+                     */}
+                    {PREVIEW_ROLES.map((previewRole) => (
                       <li key={previewRole}>
                         <Link
                           href={ROLE_META[previewRole].home}

@@ -6,8 +6,12 @@ import { describe, expect, it } from "vitest"
 
 import {
   MOCKUP_ROLES,
+  NAV_SECTIONS,
+  PREVIEW_ROLES,
+  ROLE_META,
   allNavItems,
   brandHref,
+  findNavItem,
   isActiveHref,
   navHref,
   navSectionsFor,
@@ -85,6 +89,34 @@ describe("nav scope: mockup tree is unchanged", () => {
 
   it("keeps the mockup index as the brand target", () => {
     expect(brandHref("mockup")).toBe("/mockup")
+  })
+})
+
+describe("admin is reachable but unadvertised", () => {
+  it("omits admin from the roles the shell advertises", () => {
+    // Administrators are provisioned by invitation, and the real app already
+    // hides admin (proxy.ts redirects non-admins away from /admin, and the nav
+    // is role-scoped). Re-adding admin here would re-advertise it.
+    expect(PREVIEW_ROLES).not.toContain("admin")
+    expect([...PREVIEW_ROLES].sort()).toEqual(["student", "teacher"])
+  })
+
+  it("still knows admin exists, so nav iteration is unaffected", () => {
+    expect(MOCKUP_ROLES).toContain("admin")
+    // The complete set is what allNavItems walks and what the active-href home
+    // set is derived from; shrinking it would break both.
+    for (const role of PREVIEW_ROLES) expect(MOCKUP_ROLES).toContain(role)
+  })
+
+  it("keeps the admin workspace reachable by URL", () => {
+    // Not advertised, but not removed: the hidden link points at this home.
+    expect(roleHome("admin", "mockup")).toBe("/mockup/admin")
+    expect(findNavItem("/mockup/admin")?.role).toBe("admin")
+    expect(navSectionsFor("admin", "mockup").length).toBeGreaterThan(0)
+  })
+
+  it("exposes admin's home so the index footer link cannot drift", () => {
+    expect(ROLE_META.admin.home).toBe("/mockup/admin")
   })
 })
 

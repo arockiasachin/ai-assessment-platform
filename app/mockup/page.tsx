@@ -12,8 +12,8 @@ import {
 
 import {
   BRAND,
-  MOCKUP_ROLES,
   NAV_SECTIONS,
+  PREVIEW_ROLES,
   ROLE_META,
   allNavItems,
 } from "@/components/shell/nav-config"
@@ -125,7 +125,10 @@ export default function MockupIndexPage() {
         </ul>
       </section>
 
-      {MOCKUP_ROLES.map((role) => (
+      {/*
+       * `PREVIEW_ROLES` omits admin on purpose — see the constant's docblock.
+       */}
+      {PREVIEW_ROLES.map((role) => (
         <section key={role} aria-labelledby={`role-${role}`} className="mt-8">
           <div className="mb-4 flex flex-wrap items-baseline justify-between gap-2 border-b border-border pb-2">
             <h2 id={`role-${role}`} className="text-lg font-semibold tracking-tight">
@@ -166,6 +169,22 @@ export default function MockupIndexPage() {
       <p className="mt-10 flex items-center gap-2 text-xs text-muted-foreground">
         <Layers className="size-3.5" aria-hidden="true" />
         {BRAND.name} · {BRAND.tagline} · mockup build of the assessment platform UI
+      </p>
+
+      {/*
+       * The admin workspace is deliberately unadvertised: administrators are
+       * provisioned by invitation, and the real app already hides it (`proxy.ts`
+       * redirects non-admins away from `/admin`, and the nav is role-scoped).
+       * This low-emphasis link is the "hidden" way in — reachable for review, but
+       * not offered as a destination anywhere a casual reader would look.
+       */}
+      <p className="mt-3 text-xs">
+        <Link
+          href={ROLE_META.admin.home}
+          className="rounded-sm text-muted-foreground/60 hover:text-muted-foreground focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-1 focus-visible:outline-ring"
+        >
+          Administrator workspace
+        </Link>
       </p>
     </>
   )
