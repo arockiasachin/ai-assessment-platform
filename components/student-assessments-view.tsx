@@ -93,7 +93,20 @@ export function StudentAssessmentsView({
   const [courseFilter, setCourseFilter] = useState<string>("all")
   const [statusFilter, setStatusFilter] = useState<"all" | "graded" | "pending" | "overdue">("all")
   const [expanded, setExpanded] = useState<Record<string, boolean>>({})
-  const [submissionDrafts, setSubmissionDrafts] = useState<Record<string, string>>({})
+  /*
+   * Seeded from the server payload. This is the bug I shipped and then fixed:
+   * the draft text used to be populated by `load()` on mount, so when the initial
+   * fetch was removed the map stayed empty — a student's saved draft rendered
+   * blank in the textarea, and "Save draft" would post an empty string and erase
+   * it (the server stores null and reports "Draft saved.").
+   *
+   * The initialiser must come from `initialPayload`, not from a later call.
+   */
+  const [submissionDrafts, setSubmissionDrafts] = useState<Record<string, string>>(() =>
+    Object.fromEntries(
+      initialPayload.assessments.map((item) => [item.id, item.submissionContent ?? ""]),
+    ),
+  )
   const [savingSubmissionId, setSavingSubmissionId] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -251,9 +264,14 @@ export function StudentAssessmentsView({
               <Sparkles className="size-3.5" />
               Assessment hub
             </Badge>
-            <h3 className="text-lg font-semibold tracking-tight">
+            {/*
+             * h2, not h3: `PageHeader` above is the page's `<h1>`, and the
+             * previous shell's title was an `<h2>`, so an `<h3>` here skipped a
+             * level once the shell changed.
+             */}
+            <h2 className="text-lg font-semibold tracking-tight">
               Track every assessment with full detail
-            </h3>
+            </h2>
             <p className="text-sm text-muted-foreground">
               Inspect scores, due windows, feedback, and course context in one place.
             </p>
@@ -396,9 +414,15 @@ export function StudentAssessmentsView({
                       <div className="rounded-lg border border-border/70 bg-background px-3 py-2">
                         <p className="text-xs text-muted-foreground">Your score</p>
                         <p className="mt-1 font-medium">
-                          {assessment.score === null
-                            ? "Not graded"
-                            : `${assessment.score}/${assessment.maxMarks} (${round(assessment.percentage ?? 0)}%)`}
+                          {assessment.score !== null
+                            ? `${assessment.score}/${assessment.maxMarks} (${round(assessment.percentage ?? 0)}%)`
+                            : assessment.hasMark
+                              ? // A mark exists but has not been released. Saying
+                                // "Not graded" here would be untrue, and showing
+                                // the value would leak an unreleased mark.
+                                "Marked — awaiting release"
+                              : // `null` renders as an em dash, never 0.
+                                "—"}
                         </p>
                       </div>
                       <div className="rounded-lg border border-border/70 bg-background px-3 py-2">

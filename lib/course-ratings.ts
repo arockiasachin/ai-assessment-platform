@@ -86,6 +86,10 @@ export async function submitCourseRating(
     update: {
       rating: input.rating,
       comment: comment.length ? comment : null,
+      // Clear the purge marker when the student writes new text. Without this a
+      // rating purged once stays marked forever, so a comment written afterwards
+      // would be hidden by the UI as "removed by retention policy".
+      purgedAt: comment.length ? null : undefined,
     },
     create: {
       offeringId: input.offeringId,

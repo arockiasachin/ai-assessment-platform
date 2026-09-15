@@ -221,11 +221,11 @@ export function StudentQuizAttempts({ initialQuizzes }: Props) {
           icon={History}
         />
         <StatCard
-          label="Scored"
+          label="Latest attempt scored"
           value={String(
             quizzes.filter((quiz) => (quiz.latestAttempt?.score ?? null) !== null).length,
           )}
-          hint="With a score on the latest attempt"
+          hint="A quiz counts here only if its most recent attempt has a score"
           icon={CheckCheck}
         />
       </div>
@@ -272,18 +272,14 @@ export function StudentQuizAttempts({ initialQuizzes }: Props) {
       </SectionCard>
 
       {message && (
-        <div role="status">
-          <Callout tone="success" title="Saved">
-            {message}
-          </Callout>
-        </div>
+        <Callout tone="success" role="status" title="Saved">
+          {message}
+        </Callout>
       )}
       {error && (
-        <div role="alert">
-          <Callout tone="destructive" title="Something went wrong">
-            {error}
-          </Callout>
-        </div>
+        <Callout tone="destructive" role="alert" title="Something went wrong">
+          {error}
+        </Callout>
       )}
 
       {selected && (

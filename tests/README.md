@@ -10,7 +10,7 @@ Worth knowing, because it is easy to misread a local run:
 
 |                      | files                              | tests          |
 | -------------------- | ---------------------------------- | -------------- |
-| With a test database | 97 passed, 2 skipped               | **648 passed** |
+| With a test database | 95 passed, 2 skipped (97 total)    | **648 passed** |
 | Without one          | 60 passed, 35 **error**, 2 skipped | 444 passed     |
 
 The 35 files do not fail an assertion — they refuse to run

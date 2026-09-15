@@ -25,12 +25,15 @@ export type StudentAssessmentItem = {
   score: number | null
   percentage: number | null
   /**
-   * Whether the student's own mark has been released.
+   * Whether a mark exists at all, released or not.
    *
-   * Distinguishes "marked but not yet released" from "not marked at all" — both
-   * of which otherwise render as `score: null`, and they are different facts to
-   * put in front of a student.
+   * Paired with `published`, this is what separates "not marked yet" from
+   * "marked but not yet released" — both of which render as `score: null`, and
+   * which are different things to tell a student. The mark's *value* is never
+   * exposed until it is released; only the fact of its existence.
    */
+  hasMark: boolean
+  /** Whether that mark has been released, so `score` is populated. */
   published: boolean
   classAveragePercentage: number | null
   quizQuestionCount: number
@@ -196,13 +199,21 @@ export async function listStudentAssessments(
         teacherName: assessment.offering.teacher.fullName,
         score,
         percentage,
+        // `ownGrade !== null` is the discriminator the earlier version computed
+        // and then threw away, which made `published: false` mean two different
+        // things. The mark's value still never leaves here unless published.
+        hasMark: ownGrade !== null,
         published: publishedGrade !== null,
         classAveragePercentage,
         quizQuestionCount,
         submissionState: submissionStateFromDbStatus(submission?.status ?? null),
         submittedAt: submission?.submittedAt?.toISOString() ?? null,
         gradedAt: submission?.gradedAt?.toISOString() ?? null,
-        feedback: submission?.feedback ?? null,
+        // Feedback is withheld until the mark is released, matching the design's
+        // rule that a student sees nothing about an assessment's outcome before
+        // publication. A teacher can write feedback with no score attached, so
+        // this is reachable without a grade row.
+        feedback: publishedGrade !== null ? (submission?.feedback ?? null) : null,
         submissionContent: submission?.contentText ?? null,
         daysUntilDue: Math.ceil((dueTime - now.getTime()) / dayMs),
         isPastDue: dueTime < now.getTime(),

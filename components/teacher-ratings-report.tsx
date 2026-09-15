@@ -44,8 +44,8 @@ export function TeacherRatingsReport({ offerings }: { offerings: CourseOfferingR
     return (
       <SectionCard title="Course feedback">
         <EmptyState
-          title="No rating data yet"
-          description="Ratings open once a course has finished, so an in-progress offering will legitimately have none."
+          title="No offerings to report on"
+          description="This report lists your offerings; an offering with no ratings yet still appears here with a zero count."
         />
       </SectionCard>
     )
@@ -125,22 +125,29 @@ export function TeacherRatingsReport({ offerings }: { offerings: CourseOfferingR
                       </span>
                     </div>
                     {/*
-                     * Three distinct states, because `comment: null` alone cannot
-                     * tell "left no comment" from "cleared by the retention
-                     * policy" — and only one of those is the student's choice.
+                     * Order matters: a live comment always wins, so a student who
+                     * re-rates after a purge still has their new words shown.
+                     *
+                     * The purged branch is honest at the **offering** level rather
+                     * than the row level. `purgedAt` is stamped on every rating in
+                     * the sweep, so after a purge a row that never had a comment is
+                     * indistinguishable from one whose comment was redacted —
+                     * claiming "this comment was removed" would be unsupportable for
+                     * the first case. Saying the offering's feedback was redacted is
+                     * true either way.
                      */}
-                    {rating.purged ? (
-                      <p className="mt-1.5">
-                        <StatusPill
-                          status="archived"
-                          label="Comment removed by retention policy"
-                          dot
-                        />
-                      </p>
-                    ) : rating.comment ? (
+                    {rating.comment ? (
                       <p className="mt-1.5 flex items-start gap-1.5 text-muted-foreground">
                         <MessageSquare className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
                         <span>{rating.comment}</span>
+                      </p>
+                    ) : rating.purged ? (
+                      <p className="mt-1.5">
+                        <StatusPill
+                          status="archived"
+                          label="Feedback redacted by the retention policy"
+                          dot
+                        />
                       </p>
                     ) : (
                       <p className="mt-1.5 text-muted-foreground">No comment left.</p>

@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { useRouter } from "next/navigation"
 import { Plus, Save, Trash2 } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
@@ -62,6 +63,7 @@ export function TeacherRubricEditor({
 }: {
   initialAssessments: TeacherAssessmentSummary[]
 }) {
+  const router = useRouter()
   const first = initialAssessments[0] ?? null
   const firstDraft = toDraft(first?.rubric ?? null, first?.title ?? "")
 
@@ -139,6 +141,12 @@ export function TeacherRubricEditor({
         ),
       )
       setMessage("Rubric saved. Grades cannot publish without your approval.")
+      /*
+       * The read-only summary above this editor is a Server Component rendered
+       * from the same server payload, so it would still show the pre-save
+       * criteria. Refresh it so the two cannot contradict each other on screen.
+       */
+      router.refresh()
     } catch {
       setError("Unable to save the rubric.")
     } finally {

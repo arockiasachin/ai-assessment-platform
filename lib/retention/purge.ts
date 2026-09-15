@@ -229,6 +229,14 @@ async function purgeOffering(
 
   // CourseRating — the free-text comment. The numeric rating is retained for
   // aggregate reporting.
+  //
+  // `purgedAt` is a "processed by this sweep" marker, not a claim that a comment
+  // existed: it is what makes the purge idempotent (`where: purgedAt: null`) and
+  // what the operator's count reports. An earlier attempt narrowed this to rows
+  // with a comment so the UI could say "your comment was removed", which was the
+  // wrong layer — it left comment-less rows permanently in scope, so every later
+  // run would re-count them. The UI makes an offering-level claim instead, which
+  // is true either way.
   entities.push({
     entity: "CourseRating",
     fields: ["comment"],
