@@ -1,3 +1,5 @@
+"use client"
+
 import { Progress, ProgressLabel, ProgressValue } from "@/components/ui/progress"
 import { cn } from "@/lib/utils"
 
@@ -26,6 +28,11 @@ const TONE: Record<NonNullable<ProgressBarProps["tone"]>, string> = {
  * the correct ARIA progressbar roles; this wrapper adds a visible label/value
  * pair and a taller track, and re-colours the indicator by targeting its
  * `data-slot` so the primitive itself stays untouched.
+ *
+ * `"use client"` is required: `ProgressValue` takes a render-prop child, and a
+ * function cannot be passed across the server/client boundary. Without it, any
+ * Server Component rendering this fails the build with "Functions cannot be
+ * passed directly to Client Components".
  */
 export function ProgressBar({
   value,

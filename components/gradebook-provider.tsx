@@ -1,6 +1,7 @@
 "use client"
 
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react"
+import { usePathname } from "next/navigation"
 import {
   markKey,
   type Assessment,
@@ -68,6 +69,7 @@ type GradebookContextValue = {
 const GradebookContext = createContext<GradebookContextValue | null>(null)
 
 export function GradebookProvider({ children }: { children: ReactNode }) {
+  const pathname = usePathname()
   const [role, setRole] = useState<Role>("teacher")
   const [isLoading, setIsLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
@@ -122,9 +124,24 @@ export function GradebookProvider({ children }: { children: ReactNode }) {
     await loadGradebook()
   }
 
+  // The provider is mounted in the root layout, so this effect runs on every
+  // route. The gradebook API is role-scoped and returns 401 for anonymous
+  // visitors, so fetching on the unauthenticated /mockup tree only produces
+  // console noise. Skip it there; real dashboard routes are unaffected.
+  //
+  // NOTE: this is a scope guard, not the fix for the P1 "fetch on mount"
+  // finding. The proper fix is to server-render the payload and pass it in as
+  // initial state; see docs/quality/a11y-perf-audit.md.
+  const isMockupRoute = pathname.startsWith("/mockup")
+
   useEffect(() => {
+    if (isMockupRoute) {
+      setIsLoading(false)
+      return
+    }
     void loadGradebook()
-  }, [])
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- loadGradebook is stable per render and intentionally not a dependency
+  }, [isMockupRoute])
 
   const setMark = (studentId: string, assessmentId: string, score: number | null) => {
     setMarks((prev) => {
