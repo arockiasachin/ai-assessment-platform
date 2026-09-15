@@ -128,6 +128,8 @@ not merged. See [`docs/README.md`](docs/README.md) for the full gap list.
 
 ### Added
 
+- **UI mockup tree and design system: thirty-eight static screens across three roles, and the primitives behind them** — a full design deliverable at `app/mockup/**` (35 routes) plus the standalone auth and quiz screens under `app/(mockup-standalone)/mockup/**` (3), built on a shared shell (`components/shell/**`) and a primitive set (`components/ui/**`: `Callout` + `tone.ts`, `CodeBlock`, `TruncatedText`, `PageTabs`, `FilterBar`, `StatCard`, `DataTable`, `StatusPill`, `GradeDonut`, `Sparkline`, `ProgressBar`, `EmptyState`, `Timeline`, `MetricRow`, `SectionCard`). Every screen renders from typed fixtures in `lib/mock/**` whose string unions mirror the Prisma enums 1:1 so a later wiring pass needs no translation tables. Two refinement passes hoisted page-local workarounds into the primitives: the four local `overflow-x-auto` hacks on tab rows — which were clipping the active-tab underline entirely — were deleted in favour of `PageTabs` owning narrow-width scrolling, five hand-rolled notice panels were replaced by `Callout`, and `-foreground` tokens were banned on tinted backgrounds (measured: `--warning-foreground` on `bg-warning/15` in dark is 1.35:1, whereas the audited pairs in `tone.ts` are 4.88–14.11:1). The tree is deliberately unauthenticated (`proxy.ts` does not match `/mockup`) and **is not yet connected to the backend**; the wiring plan is [`docs/plans/mockup-to-backend.md`](docs/plans/mockup-to-backend.md), and the design system is [`docs/ui/design-system.md`](docs/ui/design-system.md).
+
 - **Course ratings restored** — students can rate a completed course they are enrolled in and update their rating, and teachers get an ownership-scoped ratings report with per-course averages, counts, and comments. `20260912010000_restore_course_rating` re-creates the `CourseRating` model dropped by `20260912000000_schema_unfreeze` (which an audit wrongly reported as unreferenced); the already-modernized consumer code is restored (`app/api/student/courses/rating`, `app/api/teacher/reports/ratings`, `components/student-courses-view.tsx`, `components/teacher-ratings-report.tsx`, `app/(dashboard)/teacher/reports`), with the contract, service layer, nav entry, and fresh tests. See [`docs/features/course-ratings.md`](docs/features/course-ratings.md).
 
 - **`zod` API contract** (`lib/contracts/`). Request/response schemas for auth, gradebook, and the
@@ -369,6 +371,27 @@ work. Not yet git-tagged; `package.json` declares `0.1.0`.
 
 ### Fixed
 
+- `fix(ui): mocked filter selects showed raw values instead of labels` — Base UI's `Select.Value`
+  renders the raw value unless the root receives the value→label map, so every list page's filters
+  displayed `asm_descriptive`, `open`, `below-floor`. Fixed once in `FilterBar` (covering all 13
+  list pages) rather than per page, and in the two standalone auth role selects.
+- `fix(ui): mockup fixtures that contradicted the page rendering them` — `/mockup/teacher/code-tasks`
+  printed "5741%" and "8067%" for averages whose callers had already converted to percentages
+  (`mean()` scaled by 100 twice); the teacher dashboard's "Awaiting review 5" sat beside the hint
+  "6 descriptive · 3 other"; `/mockup/student/quizzes` listed a **draft** question among released
+  results, with its answer key, while item analysis reported that question as never administered;
+  `/mockup/teacher/activity` said "No overrides recorded" beside an audit entry recording one; and
+  every review-queue row read "No group". Each value is now derived from its own fixtures rather
+  than typed in twice.
+- `fix(ui): FilterBar pluralised the whole noun phrase` — the result count appended `"s"` to the
+  entire `resultNoun`, so the reviews queue rendered "9 item in the queues". A new optional
+  `resultNounPlural` prop supplies the plural for multi-word nouns (single-word callers are
+  unchanged and it defaults to `${resultNoun}s`); this also fixed "8 entrys" → "8 entries" and a
+  duplicated "grading rubric rubric" on the assignments page.
+- `fix(ui): ui/chart.tsx formatted numbers in the runtime locale` — `toLocaleString()` with no
+  argument resolves to the server's locale on the server and the browser's on the client, a
+  hydration-mismatch risk of the same class already fixed in the student views. Now uses a hoisted
+  `Intl.NumberFormat("en-US")`, and a repo-wide sweep for unlocalised `toLocale*` calls returns zero.
 - `fix(ci): align hono lockfile entry with the npm override` — the `hono` override lived in a
   pnpm-only block that npm ignores, so the lockfile resolved `hono@4.13.0` while `package.json`
   required `4.12.25`, which `npm ci` rejects. The lockfile was regenerated so both agree.

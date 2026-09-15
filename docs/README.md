@@ -46,6 +46,16 @@ provider (`fe65e5a`) with a decoupled embeddings provider (`aefe1c2`), the stude
 policy (`702ab25`), short-answer partial credit (`5981203`), and the grade-immutability fixes from
 bug-fix run 4 (`3992ce4`, merged `83dbbe9`).
 
+## Forward plan
+
+Phase 4 ends the phased plan; no Phase 5 is defined. The next body of work is connecting the UI
+mockups to the backend that already exists behind them:
+
+- [`plans/mockup-to-backend.md`](./plans/mockup-to-backend.md) — the strategy (port the mockup
+  _presentation_ onto the existing real pages, rather than wiring `/mockup` itself to data), the
+  component seam, five sequenced waves, the fixture fields that have no schema backing and each
+  need a decision, and the risks. Written against `dev` @ `2bc51b5`.
+
 ## Shipped feature pods
 
 Ten Phase 2/3 pods are implemented and merged to `dev`. Commit hashes are the landing commits from
