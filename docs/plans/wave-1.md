@@ -270,12 +270,15 @@ data, and does not show a persisted practice attempt — the mockup's `QuizInPro
 (`lib/mock/types.ts`, fields `kind`, `expiresAt`, `flaggedQuestionIds`, `timeSpentMs`) is not
 servable today and is not faked.
 
-### D5 — Peer-rating disclosure threshold: 2 or 3? _(blocks `student/peer-evaluation`)_
+### D5 — Peer-rating disclosure threshold: 2 or 3? _(RESOLVED — the server wins; not a product choice)_
 
 The mockup says **2** (`MIN_RESPONSES_TO_AGGREGATE = 2`, and its copy says "at least 2 teammates").
 The server says **3** (`MIN_RATERS_FOR_DISCLOSURE`, `lib/groups/student-service.ts:32`), and
-`tests/groups-peer-evaluation.test.ts` asserts 3. **The server wins** — the mockup number must not
-be ported, and its copy must be regenerated from the server constant rather than hardcoded.
+`tests/groups-peer-evaluation.test.ts` asserts 3.
+
+**The mockup number is simply wrong**, so this needed no decision: the port reads the server constant
+and regenerates the copy from it rather than hardcoding a number. Withholding a small sample is the
+privacy control, and a design file is not the place to disagree with it.
 
 ### D6 — May a teacher see the evaluator↔evaluatee pair matrix? _(RESOLVED — yes, for teachers)_
 
@@ -315,15 +318,15 @@ The port renders weight as a **relative** number and drops the "100%" framing an
 Enforcing a sum would need new validation plus a migration for existing rubrics; that is a real
 option, but it is a schema decision under a presentation task, so it is not taken here.
 
-### D9 — Smaller GAPs to drop or migrate
+### D9 — Smaller GAPs: all dropped _(RESOLVED — no product decision needed)_
 
-| Item                               | Pages                               | Recommendation                                                                                                                                                                                                                                                                                                                                       |
+| Item                               | Pages                               | Outcome                                                                                                                                                                                                                                                                                                                                              |
 | ---------------------------------- | ----------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `CompletionPercent` (fixture `62`) | classes, reports, courses           | Drop — matches nothing derivable                                                                                                                                                                                                                                                                                                                     |
+| `CompletionPercent` (fixture `62`) | classes, reports, courses           | **Drop** — matches nothing derivable                                                                                                                                                                                                                                                                                                                 |
 | `Last active` / `lastLoginAt`      | classes                             | **Drop — confirmed dead end.** Nothing records a login or activity time, and `AuditLog` is not a substitute: its actions are all domain events (`grade.published`, `code_test_case.created`, `course_offering.results_published`, …) with no login action, so the column cannot be derived from it either. Needs a real column before it can return. |
-| `room` on `ClassRoom`              | courses                             | Drop, or migrate a column                                                                                                                                                                                                                                                                                                                            |
-| `Notification`, `FeatureFlag`      | (already dropped in Wave 0's shell) | Keep dropped                                                                                                                                                                                                                                                                                                                                         |
-| Search field                       | shell                               | Already hidden in app scope pending real search                                                                                                                                                                                                                                                                                                      |
+| `room` on `ClassRoom`              | courses                             | **Drop** — no column, and a room is not worth a migration for a read-only card                                                                                                                                                                                                                                                                       |
+| `Notification`, `FeatureFlag`      | (already dropped in Wave 0's shell) | **Keep dropped**                                                                                                                                                                                                                                                                                                                                     |
+| Search field                       | shell                               | **Already hidden** in app scope pending real search                                                                                                                                                                                                                                                                                                  |
 
 ---
 
