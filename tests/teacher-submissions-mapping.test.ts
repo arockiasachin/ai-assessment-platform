@@ -139,4 +139,35 @@ describe("toTeacherSubmissionRow", () => {
     query.submittedAt = null
     expect(toTeacherSubmissionRow(query).submittedAt).toBeNull()
   })
+
+  it("keeps a saved draft distinguishable from a submission", () => {
+    // A student "Save draft" upserts a real row with status DRAFT and a null
+    // submittedAt. The queue's "Submitted" tile counts non-null submittedAt, so
+    // this shape must survive the projection as the draft it is — otherwise the
+    // tile reports a submission that was never made while the row shows "Draft".
+    const query = row({ status: "DRAFT" })
+    query.submittedAt = null
+    const result = toTeacherSubmissionRow(query)
+    expect(result.state).toBe("DRAFT")
+    expect(result.submittedAt).toBeNull()
+    expect(result.points).toBeNull()
+  })
+
+  it("treats a non-finite mark as no mark, not zero", () => {
+    // Postgres `numeric` can hold NaN. `toAssessmentScale` returns 0 for a
+    // non-finite input, so the guard has to run before it — otherwise the cell
+    // prints "0 / 30", the exact null-vs-zero violation this page pins.
+    const result = toTeacherSubmissionRow(
+      row({ grade: { points: "NaN", maxPoints: 30, published: false } }),
+    )
+    expect(result.points).toBeNull()
+    expect(result.points).not.toBe(0)
+  })
+
+  it("treats a non-positive ceiling as no mark", () => {
+    const result = toTeacherSubmissionRow(
+      row({ grade: { points: 5, maxPoints: 0, published: false } }),
+    )
+    expect(result.points).toBeNull()
+  })
 })

@@ -58,7 +58,8 @@ mockups to the backend that already exists behind them:
 - [`plans/wave-1.md`](./plans/wave-1.md) — the Wave 1 research: field-by-field port dossiers for all
   twelve remaining pages, the nine decisions that gate them, cross-cutting prerequisites, and two
   corrections to the parent plan (`teacher/classes` is a different screen, not a re-skin, and
-  `teacher/submissions` has no real page at all).
+  `teacher/submissions` has no real page at all — since resolved: it is now a read-only queue, see
+  §D2).
 
 ## Shipped feature pods
 

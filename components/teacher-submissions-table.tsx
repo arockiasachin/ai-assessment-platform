@@ -64,7 +64,12 @@ export function TeacherSubmissionsTable({ rows }: { rows: TeacherSubmissionRow[]
     })
   }, [rows, query, assessment, state, release])
 
-  const submitted = rows.length
+  // "Submitted" means a submission actually exists. A row with
+  // `submittedAt === null` is a saved draft (the student "Save draft" action
+  // upserts exactly that), so counting rows would report a submission that was
+  // never made — and the row right below it would contradict the tile by showing
+  // State "Draft" with "—" for Submitted.
+  const submitted = rows.filter((row) => row.submittedAt !== null).length
   const late = rows.filter((row) => row.state === "LATE").length
   const marked = rows.filter((row) => row.points !== null).length
   const withheld = rows.filter((row) => row.points !== null && !row.published).length
@@ -249,8 +254,14 @@ export function TeacherSubmissionsTable({ rows }: { rows: TeacherSubmissionRow[]
           getRowId={(row) => row.id}
           hideCaption
           rowActions={(row) => (
+            // Named per row: "Open" repeated on every row gives a screen-reader
+            // link list of identical labels with no way to choose. The href is
+            // the assignments page because that is where the editor lives — this
+            // queue is read-only (see docs/plans/wave-1.md §D2).
             <Link
               href="/teacher/assignments"
+              aria-label={`Open ${row.studentName}'s submission for ${row.assessmentTitle} in assignments`}
+              title={`Open in assignments: ${row.assessmentTitle}`}
               className={buttonVariants({ variant: "outline", size: "sm" })}
             >
               Open

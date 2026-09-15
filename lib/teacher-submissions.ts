@@ -102,10 +102,21 @@ function classLabel(classRoom: { name: string; section: string | null }): string
 export function toTeacherSubmissionRow(row: SubmissionQueryRow): TeacherSubmissionRow {
   const grade = row.assessment.finalGrades.find((item) => item.studentId === row.student.id) ?? null
 
-  const hasMark = grade !== null && grade.points !== null && grade.maxPoints !== null
-  const points = hasMark
-    ? toAssessmentScale(Number(grade.points), Number(grade.maxPoints), row.assessment.maxMarks)
-    : null
+  // A usable mark needs both a finite score and a positive ceiling. Without the
+  // finiteness check a `Decimal('NaN')` (Postgres `numeric` can hold it) reaches
+  // `toAssessmentScale`, which returns `0` for a non-finite input — printing
+  // "0 / 30" where the truth is "no valid mark", the exact null-vs-zero rule this
+  // page is meant to honour. A non-positive ceiling is likewise not a scale.
+  const pointsValue = grade?.points == null ? null : Number(grade.points)
+  const maxValue = grade?.maxPoints == null ? null : Number(grade.maxPoints)
+  const hasMark =
+    pointsValue !== null &&
+    maxValue !== null &&
+    Number.isFinite(pointsValue) &&
+    Number.isFinite(maxValue) &&
+    maxValue > 0
+
+  const points = hasMark ? toAssessmentScale(pointsValue, maxValue, row.assessment.maxMarks) : null
 
   return {
     id: row.id,
@@ -182,7 +193,11 @@ export async function listSubmissionsForTeacher(user: AuthUser): Promise<Teacher
         },
       },
     },
-    orderBy: [{ submittedAt: "desc" }, { updatedAt: "desc" }],
+    // Newest first. `nulls: "last"` because a never-submitted draft has a null
+    // `submittedAt`, and Postgres sorts NULLs FIRST on DESC by default — which
+    // would put an unsubmitted draft above the newest real submission in a list
+    // labelled "Newest first".
+    orderBy: [{ submittedAt: { sort: "desc", nulls: "last" } }, { updatedAt: "desc" }],
     take: 300,
   })
 
