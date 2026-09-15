@@ -150,6 +150,7 @@ export default function TeacherActivityPage() {
           searchPlaceholder="Search action, entity or summary…"
           resultCount={EVENTS.length}
           resultNoun="entry"
+          resultNounPlural="entries"
           selects={[
             {
               id: "filter-actor-kind",

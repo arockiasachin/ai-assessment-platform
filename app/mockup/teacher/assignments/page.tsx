@@ -203,7 +203,9 @@ export default function TeacherAssignmentsPage() {
 
         <SectionCard
           title="Assessments"
-          description={`Weights sum to 100% of the final grade. ${RUBRIC_ASSESSMENTS.length} assessment uses the ${MOCK_RUBRIC.title} rubric; ${INDEXED_MATERIALS} indexed materials can ground generated questions.`}
+          description={`Weights sum to 100% of the final grade. ${RUBRIC_ASSESSMENTS.length} ${
+            RUBRIC_ASSESSMENTS.length === 1 ? "assessment uses" : "assessments use"
+          } ${MOCK_RUBRIC.title}; ${INDEXED_MATERIALS} indexed materials can ground generated questions.`}
         >
           <PageTabs
             items={TABS.map((tab) => ({
