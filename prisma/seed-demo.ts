@@ -607,7 +607,13 @@ async function createCodeTask() {
       starterCode: "def slope(x1, y1, x2, y2):\n    return 0\n",
       timeLimitMs: 5000,
       memoryLimitMb: 256,
-      metadata: { maxSubmissions: 3, draftTestCaseIds: [] },
+      // The `generator` marker is what makes this an envelope at all:
+      // `readCodeEvalMetadata` returns null without it, so `maxSubmissions: 3`
+      // was silently ignored and the task fell back to the default cap of 10 —
+      // the student page read "1 / 10 runs used" for a task meant to allow 3.
+      // Every test fixture writes the marker; the seed was the only writer that
+      // did not.
+      metadata: { generator: "code-eval", maxSubmissions: 3, draftTestCaseIds: [] },
     },
   })
 
