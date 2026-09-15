@@ -231,13 +231,38 @@ Real alerts are **offering-level** (`lib/analytics/alerts.ts:36-38`: class-avera
 contribution-imbalance, pending-reviews). There is no per-student flag and no column. Either define
 a per-student rule (Wave 3 work) or drop the column and the KPI from both pages.
 
-### D4 — `QuizAttempt.kind` (GRADED vs PRACTICE) _(blocks `student/quizzes`)_
+### D4 — `QuizAttempt.kind` (GRADED vs PRACTICE) _(RESOLVED — practice does not consume a graded attempt)_
 
-Confirmed independently: `QuizAttempt` has `status` only — no `kind`. Migrating one must also teach
-the attempt cap about it, because `COUNTED_STATUSES` counts `IN_PROGRESS/SUBMITTED/GRADED/EXPIRED`,
-so a persisted PRACTICE row would consume a graded attempt. Options: migrate and exclude it from the
-cap; drop the distinction; or model practice outside `QuizAttempt` (which the read-only retake
-implementation already implies).
+**Decision: a practice attempt must not count against the attempt cap.**
+
+Verified first, because the answer changes what has to be built:
+
+- `QuizAttempt` has **no `kind` column** (`grep -c 'kind'` on the model → 0). The only thing distinguishing attempts today is `status`.
+- The cap is **status**-based, not kind-based:
+  `COUNTED_STATUSES = ["IN_PROGRESS", "SUBMITTED", "GRADED", "EXPIRED"]`, counted in three
+  places in `lib/quiz-attempts/service.ts` (the summary, the eligibility gate, and the start path).
+- The adaptive retake is **read-only**: it persists nothing.
+
+So excluding practice **cannot be expressed by status alone** — "practice but counted" is
+indistinguishable from "graded and counted" under that rule. Honouring the decision therefore has two
+possible shapes, and the cheap one is the right one for Wave 1:
+
+**Chosen: do not persist practice attempts.** Nothing is written, so nothing can be counted, and the
+cap is correct by construction with the existing logic untouched. No migration, no new enum, and the
+cap's safety properties (which `tests/quiz-attempts-eligibility.test.ts` and
+`tests/quiz-attempts-adversarial.test.ts` pin) stay exactly as verified.
+
+**Deferred, if practice should ever be a real persisted sitting** (resumable, with its own history):
+that needs a `kind` column, and then `COUNTED_STATUSES` must become kind-aware — counting only
+`kind = "GRADED"` rows — rather than being extended. It also needs `QuizAttempt.expiresAt` to actually
+be written (it is currently never set) and a place to store per-question flags, neither of which
+exists. That is Wave 3 work alongside the retake surface, not a presentation port, and it touches a
+security-relevant control, so it wants its own reviewed change.
+
+**Consequence for the port:** `student/quizzes` renders the sitting card from the **read-only retake**
+data, and does not show a persisted practice attempt — the mockup's `QuizInProgressAttempt` shape
+(`lib/mock/types.ts`, fields `kind`, `expiresAt`, `flaggedQuestionIds`, `timeSpentMs`) is not
+servable today and is not faked.
 
 ### D5 — Peer-rating disclosure threshold: 2 or 3? _(blocks `student/peer-evaluation`)_
 
