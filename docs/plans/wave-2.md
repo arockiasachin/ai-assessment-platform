@@ -13,16 +13,17 @@ rather than in the composition.
 
 **Wave 2 = the three "no reader at all" pages, plus an optional trailing re-skin.**
 
-| Slice  | Content                                                    | Ships independently |
-| ------ | ---------------------------------------------------------- | ------------------- |
-| **S1** | `lib/materials.ts` + pure mapper + tests. **No page.**     | yes                 |
-| **S2** | **Seed: materials** — the 8 rows in §2.2, indexed for real | yes                 |
-| **S3** | `student/resources` page                                   | yes                 |
-| **S4** | `lib/calendar.ts` + pure mapper + tests. **No page.**      | yes                 |
-| **S5** | **Seed: calendar** — the 10 rows in §2.3                   | yes                 |
-| **S6** | `student/events` page                                      | yes                 |
-| **S7** | `teacher/planner` page                                     | yes                 |
-| **S8** | `teacher/observability` re-skin (optional, droppable)      | yes                 |
+| Slice  | Content                                                     | Ships independently |
+| ------ | ----------------------------------------------------------- | ------------------- |
+| **S1** | `lib/materials.ts` + pure mapper + tests. **No page.**      | yes                 |
+| **S2** | **Seed: materials** — the 8 rows in §2.2, indexed for real  | yes                 |
+| **S3** | `student/resources` page                                    | yes                 |
+| **S4** | `lib/calendar.ts` + pure mapper + tests. **No page.**       | yes                 |
+| **S5** | **`Assessment` release**: migration, publish action, audit  | yes                 |
+| **S6** | **Seed: calendar** — the 10 rows in §2.3, with `releasedAt` | yes                 |
+| **S7** | `student/events` page                                       | yes                 |
+| **S8** | `teacher/planner` page                                      | yes                 |
+| **S9** | `teacher/observability` re-skin (optional, droppable)       | yes                 |
 
 The three pages are the only ones where a **reader must be written that does not exist**. The parent
 plan warned about under-budgeting exactly this: _"'Missing reader' is not 'missing model' … budget
@@ -32,7 +33,7 @@ Wave 2 properly"_ (`mockup-to-backend.md:215`).
 Proving the reader with a pure mapper test and a DB test before any page exists keeps the composition
 slices trivially reviewable.
 
-**S2 and S5 are seed slices, and they are not padding** — see §2.1. Without them the three pages render
+**S2 and S6 are seed slices, and they are not padding** — see §2.1. Without them the three pages render
 monotonous data and every branch they contain goes untaken, which means unreviewed.
 
 ### Excluded, and why
@@ -90,7 +91,7 @@ stale claim to correct — the entire risk is in the new query.
 
 ### 2.1 The seed is part of the deliverable, not an afterthought
 
-**Writing these rows properly is a Wave 2 task in its own right**, because without them S2, S4 and S5
+**Writing these rows properly is a Wave 2 task in its own right**, because without them S2, S5 and S6
 cannot be demonstrated or meaningfully reviewed. This is not padding: **each row below exists to
 exercise a branch that would otherwise be dead code.** A page whose every branch is never taken is a
 page nobody has actually reviewed.
@@ -207,7 +208,42 @@ Field verdicts, `MaterialView` (`lib/mock/types.ts:555`):
 The em-dash rule does **not** apply to chunks: `0` is a real, knowable fact, and the mockup already
 says so ("Not searchable yet").
 
-### 3.2 `lib/calendar.ts` (S4) — shared by two pages
+### 3.2 `Assessment` release (S5) — the one schema change in this wave
+
+E1 resolved to **adding** the concept rather than rewriting the mockup's copy away, so this is the only
+slice that touches the schema. It is ordered before the calendar reader because the reader depends on it.
+
+**Why a column rather than a derivation.** The alternatives are worse: deriving "released" from "has a
+published question" is wrong for four of the five assessment types (only quizzes carry
+`Question.status`), and deriving from `Grade.publishedAt` answers a _per-student_ question, not a
+per-assessment one. `Assessment.releasedAt DateTime?` is additive and nullable, so it needs no backfill
+and no data migration.
+
+**What to build**
+
+|            |                                                                                                                                                    |
+| ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Migration  | `Assessment.releasedAt DateTime?` — additive, nullable                                                                                             |
+| Write path | an explicit teacher action, mirroring the shape of `POST /api/teacher/offerings/[offeringId]/results` (`requireRole("teacher")` + ownership check) |
+| Audit      | one `AuditLog` row, consistent with every other publish-like action here                                                                           |
+| Seed       | populate it on the assessments that should be visible — **or the student calendar renders empty**                                                  |
+| Contract   | `released` on the calendar and planner projections only                                                                                            |
+
+**The naming matters, and this is not pedantry.** The offering already has a _different_ publish:
+`CourseOffering.resultsPublishedAt` is the **retention anchor** and starts the purge clock. That is
+"results are out for the whole course"; this is "this assessment is visible to students". Different
+facts, different granularity. The field is `releasedAt`, **not** `publishedAt`, so that a future reader
+cannot wire the purge clock to the wrong column.
+
+**Not on the student assessment payload.** That already answers "has _my mark_ been released" with
+`hasMark`/`published` (Wave 1). This answers "is this assessment visible at all", which is a calendar
+question.
+
+**Tests:** authz on the publish action (401/403 before the service runs), the audit row exists, an
+unreleased assessment's event is absent for a student and present for its teacher, and a released one is
+visible to both.
+
+### 3.3 `lib/calendar.ts` (S4) — shared by two pages
 
 There **is** an existing `CalendarEvent` read, and reusing it would be a trap:
 `lib/gradebook-db.ts:242-278` is a _dashboard_ projection — it filters `isUpcoming: true`, takes 100,
@@ -233,7 +269,7 @@ Field verdicts, `CalendarEventView` (`lib/mock/types.ts:543`): everything **EXIS
 `location` (**DERIVE-as-className or DROP** → decision E2). `EventType`'s four names match the view
 union verbatim, so no translation table is needed.
 
-### 3.3 `teacher/planner` (S7) — plus an assessment-deadline query
+### 3.4 `teacher/planner` (S8) — plus an assessment-deadline query
 
 Same calendar reader, plus a second query for the mockup's "Assessment deadlines" table.
 `Assessment.dueDate` exists, and `lib/analytics/service.ts:403-420` is a working precedent for
@@ -256,7 +292,7 @@ Two things that will be visible in the first render and are **decisions, not bug
   `"Due: <title>"` with `startAt = dueDate` (`prisma/seed-demo.ts:442-451`), and the design has both
   an "All events" table and an "Assessment deadlines" table. One row per fact → decision E3.
 
-### 3.4 `teacher/observability` (S8, droppable)
+### 3.5 `teacher/observability` (S9, droppable)
 
 The **only** Group C row verified as a true Wave-1-shaped re-skin. The read path exists and is tested
 (`getRecentGradeActivityForTeacher`, `lib/observability/audit-view.ts:70`). Two small additions:
@@ -272,18 +308,19 @@ before. Pass one server `generatedAt` and format explicitly.
 
 ## 4. Prerequisites, ranked
 
-| #      | Prerequisite                                                           | Blocks                                                 |
-| ------ | ---------------------------------------------------------------------- | ------------------------------------------------------ |
-| **P1** | `lib/materials.ts` + mapper (S1)                                       | `student/resources`; later the quiz-ai materials panel |
-| **P2** | **Seed: materials (S2)** — §2.2                                        | any meaningful demo or review of S3                    |
-| **P3** | `lib/calendar.ts` + mapper (S4)                                        | both calendar pages                                    |
-| **P4** | **Seed: calendar (S5)** — §2.3                                         | any meaningful demo or review of S6/S7                 |
-| **P5** | Decision E1 (how a student calendar knows an assessment is unreleased) | S6                                                     |
-| **P6** | Decisions E2 (location), E3 (duplicate rows)                           | S7                                                     |
-| **P7** | Decisions M1 (topic), M3 (drop `state`/`sizeLabel`)                    | S3                                                     |
-| **P8** | Decision M2 (does a Material need a creation path?)                    | decides whether S2/S3 are a demo or a product          |
+| #       | Prerequisite                                                       | Blocks                                                 |
+| ------- | ------------------------------------------------------------------ | ------------------------------------------------------ |
+| **P1**  | `lib/materials.ts` + mapper (S1)                                   | `student/resources`; later the quiz-ai materials panel |
+| **P2**  | **Seed: materials (S2)** — §2.2                                    | any meaningful demo or review of S3                    |
+| **P3**  | `lib/calendar.ts` + mapper (S4)                                    | both calendar pages                                    |
+| **P4**  | **`Assessment` release (S5)** — migration + publish action + audit | S6, S7, and the student calendar's copy                |
+| **P4b** | **Seed: calendar (S6)** — §2.3, with `releasedAt` populated        | any meaningful demo or review of S7/S8                 |
+| ~~P5~~  | ~~Decision E1~~ — **RESOLVED**: add `Assessment.releasedAt`        | folded into S5                                         |
+| **P5b** | Decisions E2 (location), E3 (duplicate rows)                       | S8                                                     |
+| **P7**  | Decisions M1 (topic), M3 (drop `state`/`sizeLabel`)                | S3                                                     |
+| ~~P8~~  | ~~Decision M2~~ — **RESOLVED**: list-only                          | makes S2 the reason S3 is demonstrable                 |
 
-**Order:** P1 → P2 → P7 → S3 → P3 → P4 → P5/P6 → S6 → S7 → S8.
+**Order:** P1 → P2 → S3 → P3 → S4 → **S5** → P4b → S6 → S7 → S8 → S9.
 
 The seed slices sit **before** their pages deliberately: a page built against two monotonous rows
 teaches nothing about whether its branches work, and the seed guard (`§2.5`) establishes the fixture
@@ -295,11 +332,18 @@ needs no change.
 
 ---
 
-## 5. Decisions needed before building
+## 5. Decisions
 
-Every one is a **human call**. Recommendations are mine, not conclusions.
+**Resolved:** M1 (drop topic), M2 (list-only), E1 (add `Assessment.releasedAt` — now slice S5),
+E2 (derive location as `classRoom.name`), E3 (filter `ASSESSMENT` events out of "All events").
 
-### Group B — defer to its own decision-first wave
+**Outstanding: Group B only** — and it is settled **now** rather than deferred, per the owner. Its
+questions are below; answering them unblocks Wave 3 and does not block this wave's slices.
+
+### Group B — settled now, so Wave 3 is unblocked
+
+Wave 2's slices do not depend on these, but they gate the analytics and retake pages, and leaving six
+undefined metrics in the plan is how a wave ends up guessing. Each is a **human call**.
 
 - **B1. What is "topic mastery"?** Options: (a) correct/total over `Question.subtopic` across the
   offering's responses; (b) percentage of a _student's_ questions in that subtopic; (c) average of
@@ -318,34 +362,51 @@ Every one is a **human call**. Recommendations are mine, not conclusions.
 
 ### Materials
 
-- **M1. What is a material's "topic"?** (a) drop the column — a material has no topic, the _question_
-  does; (b) put it in `Material.metadata.topic`, unenforced and invisible to a `where` filter;
-  (c) add a real column + migration. **Recommend (a) for Wave 2**; (c) is the honest long-term answer
-  and should not be decided inside a presentation port.
-- **M2. Does a material need a creation path, or only a list? — the decision that matters most.**
-  Today there is **no way to add one**, so a ported list is a read-only view over whatever the seed
-  put there: 2 rows on the demo database, 0 on any other. That makes it **untestable by a user and
-  undemoable on a fresh database**. Options: (a) list-only, be explicit in the copy and docs, seed
-  more rows; (b) add a teacher create/link form + route + contract + tests + the `indexMaterial` call
-  — a real feature, not a port; (c) list-only now, creation as its own slice. **Recommend (c)**;
-  adding a write path "while we're here" is precisely how D1 and D2 happened.
+- **M1. RESOLVED — drop the Topic column and its filter.** A material has no topic; the _question_
+  does, and retrieval searches content rather than a topic key. Adding a real `Material.topic` column
+  is the honest long-term answer **if** topic becomes a product noun, but that is a schema decision
+  that should not be taken inside a presentation port.
+- **M2. RESOLVED — list-only.** The page is ported against the seeded rows, and the copy and docs say
+  plainly that nothing creates a material yet. Creating one (an add/link form + route + contract +
+  tests + the `indexMaterial` call) is a real feature, not a port, and adding a write path "while
+  we're here" is precisely how D1 and D2 happened. **Consequence to accept:** the page is a demo of
+  the reader, not a usable surface, and on a fresh database it renders empty. S2's seed work is what
+  makes it demonstrable at all.
 - **M3. Drop `state` and `sizeLabel`?** No pipeline state exists and there is no stored file.
   **Recommend drop both**, collapsing into the derived `indexed` boolean.
 
 ### Calendar
 
-- **E1. How does a student's calendar know an assessment is unreleased?** The mockup's section copy
-  asserts it, but **`Assessment` has no release column**. The nearest signals are quiz-only. Options:
-  (a) treat every stored event as visible and **rewrite the copy to say what is true**; (b) derive
-  from "has a published question" (wrong for three of the five assessment types); (c) add
-  `Assessment.releasedAt` + a publish action + audit — a real feature. **Recommend (a) for Wave 2.**
-  Note the teacher side already calls a _different_ thing "publish" (`CourseOffering.resultsPublishedAt`,
-  the retention anchor) — do not overload the word again.
-- **E2. "Location" on an event.** No column; `ClassRoom` has no venue, and Wave 1 **D9** already
-  dropped the mockup's `room` for this reason. **Recommend derive as `classRoom.name` and rename the
-  column "Class"**, rendering `—` for an event with no class.
-- **E3. The planner lists every assessment twice.** **Recommend filtering `eventType = "ASSESSMENT"`
-  out of "All events"** so the deadlines table owns them — one row per fact.
+- **E1. RESOLVED — add a release concept to `Assessment`.** The mockup's section copy asserts that
+  unreleased assessments are not listed, and **`Assessment` has no release column** at all. Chosen:
+  add `Assessment.releasedAt DateTime?` with a **publish action and an audit row**, rather than
+  rewriting the copy away.
+
+  **This is the one decision that changes Wave 2's shape** — it is a schema change plus a write path,
+  so it is its own slice (S5a) before the calendar page consumes it:
+
+  |            |                                                                                                                                                                                |
+  | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+  | Migration  | `Assessment.releasedAt DateTime?` — additive, nullable, no backfill needed                                                                                                     |
+  | Write path | an explicit teacher action setting it, mirroring how `CourseOffering.resultsPublishedAt` is set (route + `requireRole` + ownership)                                            |
+  | Audit      | one `AuditLog` row, consistent with every other publish-like action in this codebase                                                                                           |
+  | Contract   | `released` on whatever the calendar and planner projections need — **not** on the student assessment payload, which already has `hasMark`/`published` for the per-student view |
+  | Tests      | the publish action's authz, the audit row, and that an unreleased assessment's event is absent for a student and present for its teacher                                       |
+
+  **Naming caution, already a live confusion:** the offering already has a _different_ publish —
+  `CourseOffering.resultsPublishedAt`, which is the **retention anchor** and starts the purge clock.
+  That is "results are out for the course"; this is "this assessment is visible to students". They are
+  different facts at different granularities. The new field must not be called `publishedAt`, or a
+  future reader will wire the purge clock to the wrong column. `releasedAt` is the name.
+
+  **Also required:** the seed must populate it on the assessments that should be visible, or the
+  student calendar renders empty. That makes S5 a prerequisite of S6 (seed) rather than a
+  parallel task.
+
+- **E2. RESOLVED — derive location as `classRoom.name`**, and rename the column "Class". No migration;
+  an event with no class (a holiday) renders `—`, which is the em-dash rule on live data.
+- **E3. RESOLVED — filter `eventType = "ASSESSMENT"` out of "All events"** so the deadlines table owns
+  them. One row per fact; keeps the deadlines table, whose columns the events table cannot serve.
 - **E4. Recurrence.** `CalendarEvent` cannot express it (no `rrule`/`seriesId`/`parentId`), and the
   mockup has no recurrence control, so nothing is blocked. **Explicitly out of scope**; say so rather
   than implying support.
@@ -372,12 +433,12 @@ The read paths are new, so they need tests — this is where Wave 1's untested-G
 
 | Slice | Test                                                                                                                                                                                                                                  | Kind        |
 | ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------- |
-| S2/S5 | `tests/demo-seed-shape.test.ts` — **legibility, not existence** (full list in §2.5). The lesson from Wave 1's three seed bugs, all of which passed their own tests because the assertions only counted rows                           | DB          |
+| S2/S6 | `tests/demo-seed-shape.test.ts` — **legibility, not existence** (full list in §2.5). The lesson from Wave 1's three seed bugs, all of which passed their own tests because the assertions only counted rows                           | DB          |
 | S1    | `tests/material-mapping.test.ts` — all six kinds; `sourceUrl: null` stays null; `chunks: 0` → `indexed: false` (not `undefined`)                                                                                                      | pure, no DB |
 | S1    | `tests/materials-read.test.ts` — a student sees their offering's materials **and** course-wide ones, not another offering's; an unenrolled student sees nothing; `chunks` matches the real count; a zero-chunk material still appears | DB          |
 | S4    | `tests/calendar-mapping.test.ts` — all four kinds; `endAt`/`description` null (never `""`); `selectUpcoming` orders and drops past events                                                                                             | pure        |
 | S4    | `tests/calendar-read.test.ts` — cross-offering isolation both ways; a course-wide event visible to the enrolled student and the owning teacher only                                                                                   | DB          |
-| S7    | an assessment-deadline projection test that **drops** `weightPercent`/`published`, so a future migration has to change the test deliberately                                                                                          | pure        |
+| S8    | an assessment-deadline projection test that **drops** `weightPercent`/`published`, so a future migration has to change the test deliberately                                                                                          | pure        |
 
 ---
 
