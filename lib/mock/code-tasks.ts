@@ -256,7 +256,14 @@ export const MOCK_SIMILARITY: SimilarityRow[] = [
   },
 ]
 
-function mean(values: number[]): number | null {
+/**
+ * Mean of a list of 0..1 ratios, expressed as a whole percentage.
+ *
+ * Callers pass ratios (`run.coverage`, `passed / total`), never values that
+ * have already been multiplied by 100 — the `× 100` below is the only scaling,
+ * so the aggregate is `formatPercent`-ready and cannot render as "5741%".
+ */
+function meanPercent(values: number[]): number | null {
   if (values.length === 0) return null
   return Math.round((values.reduce((total, value) => total + value, 0) / values.length) * 100)
 }
@@ -274,16 +281,13 @@ export const MOCK_CODE_TASK: CodeTask = {
   memoryLimitMb: 256,
   testCases: MOCK_TEST_CASES,
   runs: MOCK_TEST_RUNS,
-  avgPassRate: mean(
-    finishedRuns.map((run) =>
-      run.totalCount === 0 ? 0 : (run.passedCount / run.totalCount) * 100,
-    ),
+  avgPassRate: meanPercent(
+    finishedRuns.map((run) => (run.totalCount === 0 ? 0 : run.passedCount / run.totalCount)),
   ),
-  avgCoverage: mean(
+  avgCoverage: meanPercent(
     finishedRuns
       .map((run) => run.coverage)
-      .filter((coverage): coverage is number => coverage !== null)
-      .map((coverage) => coverage * 100),
+      .filter((coverage): coverage is number => coverage !== null),
   ),
   similarity: MOCK_SIMILARITY,
 }

@@ -22,6 +22,15 @@ import type { CalendarEventView, Kpi } from "./types"
 const demoStudent = MOCK_STUDENTS.find((student) => student.id === "stu_aarav")
 const demoTeam = MOCK_GROUP_BY_ID["grp_matrices"]
 
+/**
+ * The review backlog, split by kind, so the dashboard tile's value and its hint
+ * are computed from the same list and cannot describe different queues.
+ */
+const descriptivePendingReviews = MOCK_PENDING_REVIEWS.filter(
+  (item) => item.kind === "DESCRIPTIVE",
+).length
+const otherPendingReviews = MOCK_PENDING_REVIEWS.length - descriptivePendingReviews
+
 /** Work the student still owes on an assessment that has been released. */
 const studentOutstanding = MOCK_STUDENT_ASSESSMENTS.filter(
   (row) => row.submittedAt === null && row.state !== "draft",
@@ -53,7 +62,7 @@ export const MOCK_TEACHER_KPIS: Kpi[] = [
     id: "kpi_average",
     label: "Cohort average",
     value: MOCK_COHORT_AVERAGE === null ? "—" : `${MOCK_COHORT_AVERAGE}%`,
-    hint: "Published Quiz 1 only",
+    hint: "Mean of each student's recorded marks",
     delta: { value: "+4 pts", direction: "up", sentiment: "positive" },
     tone: "completed",
   },
@@ -61,7 +70,7 @@ export const MOCK_TEACHER_KPIS: Kpi[] = [
     id: "kpi_review",
     label: "Awaiting review",
     value: String(MOCK_PENDING_REVIEWS.length),
-    hint: "6 descriptive · 3 other",
+    hint: `${descriptivePendingReviews} descriptive · ${otherPendingReviews} other`,
     tone: "needs-review",
   },
   {
