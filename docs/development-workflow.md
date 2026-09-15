@@ -62,6 +62,41 @@ the `zod` contract are landed, and CI runs the suite on every pull request and o
 and `dev`. The one caveat is that `react-hooks/set-state-in-effect` is still a warning rather than
 an error (see [Running the gates locally](#running-the-gates-locally)).
 
+## Parallel work: pipelining research behind validation
+
+When a wave of work is being validated, the **research for the next wave** can run in parallel with
+it. Empirical basis: the Wave 0 validation (two independent agents reproducing every claim) and the
+three Wave 1 research dossiers ran concurrently with no interference and no contention.
+
+The rule is narrow, and the boundaries matter more than the permission:
+
+**Do pipeline: research for wave N+1 while wave N is validated.** Research needs wave N's
+_artifacts_, not its _verdict_. Once wave N is committed, wave N+1 is fully researchable.
+
+**Do not pipeline:**
+
+- **N+2 or later.** It depends on decisions wave N+1 will surface. Researching it early produces a
+  dossier that is stale before it is used — a new costume for the original "Frankenstein" failure.
+- **Implementation.** Only research runs ahead. Two waves of code in flight at once is how this repo
+  acquired a duplicate, unmerged `quiz-generation` implementation (see
+  [`archive/duplicate-quiz-generation.md`](./archive/duplicate-quiz-generation.md)). One wave of code,
+  always.
+- **Across an unvalidated foundation.** An unvalidated base makes downstream research worthless.
+  Validation stays on the critical path; research fills the waiting time, it does not replace it.
+
+**Two operational rules, both learned the hard way:**
+
+1. **Never mutate the artifact under validation.** A validator that runs `npm run build` compiles the
+   working tree; editing source mid-validation silently invalidates its result. Wait for the verdict,
+   then apply fixes. If a commit _message_ must change while a validator holds the sha, amend the
+   message and **prove the tree hash is unchanged** (`git rev-parse HEAD^{tree}` before and after) —
+   same content, new sha, prior verification still valid.
+2. **Keep concurrent agents' writes disjoint.** Give parallel agents non-overlapping scopes — split
+   by data source or by concern, not by page count — and have read-only researchers **return reports
+   instead of writing files**, so one agent's output cannot corrupt another's `git status` check. Two
+   validators should also be split by method (static review vs. live runtime), and only one should
+   hold the dev server.
+
 ## CI gates
 
 [`../.github/workflows/ci.yml`](../.github/workflows/ci.yml) runs on every pull request and on
