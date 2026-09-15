@@ -4,6 +4,7 @@ import { toAssessmentScale } from "@/lib/gradebook"
 import type { AssessmentKind, SubmissionState } from "@/lib/mock"
 import { prisma } from "@/lib/prisma"
 import type { AuthUser } from "@/lib/session"
+import { resolveTeacherStaffId } from "@/lib/teacher-staff"
 
 /**
  * The teacher's submissions queue.
@@ -142,13 +143,7 @@ export function toTeacherSubmissionRow(row: SubmissionQueryRow): TeacherSubmissi
 }
 
 /** The acting teacher's `StaffProfile.id`, or `null` when they have no profile. */
-export async function resolveTeacherStaffId(userId: string): Promise<string | null> {
-  const staff = await prisma.staffProfile.findUnique({
-    where: { userId },
-    select: { id: true },
-  })
-  return staff?.id ?? null
-}
+export { resolveTeacherStaffId } from "@/lib/teacher-staff"
 
 /**
  * Every submission across the offerings this teacher owns, newest first.
