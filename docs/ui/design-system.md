@@ -5,9 +5,16 @@ primitive inventory, the spacing/typography/density rules, the status vocabulary
 dark-mode requirements, and — most importantly — **the exact convention the three
 page-agents must follow**.
 
-Everything described here is mockup-only and additive. The existing real pages
-(`app/(dashboard)/**`, `app/(auth)/**`, `components/role-*.tsx`,
-`components/dashboard-header.tsx`) are untouched and keep working.
+**Phase status.** The design was built as a static mockup tree, and this document
+began as the contract for that phase. The mockups are now being wired to the real
+backend, which supersedes two of the rules below **for any page that has been
+ported**: the "never fetch" rule and the "do not touch `app/(dashboard)/**`" rule.
+The wiring strategy is [`docs/plans/mockup-to-backend.md`](../plans/mockup-to-backend.md),
+and the rule that replaces them is [`§8.3.1`](#831-wiring-a-real-page).
+
+The **design** rules — anatomy, primitives, spacing, density, status vocabulary,
+dark mode — apply to both trees unchanged. Only the mockup _page_ rules below are
+phase-specific.
 
 ---
 
@@ -407,8 +414,9 @@ Non-negotiable rules:
 1. **Default to a Server Component.** Add `"use client"` only if the page has
    real local interaction that the primitives do not already provide (the
    primitives that need it — tabs, select, dialog — are already client).
-2. **Never fetch.** No `fetch`, no `useEffect`, no route handlers, no Prisma.
-   Import from `@/lib/mock` only.
+2. **Never fetch** _(mockup pages; superseded once ported — see §8.3.1)_. No
+   `fetch`, no `useEffect`, no route handlers, no Prisma. Import from `@/lib/mock`
+   only.
 3. **Name components `PascalCase` ending in `Page`**, derived from the route
    (`TeacherCodeTasksPage`). Local sub-components are `PascalCase` without the
    suffix and stay in the same file unless reused.
@@ -418,7 +426,8 @@ Non-negotiable rules:
 5. **No new dependencies**, no `package.json` edits, no `prisma/**` edits.
 6. **Do not touch** `app/(dashboard)/**`, `app/(auth)/**`, `components/role-*.tsx`,
    `components/dashboard-header.tsx`, `components/gradebook-*`, or any existing
-   primitive in `components/ui/`.
+   primitive in `components/ui/` _(mockup-page rule; superseded once ported — see
+   §8.3.1)_.
 7. **Delete the "Build guide" card** once the page is real. Keep the page header,
    breadcrumbs and description.
 8. **Handle every fixture edge case** listed in the stub's "Must honour" block —
@@ -427,6 +436,39 @@ Non-negotiable rules:
 9. **Dates**: use `formatDate`/`formatDateTime`/`formatDueLabel` from
    `@/lib/mock` (UTC, fixed `MOCK_NOW`). Never call `new Date()` in render.
 10. **Verify**: `npm run verify` must stay at exit 0.
+
+### 8.3.1 Wiring a real page
+
+A page that has been ported to the real tree replaces rules 2 and 6 above with this
+one rule:
+
+> **Keep the data layer; adopt the presentation.** The page keeps its Server
+> Component shape, its `requireRole`/`getSessionUser` guard, its existing query or
+> `lib/*` service call, and its place under the `proxy.ts` matcher. It adopts the
+> shell and the primitives, and maps real rows into the view models in
+> `lib/mock/types.ts`.
+
+Two invariants are load-bearing:
+
+- **`null` means "no value yet" and renders as `—`, never `0`.** `Grade.percentage`
+  is `Float?`, `QuizAttempt.score` is `Decimal?`, and item analysis deliberately
+  withholds `difficultyIndex` below threshold. Defaulting nulls to zero breaks
+  documented behaviour.
+- **Do not add a client fetch for data the server already has.** The known P1
+  finding is `GradebookProvider` fetching in a `useEffect`; a port is the moment to
+  pass server-fetched props, not to add more client fetching.
+
+**Shell scope.** `AppShell` takes a `scope`. `"mockup"` (the default) links to the
+static routes and keeps the mockup-only chrome — preview-role switcher, mockup
+index, notifications. `"app"` links to the authenticated routes, takes the signed-in
+user from the server, and offers a real sign-out. The nav stays one definition
+(`components/shell/nav-config.ts`), resolved per scope by `navHref`; items with no
+real page carry a `null` target and are dropped from the app nav rather than
+rendered as broken links. `tests/nav-scope.test.ts` asserts that every app-scope
+href has a page on disk.
+
+**Identity.** The `User` model has no name column, so an app-scope shell shows the
+email and derives initials from it (`lib/user-identity.ts`). Do not invent a name.
 
 ### 8.4 Fixture modules
 

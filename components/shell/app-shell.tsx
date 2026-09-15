@@ -6,20 +6,35 @@ import { PanelLeftClose, PanelLeftOpen } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
-import { ROLE_META, BRAND, roleFromPathname, type MockupRole } from "@/components/shell/nav-config"
+import {
+  ROLE_META,
+  BRAND,
+  roleFromPathname,
+  type MockupRole,
+  type NavScope,
+} from "@/components/shell/nav-config"
 import { SideNav } from "@/components/shell/side-nav"
-import { TopBar } from "@/components/shell/top-bar"
+import { TopBar, type TopBarUser } from "@/components/shell/top-bar"
 
 type AppShellProps = {
   children: React.ReactNode
   /**
    * Override the role the chrome is rendered for. Normally omitted: the shell
-   * derives the role from the first `/mockup/<role>` path segment, which keeps
-   * `app/mockup/layout.tsx` a single, role-agnostic wrapper.
+   * derives the role from the pathname — the segment after `/mockup`, or the
+   * first segment in `app` scope.
    */
   role?: MockupRole
-  /** Role used for `/mockup` itself, where the URL names no role. */
+  /** Role used when the pathname names no role (e.g. `/mockup` itself). */
   defaultRole?: MockupRole
+  /**
+   * Which tree this shell wraps. `mockup` (the default) links to the static
+   * mockup routes and keeps the mockup-only affordances; `app` links to the real
+   * authenticated routes and drops the mockup chrome. Defaulting to `mockup`
+   * keeps every existing mockup page byte-identical.
+   */
+  scope?: NavScope
+  /** Real signed-in user, shown in `app` scope. Falls back to the mock identity. */
+  user?: TopBarUser
 }
 
 /**
@@ -32,15 +47,25 @@ type AppShellProps = {
  * outside render — so the chrome paints immediately with no "Loading…" flash.
  * Everything inside `children` stays a Server Component.
  */
-export function AppShell({ children, role: roleProp, defaultRole = "teacher" }: AppShellProps) {
+export function AppShell({
+  children,
+  role: roleProp,
+  defaultRole = "teacher",
+  scope = "mockup",
+  user,
+}: AppShellProps) {
   const pathname = usePathname()
-  const role = roleProp ?? roleFromPathname(pathname) ?? defaultRole
+  const role = roleProp ?? roleFromPathname(pathname, scope) ?? defaultRole
   const [collapsed, setCollapsed] = useState(false)
+  // Scoped DOM ids: a real page should not carry `mockup-*` ids (and a mockup
+  // page must keep them), so the prefix follows the scope.
+  const mainId = scope === "mockup" ? "mockup-main" : "app-main"
+  const sidebarId = scope === "mockup" ? "mockup-sidebar" : "app-sidebar"
 
   return (
     <div className="min-h-screen bg-background text-foreground">
       <a
-        href="#mockup-main"
+        href={`#${mainId}`}
         className="sr-only focus:not-sr-only focus:absolute focus:top-3 focus:left-3 focus:z-50 focus:rounded-lg focus:bg-primary focus:px-3 focus:py-2 focus:text-sm focus:text-primary-foreground"
       >
         Skip to main content
@@ -48,7 +73,7 @@ export function AppShell({ children, role: roleProp, defaultRole = "teacher" }: 
 
       <div className="md:flex">
         <aside
-          id="mockup-sidebar"
+          id={sidebarId}
           aria-label="Workspace navigation"
           className={cn(
             // Visible from `md` up; the mobile drawer covers narrower viewports.
@@ -86,7 +111,7 @@ export function AppShell({ children, role: roleProp, defaultRole = "teacher" }: 
               onClick={() => setCollapsed((value) => !value)}
               aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
               aria-expanded={!collapsed}
-              aria-controls="mockup-sidebar"
+              aria-controls={sidebarId}
               className="ml-auto hidden text-muted-foreground lg:inline-flex"
             >
               {collapsed ? (
@@ -98,13 +123,13 @@ export function AppShell({ children, role: roleProp, defaultRole = "teacher" }: 
           </div>
 
           <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-2 py-3">
-            <SideNav role={role} collapsed={collapsed} />
+            <SideNav role={role} scope={scope} collapsed={collapsed} />
           </div>
         </aside>
 
         <div className="flex min-w-0 flex-1 flex-col">
-          <TopBar role={role} />
-          <main id="mockup-main" className="flex-1 px-4 py-6 sm:px-6 lg:px-8">
+          <TopBar role={role} scope={scope} user={user} />
+          <main id={mainId} className="flex-1 px-4 py-6 sm:px-6 lg:px-8">
             <div className="mx-auto w-full max-w-7xl">{children}</div>
           </main>
         </div>

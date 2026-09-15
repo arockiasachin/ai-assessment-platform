@@ -1,19 +1,37 @@
 "use client"
 
+import { useState } from "react"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import { Popover } from "@base-ui/react/popover"
-import { Bell, ChevronDown, Search, UserRound } from "lucide-react"
+import { Bell, ChevronDown, LogOut, Search, UserRound } from "lucide-react"
 
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Separator } from "@/components/ui/separator"
 import { StatusDot, StatusPill } from "@/components/ui/status-pill"
-import { BRAND, MOCKUP_ROLES, ROLE_META, type MockupRole } from "@/components/shell/nav-config"
+import {
+  BRAND,
+  MOCKUP_ROLES,
+  ROLE_META,
+  brandHref,
+  type MockupRole,
+  type NavScope,
+} from "@/components/shell/nav-config"
 import { MobileNav } from "@/components/shell/mobile-nav"
 import { ThemeToggle } from "@/components/shell/theme-toggle"
 import { formatRelativeTime } from "@/lib/mock/format"
 import { MOCK_NOTIFICATIONS, MOCK_CURRENT_USER } from "@/lib/mock/session"
+import type { MockUser } from "@/lib/mock/types"
+
+/** The signed-in identity the top bar renders. */
+export type TopBarUser = {
+  name: string
+  email: string
+  initials: string
+  roleLabel: string
+}
 
 /**
  * Sticky application top bar.
@@ -22,17 +40,31 @@ import { MOCK_NOTIFICATIONS, MOCK_CURRENT_USER } from "@/lib/mock/session"
  * effect, so the chrome paints on the first frame (no "Loading…" flash). The
  * search field is intentionally inert: it is visually complete so reviewers can
  * judge the composition, but it does not submit anywhere.
+ *
+ * In `app` scope the mockup-only affordances are dropped: there is no preview
+ * role switcher, no mockup index link, and no notifications menu (there is no
+ * `Notification` model, so rendering one would be fabricating data). The signed
+ * in user is passed in from the server; sign-out is real.
  */
-export function TopBar({ role }: { role: MockupRole }) {
+export function TopBar({
+  role,
+  scope = "mockup",
+  user,
+}: {
+  role: MockupRole
+  scope?: NavScope
+  user?: TopBarUser
+}) {
   const unread = MOCK_NOTIFICATIONS.filter((notification) => !notification.read).length
+  const searchId = scope === "mockup" ? "mockup-search" : "app-search"
 
   return (
     <header className="sticky top-0 z-30 border-b border-border bg-background/80 backdrop-blur-md">
       <div className="flex h-14 items-center gap-2 px-3 sm:gap-3 sm:px-4">
-        <MobileNav role={role} />
+        <MobileNav role={role} scope={scope} />
 
         <Link
-          href={BRAND.indexHref}
+          href={brandHref(scope, role)}
           className="flex shrink-0 items-center gap-2.5 rounded-lg py-1 outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
         >
           <span className="flex size-9 items-center justify-center rounded-xl bg-primary text-primary-foreground">
@@ -53,7 +85,7 @@ export function TopBar({ role }: { role: MockupRole }) {
           onSubmit={(event) => event.preventDefault()}
           className="relative ml-auto hidden w-full max-w-sm md:block"
         >
-          <label htmlFor="mockup-search" className="sr-only">
+          <label htmlFor={searchId} className="sr-only">
             Search assessments, students and questions
           </label>
           <Search
@@ -61,7 +93,7 @@ export function TopBar({ role }: { role: MockupRole }) {
             aria-hidden="true"
           />
           <Input
-            id="mockup-search"
+            id={searchId}
             type="search"
             placeholder="Search assessments, students, questions…"
             className="pl-8 pr-12"
@@ -75,9 +107,9 @@ export function TopBar({ role }: { role: MockupRole }) {
         </form>
 
         <div className="ml-auto flex items-center gap-1 md:ml-2">
-          <NotificationsMenu unread={unread} />
+          {scope === "mockup" && <NotificationsMenu unread={unread} />}
           <ThemeToggle />
-          <UserMenu role={role} />
+          <UserMenu role={role} scope={scope} user={user} />
         </div>
       </div>
     </header>
@@ -132,8 +164,20 @@ function NotificationsMenu({ unread }: { unread: number }) {
   )
 }
 
-function UserMenu({ role }: { role: MockupRole }) {
-  const user = MOCK_CURRENT_USER[role]
+function UserMenu({
+  role,
+  scope,
+  user: userProp,
+}: {
+  role: MockupRole
+  scope: NavScope
+  user?: TopBarUser
+}) {
+  const mockUser = MOCK_CURRENT_USER[role]
+  const user = userProp ?? mockUser
+  // A real signed-in user is active by definition; the mock identities carry
+  // per-role demo tones so the pill has something varied to show.
+  const roleTone: MockUser["roleTone"] = userProp ? "active" : mockUser.roleTone
 
   return (
     <Popover.Root>
@@ -160,7 +204,11 @@ function UserMenu({ role }: { role: MockupRole }) {
               </Avatar>
               <div className="min-w-0">
                 <p className="truncate font-medium">{user.name}</p>
-                <p className="truncate text-xs text-muted-foreground">{user.email}</p>
+                {/* The real `User` has no name column, so the label and the email
+                    are the same string in `app` scope; don't print it twice. */}
+                {user.email !== user.name && (
+                  <p className="truncate text-xs text-muted-foreground">{user.email}</p>
+                )}
               </div>
             </div>
             <Separator />
@@ -169,42 +217,85 @@ function UserMenu({ role }: { role: MockupRole }) {
                 Signed in as
               </p>
               <div className="px-2 pb-2">
-                <StatusPill status={user.roleTone} label={`${user.roleLabel} role`} />
+                <StatusPill status={roleTone} label={`${user.roleLabel} role`} />
               </div>
-              <p className="px-2 py-1 text-xs font-semibold tracking-wider text-muted-foreground uppercase">
-                Preview role
-              </p>
-              <ul>
-                {MOCKUP_ROLES.map((previewRole) => (
-                  <li key={previewRole}>
-                    <Link
-                      href={ROLE_META[previewRole].home}
-                      aria-current={previewRole === role ? "page" : undefined}
-                      className="flex items-center gap-2 rounded-md px-2 py-1.5 hover:bg-muted"
-                    >
-                      <UserRound className="size-4 text-muted-foreground" aria-hidden="true" />
-                      <span className="flex-1">{ROLE_META[previewRole].label} workspace</span>
-                      {previewRole === role && (
-                        <span className="text-xs text-muted-foreground">current</span>
-                      )}
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-              <Separator className="my-2" />
-              <Link
-                href={BRAND.indexHref}
-                className="flex items-center gap-2 rounded-md px-2 py-1.5 hover:bg-muted"
-              >
-                Mockup index
-              </Link>
-              <p className="px-2 py-1.5 text-xs text-muted-foreground">
-                Sign out is disabled in mockups.
-              </p>
+              {scope === "mockup" ? (
+                <>
+                  <p className="px-2 py-1 text-xs font-semibold tracking-wider text-muted-foreground uppercase">
+                    Preview role
+                  </p>
+                  <ul>
+                    {MOCKUP_ROLES.map((previewRole) => (
+                      <li key={previewRole}>
+                        <Link
+                          href={ROLE_META[previewRole].home}
+                          aria-current={previewRole === role ? "page" : undefined}
+                          className="flex items-center gap-2 rounded-md px-2 py-1.5 hover:bg-muted"
+                        >
+                          <UserRound className="size-4 text-muted-foreground" aria-hidden="true" />
+                          <span className="flex-1">{ROLE_META[previewRole].label} workspace</span>
+                          {previewRole === role && (
+                            <span className="text-xs text-muted-foreground">current</span>
+                          )}
+                        </Link>
+                      </li>
+                    ))}
+                  </ul>
+                  <Separator className="my-2" />
+                  <Link
+                    href={BRAND.indexHref}
+                    className="flex items-center gap-2 rounded-md px-2 py-1.5 hover:bg-muted"
+                  >
+                    Mockup index
+                  </Link>
+                  <p className="px-2 py-1.5 text-xs text-muted-foreground">
+                    Sign out is disabled in mockups.
+                  </p>
+                </>
+              ) : (
+                <>
+                  <Separator className="my-2" />
+                  <SignOutButton />
+                </>
+              )}
             </div>
           </Popover.Popup>
         </Popover.Positioner>
       </Popover.Portal>
     </Popover.Root>
+  )
+}
+
+/**
+ * Real sign-out, for `app` scope only. Posts to the existing logout endpoint and
+ * then navigates client-side — `window.location` is deliberately avoided because
+ * the repo lints against assigning an internal path to it.
+ */
+function SignOutButton() {
+  const router = useRouter()
+  const [pending, setPending] = useState(false)
+
+  return (
+    <button
+      type="button"
+      disabled={pending}
+      aria-busy={pending}
+      onClick={async () => {
+        setPending(true)
+        try {
+          await fetch("/api/auth/logout", { method: "POST" })
+        } catch {
+          // Fall through to the redirect: an expired session should still land
+          // the user on the login screen rather than trapping them here.
+        } finally {
+          router.push("/login")
+          router.refresh()
+        }
+      }}
+      className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-muted disabled:opacity-60"
+    >
+      <LogOut className="size-4 text-muted-foreground" aria-hidden="true" />
+      {pending ? "Signing out…" : "Sign out"}
+    </button>
   )
 }

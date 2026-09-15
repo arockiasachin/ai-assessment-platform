@@ -1,10 +1,11 @@
 import { redirect } from "next/navigation"
 
 import { RoleGuard } from "@/components/role-guard"
-import { RolePageShell } from "@/components/role-page-shell"
+import { AppShell, PageHeader } from "@/components/shell"
 import { TeacherReviewQueue } from "@/components/teacher-review-queue"
 import { getSessionUser } from "@/lib/auth"
 import { listEvaluationCandidatesForTeacher, listReviewQueueForTeacher } from "@/lib/rubric-grading"
+import { initialsFromEmail, roleLabelFromRole } from "@/lib/user-identity"
 
 export default async function TeacherReviewsPage() {
   const user = await getSessionUser()
@@ -17,13 +18,29 @@ export default async function TeacherReviewsPage() {
 
   return (
     <RoleGuard role="teacher">
-      <RolePageShell
+      {/*
+       * Wave 0 pilot: the first real page on the mockup shell. `scope="app"`
+       * points the rail at the authenticated routes instead of `/mockup`, and
+       * the identity comes from the session rather than a fixture. The `User`
+       * model has no name column, so the email is the label (see
+       * `lib/user-identity.ts`).
+       */}
+      <AppShell
+        scope="app"
         role="teacher"
-        title="Review queue"
-        description="Inspect per-criterion AI suggestions with evidence and confidence, then accept, override, or reject. Nothing publishes without your approval."
+        user={{
+          name: user.email,
+          email: user.email,
+          initials: initialsFromEmail(user.email),
+          roleLabel: roleLabelFromRole(user.role),
+        }}
       >
+        <PageHeader
+          title="Review queue"
+          description="Inspect per-criterion AI suggestions with evidence and confidence, then accept, override, or reject. Nothing publishes without your approval."
+        />
         <TeacherReviewQueue items={items} candidates={candidates} />
-      </RolePageShell>
+      </AppShell>
     </RoleGuard>
   )
 }

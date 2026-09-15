@@ -1,0 +1,181 @@
+import fs from "node:fs"
+import path from "node:path"
+import { fileURLToPath } from "node:url"
+
+import { describe, expect, it } from "vitest"
+
+import {
+  MOCKUP_ROLES,
+  allNavItems,
+  brandHref,
+  isActiveHref,
+  navHref,
+  navSectionsFor,
+  roleFromPathname,
+  roleHome,
+} from "@/components/shell/nav-config"
+
+/**
+ * Nav scope contract.
+ *
+ * The shell serves two trees from one nav definition: the static `/mockup` tree
+ * and the real authenticated `app/(dashboard)` tree. The risk this file exists to
+ * prevent is a nav link that points at a page that does not exist — which is
+ * exactly what a naive "strip the /mockup prefix" translation would produce,
+ * because some mockup routes were renamed in the real tree and others (profile,
+ * settings, submissions) were never built at all.
+ *
+ * These tests walk the filesystem, so adding a nav item pointing at a missing
+ * page fails here rather than in front of a user.
+ */
+
+const repoRoot = path.resolve(fileURLToPath(new URL(".", import.meta.url)), "..")
+const appDir = path.join(repoRoot, "app")
+const dashboardDir = path.join(appDir, "(dashboard)")
+const mockupDir = path.join(appDir, "mockup")
+
+function hasPage(root: string, route: string): boolean {
+  const rel = route.replace(/^\//, "")
+  return fs.existsSync(path.join(root, rel, "page.tsx"))
+}
+
+/** `/mockup/teacher/reviews` → `teacher/reviews` */
+function mockupRel(href: string): string {
+  return href.replace(/^\/mockup/, "").replace(/^\//, "")
+}
+
+const ITEMS = allNavItems()
+
+describe("nav scope: mockup tree is unchanged", () => {
+  it("resolves every item to its own mockup href", () => {
+    for (const { item } of ITEMS) {
+      expect(navHref(item.href, "mockup"), item.href).toBe(item.href)
+    }
+  })
+
+  it("returns the full, unfiltered section list", () => {
+    for (const role of MOCKUP_ROLES) {
+      const total = navSectionsFor(role, "mockup").reduce((n, s) => n + s.items.length, 0)
+      const expected = allNavItems().filter((entry) => entry.role === role).length
+      expect(total, role).toBe(expected)
+    }
+  })
+
+  it("every mockup nav href has a mockup page on disk", () => {
+    for (const { item } of ITEMS) {
+      const rel = mockupRel(item.href)
+      const exists =
+        rel === "" ? fs.existsSync(path.join(mockupDir, "page.tsx")) : hasPage(mockupDir, rel)
+      expect(exists, `${item.href} has no page under app/mockup`).toBe(true)
+    }
+  })
+
+  it("treats a role home as active only on itself", () => {
+    expect(isActiveHref("/mockup/teacher", "/mockup/teacher", "mockup")).toBe(true)
+    expect(isActiveHref("/mockup/teacher/classes", "/mockup/teacher", "mockup")).toBe(false)
+    expect(isActiveHref("/mockup/teacher/classes", "/mockup/teacher/classes", "mockup")).toBe(true)
+  })
+
+  it("reads the role from the mockup path", () => {
+    expect(roleFromPathname("/mockup/teacher/reviews")).toBe("teacher")
+    expect(roleFromPathname("/mockup/student")).toBe("student")
+    expect(roleFromPathname("/mockup/admin/data")).toBe("admin")
+    expect(roleFromPathname("/mockup")).toBeNull()
+  })
+
+  it("keeps the mockup index as the brand target", () => {
+    expect(brandHref("mockup")).toBe("/mockup")
+  })
+})
+
+describe("nav scope: app tree resolves to real pages", () => {
+  it("every non-null app nav href has a real page on disk", () => {
+    for (const { item } of ITEMS) {
+      const href = navHref(item.href, "app")
+      if (href === null) continue
+      expect(
+        hasPage(dashboardDir, href),
+        `${item.href} → ${href} has no page under app/(dashboard)`,
+      ).toBe(true)
+    }
+  })
+
+  it("maps the two renamed routes to their real destinations", () => {
+    expect(navHref("/mockup/teacher/quiz-ai", "app")).toBe("/teacher/quiz-generation")
+    expect(navHref("/mockup/teacher/activity", "app")).toBe("/teacher/observability")
+  })
+
+  it("derives the rest by stripping the mockup prefix", () => {
+    expect(navHref("/mockup/teacher/reviews", "app")).toBe("/teacher/reviews")
+    expect(navHref("/mockup/student/peer-evaluation", "app")).toBe("/student/peer-evaluation")
+    expect(navHref("/mockup/admin/users", "app")).toBe("/admin/users")
+  })
+
+  it("has no app counterpart for the mockup index", () => {
+    expect(navHref("/mockup", "app")).toBeNull()
+  })
+
+  it("drops items whose page was never built, rather than linking to a 404", () => {
+    // These are mockup-only: the design anticipated a destination the backend
+    // does not have. `submissions` is a component inside the assignments page.
+    for (const href of [
+      "/mockup/teacher/submissions",
+      "/mockup/teacher/profile",
+      "/mockup/teacher/settings",
+      "/mockup/student/profile",
+      "/mockup/student/settings",
+      "/mockup/admin/profile",
+      "/mockup/admin/settings",
+    ]) {
+      expect(navHref(href, "app"), href).toBeNull()
+    }
+  })
+
+  it("filters dropped items out of the app section list", () => {
+    for (const role of MOCKUP_ROLES) {
+      const sections = navSectionsFor(role, "app")
+      const hrefs = sections.flatMap((s) => s.items.map((i) => navHref(i.href, "app")))
+      expect(
+        hrefs.every((h) => h !== null),
+        role,
+      ).toBe(true)
+      // No empty section should survive the filter.
+      expect(
+        sections.every((s) => s.items.length > 0),
+        role,
+      ).toBe(true)
+    }
+    // teacher loses submissions, profile and settings.
+    const teacherApp = navSectionsFor("teacher", "app").reduce((n, s) => n + s.items.length, 0)
+    const teacherMockup = navSectionsFor("teacher", "mockup").reduce(
+      (n, s) => n + s.items.length,
+      0,
+    )
+    expect(teacherApp).toBe(teacherMockup - 3)
+  })
+
+  it("anchors the brand on the signed-in role's home", () => {
+    expect(brandHref("app", "teacher")).toBe("/teacher")
+    expect(brandHref("app", "student")).toBe("/student")
+    expect(brandHref("app", "admin")).toBe("/admin")
+  })
+
+  it("treats a role home as active only on itself, with real paths", () => {
+    expect(isActiveHref("/teacher", "/teacher", "app")).toBe(true)
+    // The bug this guards: `/teacher` is a prefix of `/teacher/classes`.
+    expect(isActiveHref("/teacher/classes", "/teacher", "app")).toBe(false)
+    expect(isActiveHref("/teacher/classes", "/teacher/classes", "app")).toBe(true)
+  })
+
+  it("reads the role from the first real path segment", () => {
+    expect(roleFromPathname("/teacher/reviews", "app")).toBe("teacher")
+    expect(roleFromPathname("/student/quizzes", "app")).toBe("student")
+    expect(roleFromPathname("/admin/users", "app")).toBe("admin")
+    expect(roleFromPathname("/login", "app")).toBeNull()
+  })
+
+  it("role homes are the real role roots", () => {
+    expect(roleHome("teacher", "app")).toBe("/teacher")
+    expect(roleHome("teacher", "mockup")).toBe("/mockup/teacher")
+  })
+})

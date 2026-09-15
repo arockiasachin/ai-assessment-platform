@@ -4,10 +4,18 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 
 import { cn } from "@/lib/utils"
-import { NAV_SECTIONS, isActiveHref, type MockupRole } from "@/components/shell/nav-config"
+import {
+  isActiveHref,
+  navHref,
+  navSectionsFor,
+  type MockupRole,
+  type NavScope,
+} from "@/components/shell/nav-config"
 
 type SideNavProps = {
   role: MockupRole
+  /** Which tree the links point at. Defaults to the mockup tree. */
+  scope?: NavScope
   /** Force the icon-only rail at every width (the user-facing collapse toggle). */
   collapsed?: boolean
   /**
@@ -36,6 +44,7 @@ type SideNavProps = {
  */
 export function SideNav({
   role,
+  scope = "mockup",
   collapsed = false,
   variant = "rail",
   onNavigate,
@@ -43,10 +52,11 @@ export function SideNav({
 }: SideNavProps) {
   const pathname = usePathname()
   const responsive = variant === "rail"
+  const sections = navSectionsFor(role, scope)
 
   return (
     <nav aria-label="Primary" className={cn("flex flex-col gap-5", className)}>
-      {NAV_SECTIONS[role].map((section) => {
+      {sections.map((section) => {
         const headingId = `nav-${role}-${section.id}`
         return (
           <div key={section.id}>
@@ -62,11 +72,13 @@ export function SideNav({
             <ul aria-labelledby={headingId} className="space-y-0.5">
               {section.items.map((item) => {
                 const Icon = item.icon
-                const active = isActiveHref(pathname, item.href)
+                const href = navHref(item.href, scope)
+                if (href === null) return null
+                const active = isActiveHref(pathname, href, scope)
                 return (
                   <li key={item.href}>
                     <Link
-                      href={item.href}
+                      href={href}
                       onClick={onNavigate}
                       aria-current={active ? "page" : undefined}
                       title={item.label}

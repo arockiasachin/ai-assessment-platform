@@ -379,9 +379,88 @@ export const NAV_SECTIONS: Record<MockupRole, NavSection[]> = {
   ],
 }
 
-/** Role implied by a mockup pathname, or `null` for `/mockup` itself. */
-export function roleFromPathname(pathname: string): MockupRole | null {
-  const segment = pathname.split("/").filter(Boolean)[1]
+/**
+ * Which tree a shell instance is rendering: the static `/mockup` tree, or the
+ * real authenticated `app/(dashboard)` tree.
+ */
+export type NavScope = "mockup" | "app"
+
+/**
+ * Real route for a mockup nav href, where the two do not simply differ by the
+ * `/mockup` prefix.
+ *
+ * - A string is an explicit override (the segment was renamed in the real tree).
+ * - `null` means **there is no real page yet**. Those items are mockup-only: the
+ *   mockups designed a destination the backend does not have. They are dropped
+ *   from the app-scope nav rather than rendered as broken links, and
+ *   `tests/nav-scope.test.ts` fails if an item is added here without a page.
+ *
+ * Everything not listed here is derived by stripping the `/mockup` prefix, and
+ * the same test asserts that derivation resolves to a real page file.
+ */
+const APP_PATH_OVERRIDES: Record<string, string | null> = {
+  // Renamed in the real tree. Both names are the *same* destination; the real
+  // nav calls them "Quiz AI" and "Activity log" but links to these paths.
+  "/mockup/teacher/quiz-ai": "/teacher/quiz-generation",
+  "/mockup/teacher/activity": "/teacher/observability",
+  // No real page. Submissions is a component inside the assignments page
+  // (`components/teacher-submissions-manager.tsx`), not a route of its own.
+  "/mockup/teacher/submissions": null,
+  // No onboarding/settings surface exists for any role yet.
+  "/mockup/teacher/profile": null,
+  "/mockup/teacher/settings": null,
+  "/mockup/student/profile": null,
+  "/mockup/student/settings": null,
+  "/mockup/admin/profile": null,
+  "/mockup/admin/settings": null,
+}
+
+/**
+ * Resolve a nav item's href for a scope.
+ *
+ * Returns `null` in `app` scope for an item that has no real page, so callers
+ * must handle it rather than emitting a link to a 404. `mockup` scope always
+ * returns the href unchanged.
+ */
+export function navHref(href: string, scope: NavScope): string | null {
+  if (scope === "mockup") return href
+  const override = APP_PATH_OVERRIDES[href]
+  if (override !== undefined) return override
+  // `/mockup` itself is the mockup index; it has no app counterpart.
+  if (href === "/mockup") return null
+  return href.replace(/^\/mockup/, "")
+}
+
+/** The landing page for a role in the given scope. */
+export function roleHome(role: MockupRole, scope: NavScope): string {
+  return scope === "mockup" ? ROLE_META[role].home : `/${role}`
+}
+
+/** The brand block's target: the mockup index, or the signed-in role's home. */
+export function brandHref(scope: NavScope, role: MockupRole = "teacher"): string {
+  return scope === "mockup" ? BRAND.indexHref : roleHome(role, scope)
+}
+
+/** Nav sections for `role`, with app-scope items that have no real page removed. */
+export function navSectionsFor(role: MockupRole, scope: NavScope): NavSection[] {
+  if (scope === "mockup") return NAV_SECTIONS[role]
+  return NAV_SECTIONS[role]
+    .map((section) => ({
+      ...section,
+      items: section.items.filter((item) => navHref(item.href, scope) !== null),
+    }))
+    .filter((section) => section.items.length > 0)
+}
+
+/**
+ * Role implied by a pathname, or `null` for a role-less path.
+ *
+ * `mockup` reads the segment after `/mockup`; `app` reads the first segment
+ * (`/teacher/reviews` → `teacher`).
+ */
+export function roleFromPathname(pathname: string, scope: NavScope = "mockup"): MockupRole | null {
+  const segments = pathname.split("/").filter(Boolean)
+  const segment = scope === "mockup" ? segments[1] : segments[0]
   if (segment === "teacher" || segment === "student" || segment === "admin") return segment
   return null
 }
@@ -407,9 +486,9 @@ export function findNavItem(
  * `/mockup/teacher/classes`, so a prefix match is only allowed for non-home
  * routes.
  */
-export function isActiveHref(pathname: string, href: string): boolean {
+export function isActiveHref(pathname: string, href: string, scope: NavScope = "mockup"): boolean {
   if (pathname === href) return true
-  const isRoleHome = MOCKUP_ROLES.some((role) => ROLE_META[role].home === href)
+  const isRoleHome = MOCKUP_ROLES.some((role) => roleHome(role, scope) === href)
   if (isRoleHome) return false
   return pathname.startsWith(`${href}/`)
 }

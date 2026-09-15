@@ -11,7 +11,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
-import { ROLE_META, type MockupRole } from "@/components/shell/nav-config"
+import { ROLE_META, type MockupRole, type NavScope } from "@/components/shell/nav-config"
 import { SideNav } from "@/components/shell/side-nav"
 
 /**
@@ -24,7 +24,7 @@ import { SideNav } from "@/components/shell/side-nav"
  * trigger and drawer are `md:hidden`: from `md` up the persistent rail takes
  * over.
  */
-export function MobileNav({ role }: { role: MockupRole }) {
+export function MobileNav({ role, scope = "mockup" }: { role: MockupRole; scope?: NavScope }) {
   const [open, setOpen] = useState(false)
 
   return (
@@ -48,7 +48,7 @@ export function MobileNav({ role }: { role: MockupRole }) {
           </DialogDescription>
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto px-2 py-3">
-          <SideNav role={role} onNavigate={() => setOpen(false)} />
+          <SideNav role={role} scope={scope} onNavigate={() => setOpen(false)} />
         </div>
       </DialogContent>
     </Dialog>
