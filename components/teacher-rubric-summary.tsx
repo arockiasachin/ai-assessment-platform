@@ -39,7 +39,7 @@ function RubricPanel({ assessment }: { assessment: TeacherAssessmentSummary }) {
       action={
         <StatusPill
           status={criteria.length > 0 ? "active" : "pending"}
-          label={`${criteria.length} criterion${criteria.length === 1 ? "" : "a"}`}
+          label={`${criteria.length} ${criteria.length === 1 ? "criterion" : "criteria"}`}
           dot
         />
       }

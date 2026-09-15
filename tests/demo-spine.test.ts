@@ -8,6 +8,7 @@ import { getTeacherRatingsReport } from "@/lib/course-ratings"
 import { submitReviewDecision } from "@/lib/grading/review-service"
 import { getStudentGradeExport, getTeacherGradeExport } from "@/lib/lms-export/service"
 import { resolveGenerationStatus } from "@/lib/quiz-generation/metadata"
+import { readRunEvidence } from "@/lib/code-eval/serialize"
 import { listGeneratedQuestionsForTeacher } from "@/lib/quiz-generation/review-service"
 import { startQuizAttempt, submitQuizAttempt } from "@/lib/quiz-attempts/service"
 import { listReviewQueueForTeacher } from "@/lib/rubric-grading/review-queue"
@@ -84,6 +85,30 @@ describe("seeded demo course — end-to-end spine", () => {
     expect(await db.gradeReview.count()).toBeGreaterThan(0)
     expect(await db.codeTask.count()).toBeGreaterThan(0)
     expect(await db.testCase.count()).toBeGreaterThan(0)
+
+    /*
+     * The seeded code run must be *legible*, not merely present.
+     *
+     * `count() > 0` passed for months while the run was unreadable: `resultsJson`
+     * was written as `{ cases: [...] }` where `readRunEvidence` requires
+     * `record.results`, and `finishedAt` was never set — so the page showed a
+     * "Passed" row whose per-test evidence, recomputed points and diagnostics were
+     * all empty, and whose statistics said "no finished run yet". Two reviewers
+     * flagged it independently. These assertions are the guard.
+     */
+    const seededRun = await db.testRun.findFirstOrThrow({
+      select: { finishedAt: true, resultsJson: true, passedCount: true },
+    })
+    expect(seededRun.finishedAt).not.toBeNull()
+    const evidence = readRunEvidence(seededRun.resultsJson)
+    expect(evidence.results).toHaveLength(seededRun.passedCount ?? 0)
+    // Every result must carry the fields the UI renders; a partially-shaped row
+    // would parse but render blanks.
+    for (const result of evidence.results) {
+      expect(result.testCaseId).toBeTruthy()
+      expect(result.name).toBeTruthy()
+      expect(typeof result.passed).toBe("boolean")
+    }
     expect(await db.group.count()).toBeGreaterThan(0)
     expect(await db.groupMember.count()).toBeGreaterThan(0)
     expect(await db.peerEvaluation.count()).toBeGreaterThan(0)

@@ -3,7 +3,10 @@ import { fileURLToPath } from "node:url"
 
 import bcrypt from "bcryptjs"
 
+import type { Prisma } from "@/lib/generated/prisma/client"
 import { submitReviewDecision, recordManualMark } from "@/lib/grading/review-service"
+import { toRunEvidenceJson } from "@/lib/code-eval/serialize"
+import type { TestResult } from "@/lib/contracts/code-eval"
 import { createMockProvider } from "@/lib/llm"
 import { prisma } from "@/lib/prisma"
 import { generateQuizDraftsForTeacher } from "@/lib/quiz-generation/generation"
@@ -650,8 +653,26 @@ async function createCodeTask() {
     },
   ]
 
+  // Captured so the seeded run's evidence can reference real test-case ids.
+  // `points` is a `Decimal` and `category` is a union, so they are normalised here
+  // rather than at each use.
+  const createdTestCases: {
+    id: string
+    name: string
+    category: TestResult["category"]
+    points: number
+  }[] = []
   for (const testCase of testCases) {
-    await prisma.testCase.create({ data: { codeTaskId: CODE_TASK_ID, ...testCase } })
+    const created = await prisma.testCase.create({
+      data: { codeTaskId: CODE_TASK_ID, ...testCase },
+      select: { id: true, name: true, category: true, points: true },
+    })
+    createdTestCases.push({
+      id: created.id,
+      name: created.name,
+      category: created.category as TestResult["category"],
+      points: Number(created.points),
+    })
   }
 
   const codeSubmission = await prisma.submission.create({
@@ -664,6 +685,22 @@ async function createCodeTask() {
     },
   })
 
+  /*
+   * A finished, readable run.
+   *
+   * Two gaps this closes, both flagged by review:
+   *
+   * 1. `finishedAt` was never set, and the UI keys "finished" off it — so the row
+   *    rendered "Passed" while the statistics above it read "No finished run yet"
+   *    and counted zero finished runs. A status that contradicts its own
+   *    timestamp is worse than no data.
+   * 2. `resultsJson` was written as `{ cases: [...] }`, but `readRunEvidence`
+   *    (`lib/code-eval/serialize.ts:31`) requires `record.results` to be a
+   *    `TestResult[]`. It failed to parse, so every per-test row, the recomputed
+   *    points and the diagnostics panel rendered empty. Writing the shape
+   *    `toRunEvidenceJson` produces is what makes the seeded run legible.
+   */
+  const runFinishedAt = new Date("2026-11-25T10:02:22.000Z")
   await prisma.testRun.create({
     data: {
       codeTaskId: CODE_TASK_ID,
@@ -675,7 +712,29 @@ async function createCodeTask() {
       failedCount: 0,
       totalCount: 3,
       runtimeMs: 142,
-      resultsJson: { cases: [{ name: "Positive slope", passed: true }] },
+      startedAt: new Date("2026-11-25T10:02:20.000Z"),
+      finishedAt: runFinishedAt,
+      coverage: 100,
+      resultsJson: toRunEvidenceJson({
+        results: createdTestCases.map((testCase) => ({
+          testCaseId: testCase.id,
+          name: testCase.name,
+          description: null,
+          category: testCase.category,
+          points: testCase.points,
+          earnedPoints: testCase.points,
+          passed: true,
+          stdout: "",
+          stderr: "",
+          message: "Passed.",
+          durationMs: 40,
+        })),
+        timedOut: false,
+        memoryExceeded: false,
+        killMessage: null,
+        // `toRunEvidenceJson` returns a plain record; Prisma wants its own JSON
+        // input type, which cannot be expressed structurally.
+      }) as unknown as Prisma.InputJsonValue,
     },
   })
 }
