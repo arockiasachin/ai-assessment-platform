@@ -1,6 +1,7 @@
 import { ArrowDownRight, ArrowUpRight, Minus, type LucideIcon } from "lucide-react"
 
 import { Card } from "@/components/ui/card"
+import { SUCCESS_TEXT } from "@/components/ui/tone"
 import { cn } from "@/lib/utils"
 
 export type StatDelta = {
@@ -43,7 +44,7 @@ export function StatCard({
   className,
 }: StatCardProps) {
   const deltaTone = {
-    positive: "text-[oklch(0.45_0.12_155)] dark:text-success",
+    positive: SUCCESS_TEXT,
     negative: "text-destructive",
     neutral: "text-muted-foreground",
   } as const

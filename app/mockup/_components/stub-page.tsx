@@ -4,6 +4,7 @@ import { ArrowLeft, Hammer, ListChecks } from "lucide-react"
 import { BRAND, ROLE_META, findNavItem } from "@/components/shell/nav-config"
 import { PageHeader } from "@/components/shell/page-header"
 import { buttonVariants } from "@/components/ui/button"
+import { Callout } from "@/components/ui/callout"
 import { EmptyState } from "@/components/ui/empty-state"
 import { SectionCard } from "@/components/ui/section-card"
 import { StatusPill } from "@/components/ui/status-pill"
@@ -74,16 +75,13 @@ export function StubPage({ href }: { href: string }) {
             <GuideList heading="Section order" items={guide.structure} ordered />
           </div>
           {guide.notes && guide.notes.length > 0 && (
-            <div className="mt-6 rounded-lg border border-warning/40 bg-warning/10 p-3 dark:bg-warning/15">
-              <h3 className="text-sm font-semibold text-warning-foreground dark:text-warning">
-                Must honour
-              </h3>
-              <ul className="mt-1.5 list-disc space-y-1 pl-5 text-sm text-warning-foreground dark:text-warning">
+            <Callout tone="warning" titleAs="h3" title="Must honour" className="mt-6">
+              <ul className="list-disc space-y-1 pl-5">
                 {guide.notes.map((note) => (
                   <li key={note}>{note}</li>
                 ))}
               </ul>
-            </div>
+            </Callout>
           )}
         </SectionCard>
       </div>

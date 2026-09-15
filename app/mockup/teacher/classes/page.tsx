@@ -12,6 +12,7 @@ import { FilterBar } from "@/components/ui/filter-bar"
 import { SectionCard } from "@/components/ui/section-card"
 import { StatCard } from "@/components/ui/stat-card"
 import { StatusPill } from "@/components/ui/status-pill"
+import { TruncatedText } from "@/components/ui/truncated-text"
 import {
   MOCK_COURSE,
   MOCK_GROUPS,
@@ -52,9 +53,9 @@ export default function TeacherClassesPage() {
             <AvatarFallback>{row.initials}</AvatarFallback>
           </Avatar>
           <div className="min-w-0">
-            <p className="max-w-[15rem] truncate font-medium" title={row.name}>
+            <TruncatedText className="font-medium" title={row.name}>
               {row.name}
-            </p>
+            </TruncatedText>
             <p className="truncate text-xs text-muted-foreground">
               {row.registerNumber} · {row.email}
             </p>

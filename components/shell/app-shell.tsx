@@ -48,6 +48,7 @@ export function AppShell({ children, role: roleProp, defaultRole = "teacher" }: 
 
       <div className="md:flex">
         <aside
+          id="mockup-sidebar"
           aria-label="Workspace navigation"
           className={cn(
             // Visible from `md` up; the mobile drawer covers narrower viewports.
@@ -72,6 +73,7 @@ export function AppShell({ children, role: roleProp, defaultRole = "teacher" }: 
               onClick={() => setCollapsed((value) => !value)}
               aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
               aria-expanded={!collapsed}
+              aria-controls="mockup-sidebar"
               className="ml-auto hidden text-muted-foreground lg:inline-flex"
             >
               {collapsed ? (

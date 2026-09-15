@@ -10,6 +10,7 @@ import { FilterBar } from "@/components/ui/filter-bar"
 import { SectionCard } from "@/components/ui/section-card"
 import { StatusPill } from "@/components/ui/status-pill"
 import { Timeline, type TimelineItem } from "@/components/ui/timeline"
+import { TruncatedText } from "@/components/ui/truncated-text"
 import {
   MOCK_AUDIT_EVENTS,
   MOCK_COURSE,
@@ -65,9 +66,9 @@ export default function TeacherActivityPage() {
       id: "student",
       header: "Student",
       cell: (row) => (
-        <span className="max-w-[18rem] truncate font-medium" title={row.studentName}>
+        <TruncatedText width="lg" className="font-medium" title={row.studentName}>
           {row.studentName}
-        </span>
+        </TruncatedText>
       ),
     },
     {

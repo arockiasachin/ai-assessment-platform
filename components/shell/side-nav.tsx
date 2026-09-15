@@ -24,7 +24,11 @@ type SideNavProps = {
 /**
  * Grouped left navigation.
  *
- * - Section headings are real `<h2>`s and each list is `aria-labelledby` them.
+ * - Group labels are plain `<p>`s, not headings. The rail is the first thing in
+ *   the document, so an `<h2>` here would put a level-2 heading *before* the
+ *   page `<h1>` on all 38 mockup routes and break the heading outline; each list
+ *   is still named by its label through `aria-labelledby`, so nothing is lost
+ *   for assistive tech.
  * - The active row carries `aria-current="page"` plus a non-colour cue (a left
  *   accent bar and a weight change) so it does not rely on hue alone.
  * - When icon-only, labels stay in the DOM as `sr-only` text (the accessible
@@ -46,7 +50,7 @@ export function SideNav({
         const headingId = `nav-${role}-${section.id}`
         return (
           <div key={section.id}>
-            <h2
+            <p
               id={headingId}
               className={cn(
                 "px-2.5 pb-1.5 text-[0.7rem] font-semibold tracking-wider text-muted-foreground uppercase",
@@ -54,7 +58,7 @@ export function SideNav({
               )}
             >
               {section.heading}
-            </h2>
+            </p>
             <ul aria-labelledby={headingId} className="space-y-0.5">
               {section.items.map((item) => {
                 const Icon = item.icon

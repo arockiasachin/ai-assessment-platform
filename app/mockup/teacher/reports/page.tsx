@@ -9,6 +9,7 @@ import { EmptyState } from "@/components/ui/empty-state"
 import { SectionCard } from "@/components/ui/section-card"
 import { StatCard } from "@/components/ui/stat-card"
 import { StatusPill } from "@/components/ui/status-pill"
+import { TruncatedText } from "@/components/ui/truncated-text"
 import {
   MOCK_ANALYTICS_SUMMARY,
   MOCK_ASSESSMENT_BY_ID,
@@ -57,9 +58,9 @@ export default function TeacherReportsPage() {
       header: "Student",
       cell: (row) => (
         <div className="min-w-0">
-          <p className="max-w-[16rem] truncate font-medium" title={row.name}>
+          <TruncatedText className="font-medium" title={row.name}>
             {row.name}
-          </p>
+          </TruncatedText>
           <p className="text-xs text-muted-foreground">{row.registerNumber}</p>
         </div>
       ),
@@ -118,9 +119,9 @@ export default function TeacherReportsPage() {
       id: "student",
       header: "Student",
       cell: (row) => (
-        <span className="max-w-[16rem] truncate font-medium" title={row.studentName}>
+        <TruncatedText className="font-medium" title={row.studentName}>
           {row.studentName}
-        </span>
+        </TruncatedText>
       ),
     },
     {

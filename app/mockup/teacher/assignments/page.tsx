@@ -206,7 +206,6 @@ export default function TeacherAssignmentsPage() {
           description={`Weights sum to 100% of the final grade. ${RUBRIC_ASSESSMENTS.length} assessment uses the ${MOCK_RUBRIC.title} rubric; ${INDEXED_MATERIALS} indexed materials can ground generated questions.`}
         >
           <PageTabs
-            className="[&_[data-slot=tabs-list]]:overflow-x-auto"
             items={TABS.map((tab) => ({
               value: tab.value,
               label: tab.label,

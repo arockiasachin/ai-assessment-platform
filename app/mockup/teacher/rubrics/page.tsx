@@ -4,6 +4,7 @@ import { ListChecks, ShieldCheck } from "lucide-react"
 import { findNavItem } from "@/components/shell/nav-config"
 import { PageHeader } from "@/components/shell/page-header"
 import { Button } from "@/components/ui/button"
+import { Callout } from "@/components/ui/callout"
 import { EmptyState } from "@/components/ui/empty-state"
 import { KeyValueList, MetricRow } from "@/components/ui/metric-row"
 import { SectionCard } from "@/components/ui/section-card"
@@ -248,17 +249,16 @@ export default function TeacherRubricsPage() {
           title="How the model is constrained"
           description="The guard rails a reviewer can rely on when accepting a suggestion."
         >
-          <div className="rounded-lg border border-primary/30 bg-primary/5 p-3">
-            <p className="flex items-center gap-2 text-sm font-medium">
-              <ShieldCheck className="size-4 shrink-0 text-primary" aria-hidden="true" />
-              Suggestions are capped, never scaled.
-            </p>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Every criterion has a fixed ceiling. The model proposes a value inside it, and a
-              teacher accepts or overrides that value before anything is published — the ceiling
-              itself cannot be raised by a suggestion.
-            </p>
-          </div>
+          <Callout
+            tone="info"
+            icon={ShieldCheck}
+            title="Suggestions are capped, never scaled."
+            bodyClassName="text-muted-foreground"
+          >
+            Every criterion has a fixed ceiling. The model proposes a value inside it, and a teacher
+            accepts or overrides that value before anything is published — the ceiling itself cannot
+            be raised by a suggestion.
+          </Callout>
           <div className="mt-2">
             <MetricRow
               label="Auto-accept floor"

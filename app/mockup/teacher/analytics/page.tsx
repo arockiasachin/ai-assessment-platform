@@ -12,6 +12,7 @@ import { SectionCard } from "@/components/ui/section-card"
 import { Sparkline } from "@/components/ui/sparkline"
 import { StatCard } from "@/components/ui/stat-card"
 import { StatusPill } from "@/components/ui/status-pill"
+import { TruncatedText } from "@/components/ui/truncated-text"
 import {
   MOCK_ANALYTICS_SUMMARY,
   MOCK_AT_RISK_STUDENTS,
@@ -118,9 +119,9 @@ export default function TeacherAnalyticsPage() {
       header: "Student",
       cell: (row) => (
         <div className="min-w-0">
-          <p className="max-w-[18rem] truncate font-medium" title={row.name}>
+          <TruncatedText width="lg" className="font-medium" title={row.name}>
             {row.name}
-          </p>
+          </TruncatedText>
           <p className="text-xs text-muted-foreground">{row.groupName ?? "Not in a team"}</p>
         </div>
       ),

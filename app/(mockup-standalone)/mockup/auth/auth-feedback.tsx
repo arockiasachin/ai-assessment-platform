@@ -1,16 +1,19 @@
 import { CircleAlert, CircleCheck } from "lucide-react"
 
-import { cn } from "@/lib/utils"
+import { Callout } from "@/components/ui/callout"
 
 export type AuthFeedbackTone = "error" | "success"
 
 /**
  * Inline result banner for the auth mockups.
  *
- * Both tones use the measured WCAG-AA pairs from the design system
- * (`destructive/10` + `text-destructive`; `success/15` + the darker success
- * shade, with explicit `dark:` overrides), so the same component clears 4.5:1 in
- * both themes.
+ * A thin adapter over `Callout` so the mockup screens cannot drift from the
+ * shared tone pairs: `destructive/10` + `text-destructive` and `success/15` +
+ * the darker success shade, each with its own dark-mode override. This file used
+ * to carry its own copy of those classes (including the success colour literal).
+ *
+ * Unlike static guidance, this banner is the result of the action the user just
+ * took, so it keeps a live role: `alert` for an error, `status` for a success.
  */
 export function AuthFeedback({
   tone,
@@ -23,24 +26,17 @@ export function AuthFeedback({
   children: React.ReactNode
   className?: string
 }) {
-  const Icon = tone === "error" ? CircleAlert : CircleCheck
+  const isError = tone === "error"
 
   return (
-    <div
-      role={tone === "error" ? "alert" : "status"}
-      className={cn(
-        "flex items-start gap-2.5 rounded-lg border p-3 text-sm",
-        tone === "error"
-          ? "border-destructive/40 bg-destructive/10 text-destructive dark:bg-destructive/12"
-          : "border-success/40 bg-success/15 text-[oklch(0.45_0.12_155)] dark:bg-success/20 dark:text-success",
-        className,
-      )}
+    <Callout
+      tone={isError ? "destructive" : "success"}
+      icon={isError ? CircleAlert : CircleCheck}
+      role={isError ? "alert" : "status"}
+      title={title}
+      className={className}
     >
-      <Icon className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
-      <div className="min-w-0 space-y-0.5">
-        <p className="font-medium">{title}</p>
-        <p className="text-pretty">{children}</p>
-      </div>
-    </div>
+      {children}
+    </Callout>
   )
 }

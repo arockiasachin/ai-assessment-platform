@@ -4,6 +4,7 @@ import { Clock, Database, HardDrive, TriangleAlert, Upload } from "lucide-react"
 import { PageHeader } from "@/components/shell/page-header"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { Callout } from "@/components/ui/callout"
 import { DataTable, type Column } from "@/components/ui/data-table"
 import { EmptyState } from "@/components/ui/empty-state"
 import { FilterBar } from "@/components/ui/filter-bar"
@@ -305,16 +306,15 @@ export default function AdminDataPage() {
           description="The clock that governs how long student content stays readable."
         >
           <div className="space-y-4">
-            <div className="rounded-lg border border-warning/40 bg-warning/10 p-3 dark:bg-warning/15">
-              <h3 className="text-sm font-semibold text-warning-foreground dark:text-warning">
-                A dataset&rsquo;s clock only starts once its results are published
-              </h3>
-              <p className="mt-1 text-sm text-warning-foreground dark:text-warning">
-                Student content is redacted 15 days after results are published. Datasets whose
-                results are still unpublished show <span className="font-medium">Not started</span>{" "}
-                rather than a purge date, because there is no date to show yet.
-              </p>
-            </div>
+            <Callout
+              tone="warning"
+              titleAs="h3"
+              title="A dataset&rsquo;s clock only starts once its results are published"
+            >
+              Student content is redacted 15 days after results are published. Datasets whose
+              results are still unpublished show <span className="font-medium">Not started</span>{" "}
+              rather than a purge date, because there is no date to show yet.
+            </Callout>
 
             <div className="divide-y divide-border">
               <MetricRow label="Retention window" value="15 days after publication" />

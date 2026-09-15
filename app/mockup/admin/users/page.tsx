@@ -12,6 +12,7 @@ import { ProgressBar } from "@/components/ui/progress-bar"
 import { SectionCard } from "@/components/ui/section-card"
 import { StatCard } from "@/components/ui/stat-card"
 import { StatusPill } from "@/components/ui/status-pill"
+import { TruncatedText } from "@/components/ui/truncated-text"
 import {
   MOCK_ADMIN_USERS,
   formatDateTime,
@@ -102,8 +103,8 @@ export default function AdminUsersPage() {
             </AvatarFallback>
           </Avatar>
           <div className="min-w-0">
-            <p className="truncate font-medium">{row.name}</p>
-            <p className="truncate text-xs text-muted-foreground">{row.email}</p>
+            <TruncatedText className="font-medium">{row.name}</TruncatedText>
+            <TruncatedText className="text-xs text-muted-foreground">{row.email}</TruncatedText>
           </div>
         </div>
       ),

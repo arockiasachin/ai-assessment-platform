@@ -13,6 +13,7 @@ import {
 import { PageHeader } from "@/components/shell/page-header"
 import { findNavItem } from "@/components/shell/nav-config"
 import { Button, buttonVariants } from "@/components/ui/button"
+import { Callout } from "@/components/ui/callout"
 import { DataTable, type Column } from "@/components/ui/data-table"
 import { EmptyState } from "@/components/ui/empty-state"
 import { FilterBar } from "@/components/ui/filter-bar"
@@ -21,6 +22,7 @@ import { SectionCard } from "@/components/ui/section-card"
 import { StatCard } from "@/components/ui/stat-card"
 import { StatusPill } from "@/components/ui/status-pill"
 import { Timeline, type TimelineItem } from "@/components/ui/timeline"
+import { TruncatedText } from "@/components/ui/truncated-text"
 import {
   MOCK_GRADE_SUGGESTIONS,
   MOCK_REVIEW_QUEUE,
@@ -114,9 +116,7 @@ export default async function TeacherReviewsPage({
       header: "Student",
       cell: (row) => (
         <div className="min-w-0">
-          <p className="truncate font-medium" title={row.studentName}>
-            {row.studentName}
-          </p>
+          <TruncatedText className="font-medium">{row.studentName}</TruncatedText>
           <p className="text-xs text-muted-foreground">
             {row.groupName ?? "No group"} · {PROJECT_LABEL[row.kind]}
           </p>
@@ -231,18 +231,18 @@ export default async function TeacherReviewsPage({
 
       <div className="space-y-6">
         {/* The product rule, stated where a reviewer cannot miss it. */}
-        <div className="rounded-xl border border-primary/30 bg-primary/5 p-4">
-          <p className="flex items-center gap-2 text-sm font-medium">
-            <ShieldCheck className="size-4 shrink-0 text-primary" aria-hidden="true" />
-            AI suggests. A teacher approves. Nothing publishes without a human.
-          </p>
-          <p className="mt-1.5 text-sm text-muted-foreground">
-            Every score below is a proposal carrying its rationale, the quoted evidence it was drawn
-            from, and the model&apos;s confidence. Confirming or overriding a suggestion is a
-            separate decision from publishing the assessment, and every override is stored with its
-            reason as calibration data.
-          </p>
-        </div>
+        <Callout
+          tone="info"
+          icon={ShieldCheck}
+          title="AI suggests. A teacher approves. Nothing publishes without a human."
+          className="rounded-xl p-4"
+          bodyClassName="text-muted-foreground"
+        >
+          Every score below is a proposal carrying its rationale, the quoted evidence it was drawn
+          from, and the model&apos;s confidence. Confirming or overriding a suggestion is a separate
+          decision from publishing the assessment, and every override is stored with its reason as
+          calibration data.
+        </Callout>
 
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <StatCard
@@ -388,16 +388,13 @@ export default async function TeacherReviewsPage({
               </div>
 
               {selected.flags.length > 0 && (
-                <div className="rounded-lg border border-warning/40 bg-warning/10 p-3 dark:bg-warning/15">
-                  <h3 className="text-sm font-semibold text-warning-foreground dark:text-warning">
-                    Flags raised on this submission
-                  </h3>
-                  <ul className="mt-1 list-disc space-y-0.5 pl-5 text-sm text-warning-foreground dark:text-warning">
+                <Callout tone="warning" titleAs="h3" title="Flags raised on this submission">
+                  <ul className="list-disc space-y-0.5 pl-5">
                     {selected.flags.map((flag) => (
                       <li key={flag}>{flag}</li>
                     ))}
                   </ul>
-                </div>
+                </Callout>
               )}
 
               <div className="rounded-lg border border-border p-3">

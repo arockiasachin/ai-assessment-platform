@@ -12,6 +12,7 @@ import { SectionCard } from "@/components/ui/section-card"
 import { StatCard } from "@/components/ui/stat-card"
 import { StatusPill } from "@/components/ui/status-pill"
 import { Timeline, type TimelineItem } from "@/components/ui/timeline"
+import { TruncatedText } from "@/components/ui/truncated-text"
 import {
   MOCK_COURSE,
   MOCK_GROUP_BY_ID,
@@ -139,9 +140,9 @@ export default function TeacherGroupsPage() {
       header: "Member",
       cell: (row) => (
         <div className="min-w-0">
-          <p className="max-w-[16rem] truncate font-medium" title={row.name}>
+          <TruncatedText className="font-medium" title={row.name}>
             {row.name}
-          </p>
+          </TruncatedText>
           <p className="text-xs text-muted-foreground">{row.registerNumber}</p>
         </div>
       ),
@@ -270,7 +271,6 @@ export default function TeacherGroupsPage() {
           action={<StatusPill status={GROUP_STATE_TO_STATUS[DETAIL_GROUP.state]} dot />}
         >
           <PageTabs
-            className="[&_[data-slot=tabs-list]]:overflow-x-auto"
             items={[
               { value: "members", label: "Members", count: DETAIL_GROUP.members.length },
               {
@@ -457,9 +457,9 @@ export default function TeacherGroupsPage() {
                         className="flex flex-wrap items-center justify-between gap-2 p-3"
                       >
                         <div className="min-w-0">
-                          <p className="truncate font-medium" title={student.name}>
+                          <TruncatedText className="font-medium" title={student.name}>
                             {student.name}
-                          </p>
+                          </TruncatedText>
                           <p className="text-xs text-muted-foreground">
                             {student.registerNumber} ·{" "}
                             {student.avgPercent === null

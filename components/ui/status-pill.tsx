@@ -1,4 +1,5 @@
 import { Badge } from "@/components/ui/badge"
+import { SUCCESS_TEXT } from "@/components/ui/tone"
 import { cn } from "@/lib/utils"
 
 /**
@@ -76,15 +77,15 @@ export const STATUS_META: Record<StatusKey, { label: string; tone: StatusTone }>
  * - `danger`   destructive/10 → 5.00 light, destructive/12 → 4.88 dark
  * - `neutral`  muted + foreground → 15.79 light, 13.44 dark
  *
- * The new success hue is the only colour literal here: it keeps
- * `--success` untouched (the accessibility audit signed it off for fills and
+ * The success shade now lives in `@/components/ui/tone` (`SUCCESS_TEXT`) so the
+ * pill, the `StatCard` delta and `Callout` cannot drift apart. `--success`
+ * itself is untouched (the accessibility audit signed it off for fills and
  * icons) while giving small pill text the contrast it needs.
  */
 const TONE_PILL: Record<StatusTone, string> = {
   neutral: "border-transparent bg-muted text-foreground",
   info: "border-transparent bg-primary/10 text-primary dark:bg-primary/12",
-  success:
-    "border-transparent bg-success/15 text-[oklch(0.45_0.12_155)] dark:bg-success/20 dark:text-success",
+  success: `border-transparent bg-success/15 ${SUCCESS_TEXT} dark:bg-success/20`,
   warning:
     "border-transparent bg-warning/15 text-warning-foreground dark:bg-warning/20 dark:text-warning",
   danger: "border-transparent bg-destructive/10 text-destructive dark:bg-destructive/12",

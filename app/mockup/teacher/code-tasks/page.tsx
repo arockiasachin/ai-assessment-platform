@@ -4,6 +4,7 @@ import { Activity, Gauge, ShieldAlert, Terminal } from "lucide-react"
 import { findNavItem } from "@/components/shell/nav-config"
 import { PageHeader } from "@/components/shell/page-header"
 import { Button } from "@/components/ui/button"
+import { CodeBlock } from "@/components/ui/code-block"
 import { DataTable, type Column } from "@/components/ui/data-table"
 import { EmptyState } from "@/components/ui/empty-state"
 import { KeyValueList } from "@/components/ui/metric-row"
@@ -11,6 +12,7 @@ import { PageTabPanel, PageTabs } from "@/components/ui/page-tabs"
 import { SectionCard } from "@/components/ui/section-card"
 import { StatCard } from "@/components/ui/stat-card"
 import { StatusPill } from "@/components/ui/status-pill"
+import { TruncatedText } from "@/components/ui/truncated-text"
 import {
   MOCK_ACTIVE_RUNS,
   MOCK_ASSESSMENT_BY_ID,
@@ -56,9 +58,9 @@ export default function TeacherCodeTasksPage() {
       id: "student",
       header: "Student",
       cell: (row) => (
-        <span className="max-w-[16rem] truncate font-medium" title={row.studentName}>
+        <TruncatedText className="font-medium" title={row.studentName}>
           {row.studentName}
-        </span>
+        </TruncatedText>
       ),
     },
     {
@@ -238,7 +240,6 @@ export default function TeacherCodeTasksPage() {
         </div>
 
         <PageTabs
-          className="[&_[data-slot=tabs-list]]:overflow-x-auto"
           items={[
             { value: "runs", label: "Runs", count: MOCK_TEST_RUNS.length },
             { value: "cases", label: "Test cases", count: MOCK_TEST_CASES.length },
@@ -292,9 +293,7 @@ export default function TeacherCodeTasksPage() {
                             ? "not measured"
                             : formatPercent(run.coverage * 100)}
                         </p>
-                        <pre className="overflow-x-auto rounded-md bg-muted p-3 font-mono text-xs whitespace-pre-wrap text-foreground">
-                          {run.stderr ?? "No stderr captured."}
-                        </pre>
+                        <CodeBlock wrap>{run.stderr ?? "No stderr captured."}</CodeBlock>
                       </div>
                     </details>
                   ))}
@@ -396,9 +395,7 @@ export default function TeacherCodeTasksPage() {
               title="Starter code"
               description="What every student begins with. Submissions are run in the sandbox above, never on the reviewer's machine."
             >
-              <pre className="overflow-x-auto rounded-lg bg-muted p-4 font-mono text-xs whitespace-pre text-foreground">
-                {MOCK_CODE_TASK_SKELETON}
-              </pre>
+              <CodeBlock className="p-4">{MOCK_CODE_TASK_SKELETON}</CodeBlock>
             </SectionCard>
           </PageTabPanel>
         </PageTabs>

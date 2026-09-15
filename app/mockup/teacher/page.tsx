@@ -22,6 +22,7 @@ import { Sparkline } from "@/components/ui/sparkline"
 import { StatCard } from "@/components/ui/stat-card"
 import { StatusPill } from "@/components/ui/status-pill"
 import { Timeline, type TimelineItem } from "@/components/ui/timeline"
+import { TruncatedText } from "@/components/ui/truncated-text"
 import {
   MOCK_ASSESSMENTS,
   MOCK_COURSE,
@@ -105,9 +106,7 @@ export default function TeacherDashboardPage() {
       header: "Student",
       cell: (row) => (
         <div className="min-w-0">
-          <p className="truncate font-medium" title={row.studentName}>
-            {row.studentName}
-          </p>
+          <TruncatedText className="font-medium">{row.studentName}</TruncatedText>
           <p className="text-xs text-muted-foreground">{ASSESSMENT_KIND_LABEL[row.kind]}</p>
         </div>
       ),
@@ -382,6 +381,12 @@ export default function TeacherDashboardPage() {
             columns={assessmentColumns}
             rows={MOCK_ASSESSMENTS}
             getRowId={(row) => row.id}
+            empty={
+              <EmptyState
+                title="No assessments yet"
+                description="Nothing has been added to this offering, so there is no marking progress to show. Create an assessment to start tracking it."
+              />
+            }
           />
         </SectionCard>
       </div>

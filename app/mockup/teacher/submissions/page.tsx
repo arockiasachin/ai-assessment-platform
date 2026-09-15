@@ -10,6 +10,7 @@ import { FilterBar } from "@/components/ui/filter-bar"
 import { SectionCard } from "@/components/ui/section-card"
 import { StatCard } from "@/components/ui/stat-card"
 import { StatusPill } from "@/components/ui/status-pill"
+import { TruncatedText } from "@/components/ui/truncated-text"
 import {
   MOCK_ASSESSMENTS,
   MOCK_SUBMISSIONS,
@@ -47,9 +48,9 @@ export default function TeacherSubmissionsPage() {
       header: "Student",
       cell: (row) => (
         <div className="min-w-0">
-          <p className="max-w-[16rem] truncate font-medium" title={row.studentName}>
+          <TruncatedText className="font-medium" title={row.studentName}>
             {row.studentName}
-          </p>
+          </TruncatedText>
           <p className="text-xs text-muted-foreground">
             {row.versionCount > 1 ? `${row.versionCount} versions` : "First submission"}
           </p>

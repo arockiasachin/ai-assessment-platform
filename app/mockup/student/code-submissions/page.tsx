@@ -3,6 +3,7 @@ import { CircleCheck, Percent, PlayCircle, Timer, type LucideIcon } from "lucide
 
 import { PageHeader } from "@/components/shell/page-header"
 import { Button } from "@/components/ui/button"
+import { CodeBlock } from "@/components/ui/code-block"
 import { DataTable, type Column } from "@/components/ui/data-table"
 import { EmptyState } from "@/components/ui/empty-state"
 import { KeyValueList, MetricRow } from "@/components/ui/metric-row"
@@ -165,9 +166,9 @@ const runColumns: Column<TestRun>[] = [
             Show error output
             <span className="sr-only"> for run {row.id}</span>
           </summary>
-          <pre className="mt-2 max-h-32 overflow-auto rounded-md bg-muted p-2 font-mono text-xs whitespace-pre-wrap text-foreground">
+          <CodeBlock wrap maxHeight="sm" dense className="mt-2">
             {row.stderr}
-          </pre>
+          </CodeBlock>
         </details>
       ),
   },
@@ -306,9 +307,7 @@ export default function StudentCodeSubmissionsPage() {
                     Replace the TODO. Sorting must not mutate the input list, and it has to stay
                     inside the time limit on the performance case.
                   </p>
-                  <pre className="overflow-x-auto rounded-lg bg-muted p-3 font-mono text-xs text-foreground">
-                    {MOCK_CODE_TASK_SKELETON}
-                  </pre>
+                  <CodeBlock>{MOCK_CODE_TASK_SKELETON}</CodeBlock>
                 </div>
 
                 <div className="space-y-0.5">

@@ -178,7 +178,6 @@ export default function TeacherQuizAiPage() {
       />
 
       <PageTabs
-        className="[&_[data-slot=tabs-list]]:overflow-x-auto"
         items={[
           { value: "drafts", label: "Drafts", count: MOCK_DRAFT_QUESTIONS.length },
           { value: "published", label: "Published", count: PUBLISHED_QUESTIONS.length },

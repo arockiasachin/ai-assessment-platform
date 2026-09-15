@@ -182,4 +182,27 @@
   body {
     @apply bg-background text-foreground;
   }
+
+  /*
+   * One canonical keyboard-focus ring for every natively focusable element, so
+   * nothing can fall back to the browser's default outline.
+   *
+   * Primitives declare their own ring as `focus-visible:ring-3
+   * focus-visible:ring-ring/50 focus-visible:outline-1 focus-visible:outline-ring`
+   * (see `button`, `input`, `select`, `dialog`, `tabs`, `side-nav`). Those classes
+   * live in the `utilities` layer, which outranks `base`, so an element that
+   * declares a ring keeps it exactly; this rule only fills the gaps — hand-rolled
+   * `<summary>` disclosures, plain links inside popovers, the skip link.
+   *
+   * `:where()` keeps the specificity at zero for the same reason: any explicit
+   * utility, including `outline-none`, wins. Deliberately scoped to *native*
+   * focus targets — roving-focus widgets rendered as `div[role=option]` /
+   * `div[tabindex]` (select items, dialog popups) signal focus with a background
+   * and must not grow a ring that their scroll container would clip.
+   */
+  :where(a[href], button, input, select, textarea, summary):focus-visible {
+    outline: 1px solid var(--ring);
+    outline-offset: 0;
+    box-shadow: 0 0 0 3px color-mix(in oklab, var(--ring) 50%, transparent);
+  }
 }
