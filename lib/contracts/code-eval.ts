@@ -256,6 +256,11 @@ export type CodeSubmissionRequest = z.infer<typeof codeSubmissionRequestSchema>
 /**
  * The student's own code task with their submission budget. `reason` explains a
  * blocked submission ("deadline passed", "submission cap reached").
+ *
+ * `maxMarks` (from the assessment) and the sandbox `timeLimitMs`/`memoryLimitMb`
+ * (from the code task) are carried so the student's own page can state what the
+ * task is worth and the limits a run is killed at, without re-deriving them or
+ * widening the student surface with anything teacher-only.
  */
 export const studentCodeTaskSchema = z.object({
   assessmentId: z.string(),
@@ -265,6 +270,9 @@ export const studentCodeTaskSchema = z.object({
   instructions: z.string().nullable(),
   starterCode: z.string().nullable(),
   testCaseCount: z.number().int(),
+  maxMarks: z.number().int(),
+  timeLimitMs: z.number().int(),
+  memoryLimitMb: z.number().int(),
   maxSubmissions: z.number().int(),
   submissionsUsed: z.number().int(),
   canSubmit: z.boolean(),
