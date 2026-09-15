@@ -1,10 +1,12 @@
 # Wave 1 — per-page port dossiers
 
-Status: **research complete.** Three slices have shipped: `teacher/submissions` (D2, read-only queue),
-`student/peer-evaluation` (merged), and the auth re-skin — plus Wave 0's scope-aware shell and the
-`teacher/classes` / `teacher/offerings` split. Written against `dev` @ `a177868` (Wave 0 landed).
-Companion to [`mockup-to-backend.md`](./mockup-to-backend.md), which this document corrects in two
-places.
+Status: **research complete. Eleven of the thirteen Wave 1 rows have shipped** — Wave 0's scope-aware
+shell, `teacher/reviews` (pilot), `teacher/submissions` (D2), the `teacher/classes` / `teacher/offerings`
+split (D1), the auth re-skin, `student/peer-evaluation`, `student/quizzes`, `teacher/reports`,
+`teacher/rubrics`, `student/assessments`, `teacher/code-tasks` and `student/courses`. Remaining:
+`teacher/groups` (D6 pair matrix) and `student/code-submissions`. Written against `dev` @ `a177868`
+(Wave 0 landed). Companion to [`mockup-to-backend.md`](./mockup-to-backend.md), which this document
+corrects in two places.
 
 Three read-only research passes produced field-by-field dossiers for all twelve Wave 1 pages
 (grading/rubrics, code-eval/groups, student-learning/auth). This consolidates them into an
@@ -82,20 +84,20 @@ Do these before or alongside the first port; each is small and unblocks several 
 
 Twelve pages. "Backend" = does the read path exist and is it tested.
 
-| Page                          | Backend                                                       | Shape                                                    | Risk       | Verdict                                                                                        |
-| ----------------------------- | ------------------------------------------------------------- | -------------------------------------------------------- | ---------- | ---------------------------------------------------------------------------------------------- |
-| `student/peer-evaluation`     | Complete, tested                                              | Mockup read-only, real is a **form**                     | Low        | **SHIPPED** (`8dd7ad1`) — merged; threshold from the server (D5)                               |
-| `student/quizzes`             | Complete, tested                                              | Rebuild presentation                                     | Low        | **Best-backed.** Sitting renders from the read-only retake (D4); no persisted practice attempt |
-| `teacher/reports`             | Ratings half complete + tested; report-card half **no query** | Re-skin + new work                                       | Low/Med    | **Ship the ratings half first**; drop "At risk" and "Completion" (D3)                          |
-| `teacher/rubrics`             | Complete; `listRubricsForTeacher` **untested**                | Mockup read-only vs real **editor**                      | Low        | Add a read-only summary panel; render weight as relative, no sum claim (D8)                    |
-| `auth/login`, `auth/register` | Working, tested                                               | Pure re-skin                                             | **Lowest** | **SHIPPED** (`08ac76a`, fixes `46a4a58`)                                                       |
-| `teacher/code-tasks`          | Complete, tested                                              | Real = list + client detail; mockup = single-task detail | Med        | Server-fetch the detail; keep mutations as a client island                                     |
-| `student/code-submissions`    | Complete, tested                                              | Mockup read-only vs real **editor**                      | Med        | Merge, don't replace; one small contract extension                                             |
-| `student/courses`             | Complete, **GET untested**                                    | Rebuild presentation                                     | Med        | Drop the Materials card (no reader); rating **distribution only** (D7) needs a new aggregate   |
-| `teacher/groups`              | Complete, tested                                              | Rebuild presentation                                     | Med        | Keep all five queries; pair matrix becomes a reviewed contract addition (D6)                   |
-| `student/assessments`         | Complete, **GET untested**                                    | Rebuild presentation                                     | Med        | Preserve the submission editor; expose `published`                                             |
-| `teacher/classes`             | Complete, tested                                              | **Different screen**                                     | **High**   | **SHIPPED** (`a11c73c`, fixes `04f698b`)                                                       |
-| `teacher/submissions`         | Data layer exists as a route only                             | **No page**                                              | **High**   | **SHIPPED** (`6069f08`, fixes `d293685`)                                                       |
+| Page                          | Backend                                                       | Shape                                                    | Risk       | Verdict                                                                                          |
+| ----------------------------- | ------------------------------------------------------------- | -------------------------------------------------------- | ---------- | ------------------------------------------------------------------------------------------------ |
+| `student/peer-evaluation`     | Complete, tested                                              | Mockup read-only, real is a **form**                     | Low        | **SHIPPED** (`8dd7ad1`) — merged; threshold from the server (D5)                                 |
+| `student/quizzes`             | Complete, tested                                              | Rebuild presentation                                     | Low        | **Best-backed.** Sitting renders from the read-only retake (D4); no persisted practice attempt   |
+| `teacher/reports`             | Ratings half complete + tested; report-card half **no query** | Re-skin + new work                                       | Low/Med    | **Ship the ratings half first**; drop "At risk" and "Completion" (D3)                            |
+| `teacher/rubrics`             | Complete; `listRubricsForTeacher` **untested**                | Mockup read-only vs real **editor**                      | Low        | Add a read-only summary panel; render weight as relative, no sum claim (D8)                      |
+| `auth/login`, `auth/register` | Working, tested                                               | Pure re-skin                                             | **Lowest** | **SHIPPED** (`08ac76a`, fixes `46a4a58`)                                                         |
+| `teacher/code-tasks`          | Complete, tested                                              | Real = list + client detail; mockup = single-task detail | Med        | **SHIPPED** (`2aba04b`) — detail server-fetched; mutations stay a client island                  |
+| `student/code-submissions`    | Complete, tested                                              | Mockup read-only vs real **editor**                      | Med        | Merge, don't replace; one small contract extension                                               |
+| `student/courses`             | Complete, **GET untested**                                    | Rebuild presentation                                     | Med        | **SHIPPED** (`bc19afe`) — query extracted; distribution aggregate added; peer ratings not ported |
+| `teacher/groups`              | Complete, tested                                              | Rebuild presentation                                     | Med        | Keep all five queries; pair matrix becomes a reviewed contract addition (D6)                     |
+| `student/assessments`         | Complete, **GET untested**                                    | Rebuild presentation                                     | Med        | Preserve the submission editor; expose `published`                                               |
+| `teacher/classes`             | Complete, tested                                              | **Different screen**                                     | **High**   | **SHIPPED** (`a11c73c`, fixes `04f698b`)                                                         |
+| `teacher/submissions`         | Data layer exists as a route only                             | **No page**                                              | **High**   | **SHIPPED** (`6069f08`, fixes `d293685`)                                                         |
 
 ---
 
