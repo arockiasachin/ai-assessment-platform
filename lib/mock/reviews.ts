@@ -28,6 +28,20 @@ function groupOf(studentId: string): string | undefined {
   return MOCK_STUDENTS.find((student) => student.id === studentId)?.groupName ?? undefined
 }
 
+/**
+ * An item's confidence is its WEAKEST criterion's.
+ *
+ * The queue row prints one confidence next to a proposal the model split into
+ * criteria, and the acceptance rule is "every criterion must clear the floor",
+ * so an item cannot be more trustworthy than its least trustworthy line. The
+ * page also reasons from this number ("N of 4 criteria fell below the floor"),
+ * which only lines up with the criteria it lists if it is derived from them.
+ */
+function itemConfidence(suggestions: readonly GradeSuggestion[]): number {
+  if (suggestions.length === 0) return 1
+  return Math.min(...suggestions.map((suggestion) => suggestion.confidence))
+}
+
 const CRITERION_RATIONALE: Record<string, string> = {
   crit_reasoning:
     "The response isolates the variable and justifies each rearrangement. One step (dividing by a negative coefficient) is stated without comment.",
@@ -66,6 +80,18 @@ const OVERRIDE_DEDUCTION = 0.5
 const OVERRIDE_REASON = "0.5 marks deducted: the notation slip repeats in the final paragraph."
 
 /**
+ * The one submission carrying a criterion below the confidence floor.
+ *
+ * It has to be a submission the QUEUE actually holds, otherwise the "Low" badge
+ * on a queue row has no criterion to explain it — the model's low-confidence
+ * line used to sit on a student whose criteria are never rendered. This is
+ * `stu_gabriela`, whose first flag is "Low confidence on Use of evidence" and
+ * whose third criterion is exactly `crit_evidence`.
+ */
+const LOW_CONFIDENCE_DESCRIPTIVE_STUDENT_ID = "stu_gabriela"
+const LOW_CONFIDENCE_CRITERION_INDEX = 2
+
+/**
  * Build the four per-criterion suggestions for one descriptive submission,
  * scaled to the student's marks-table total.
  */
@@ -76,7 +102,9 @@ function buildSuggestions(studentIndex: number): GradeSuggestion[] {
   return MOCK_RUBRIC.criteria.map((criterion, criterionIndex) => {
     const raw = (criterion.maxPoints * total * wobble) / MOCK_RUBRIC.maxPoints
     const suggestedPoints = Math.min(criterion.maxPoints, Math.round(raw * 10) / 10)
-    const lowConfidence = studentIndex === 4 && criterionIndex === 2
+    const lowConfidence =
+      student.id === LOW_CONFIDENCE_DESCRIPTIVE_STUDENT_ID &&
+      criterionIndex === LOW_CONFIDENCE_CRITERION_INDEX
     const isOverridden =
       student.id === OVERRIDDEN_DESCRIPTIVE_STUDENT_ID && criterion.id === OVERRIDDEN_CRITERION_ID
     const state: ReviewState = isOverridden
@@ -162,7 +190,7 @@ const DESCRIPTIVE_REVIEW_ITEMS: ReviewQueueItem[] = descriptiveQueueStudents.map
       state,
       suggestedPoints: Math.round(suggested * 10) / 10,
       maxPoints: 30,
-      confidence: state === "NEEDS_REVIEW" ? 0.44 : 0.86,
+      confidence: itemConfidence(suggestions),
       flags: DESCRIPTIVE_REVIEW_FLAGS[index] ?? [],
       reviewer: index >= 4 ? "Dr. Meera Raman" : null,
       priority: index < 2 ? "high" : "normal",
