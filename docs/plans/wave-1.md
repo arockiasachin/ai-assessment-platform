@@ -1,8 +1,10 @@
 # Wave 1 — per-page port dossiers
 
-Status: **research complete. Slices 1 (`teacher/submissions`, D2) and 2 (the auth re-skin) have shipped.** — see §D2.
-Written against `dev` @ `a177868` (Wave 0 landed). Companion to
-[`mockup-to-backend.md`](./mockup-to-backend.md), which this document corrects in two places.
+Status: **research complete.** Three slices have shipped: `teacher/submissions` (D2, read-only queue),
+`student/peer-evaluation` (merged), and the auth re-skin — plus Wave 0's scope-aware shell and the
+`teacher/classes` / `teacher/offerings` split. Written against `dev` @ `a177868` (Wave 0 landed).
+Companion to [`mockup-to-backend.md`](./mockup-to-backend.md), which this document corrects in two
+places.
 
 Three read-only research passes produced field-by-field dossiers for all twelve Wave 1 pages
 (grading/rubrics, code-eval/groups, student-learning/auth). This consolidates them into an
@@ -82,7 +84,7 @@ Twelve pages. "Backend" = does the read path exist and is it tested.
 
 | Page                          | Backend                                                       | Shape                                                    | Risk       | Verdict                                                                                        |
 | ----------------------------- | ------------------------------------------------------------- | -------------------------------------------------------- | ---------- | ---------------------------------------------------------------------------------------------- |
-| `student/peer-evaluation`     | Complete, tested                                              | Mockup read-only, real is a **form**                     | Low        | **Merge** — keep the form, add the reporting cards; use the server's 3-rater threshold (D5)    |
+| `student/peer-evaluation`     | Complete, tested                                              | Mockup read-only, real is a **form**                     | Low        | **SHIPPED** (`8dd7ad1`) — merged; threshold from the server (D5)                               |
 | `student/quizzes`             | Complete, tested                                              | Rebuild presentation                                     | Low        | **Best-backed.** Sitting renders from the read-only retake (D4); no persisted practice attempt |
 | `teacher/reports`             | Ratings half complete + tested; report-card half **no query** | Re-skin + new work                                       | Low/Med    | **Ship the ratings half first**; drop "At risk" and "Completion" (D3)                          |
 | `teacher/rubrics`             | Complete; `listRubricsForTeacher` **untested**                | Mockup read-only vs real **editor**                      | Low        | Add a read-only summary panel; render weight as relative, no sum claim (D8)                    |

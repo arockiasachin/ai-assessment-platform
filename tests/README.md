@@ -1,8 +1,23 @@
 # Tests
 
-Vitest for unit and data-layer tests, plus DB-backed route/service tests. At
-`12e45be` the suite is **93 test files** (`ls tests/*.test.ts`). Tests never call
-a live LLM; `tests/setup.ts` forces `LLM_PROVIDER=mock`.
+Vitest for unit and data-layer tests, plus DB-backed route/service tests. The
+suite is **97 test files** (`ls tests/*.test.ts`). Tests never call a live LLM;
+`tests/setup.ts` forces `LLM_PROVIDER=mock`.
+
+## What you actually get without a database
+
+Worth knowing, because it is easy to misread a local run:
+
+|                      | files                              | tests          |
+| -------------------- | ---------------------------------- | -------------- |
+| With a test database | 97 passed, 2 skipped               | **648 passed** |
+| Without one          | 60 passed, 35 **error**, 2 skipped | 444 passed     |
+
+The 35 files do not fail an assertion — they refuse to run
+(`Refusing to run database tests against …`), so a run without a database reports
+them as failed files with zero failed tests. **A green-looking "0 failures" is
+therefore not the suite**; it is the two-thirds that needs no database. CI always
+provisions a database, so CI has always run the full 648.
 
 ## Running tests
 
@@ -24,8 +39,23 @@ additionally need the Docker daemon and the pinned `python:3.12-slim` /
 
 ## Local test database
 
-Start a throwaway pgvector Postgres on port **5433** (kept off the default 5432
-so it cannot clash with a developer's primary database):
+**If you already have Postgres running**, you do not need Docker — the only hard
+requirement is that the database name contains `test` (enforced by
+`tests/helpers/env.ts`). Create one alongside your development database and point
+the suite at it:
+
+```bash
+psql "$DATABASE_URL" -c "CREATE DATABASE assessment_test;"
+export TEST_DATABASE_URL="postgresql://<user>:<password>@localhost:5432/assessment_test"
+npm test
+```
+
+The harness drops and recreates the `public` schema in that database on every run,
+so it must be a database you are happy to lose — never point it at
+`assessment_ui`.
+
+Alternatively, start a throwaway pgvector Postgres on port **5433** (kept off the
+default 5432 so it cannot clash with a developer's primary database):
 
 ```bash
 docker run --name assessment-test-db \
