@@ -19,14 +19,13 @@ import {
   MOCK_MY_QUIZ_ATTEMPTS,
   MOCK_MY_QUIZ_RESPONSES,
   MOCK_MY_QUIZ_RESPONSE_TOTAL,
-  MOCK_QUIZ_QUESTIONS,
+  MOCK_QUIZ_QUESTION_BY_ID,
   formatDateTime,
   formatDuration,
   formatPercent,
   formatPoints,
   type QuizQuestion,
   type QuizResponseOutcome,
-  type QuizResponse,
 } from "@/lib/mock"
 
 import { InProgressQuestion } from "./in-progress-question"
@@ -195,25 +194,31 @@ export default function StudentQuizzesPage() {
   ]
 
   // ------------------------------------------------- post-submission results
-  const responseRows: ResponseRow[] = MOCK_QUIZ_QUESTIONS.map((question) => {
-    const response: QuizResponse | undefined = MOCK_MY_QUIZ_RESPONSES.find(
-      (entry) => entry.questionId === question.id,
-    )
-    return {
-      id: question.id,
-      question,
-      // A question with no response record was never attempted: it is reported
-      // as "not answered", never as incorrect.
-      outcome: response?.outcome ?? "UNANSWERED",
-      yourAnswer: optionSummary(question, response?.selectedOptionIds ?? []),
-      correctAnswer: optionSummary(
+  /**
+   * One row per question the graded sitting actually contained, derived from the
+   * responses rather than from the question bank. The responses are themselves
+   * built from the published questions, so a draft question cannot leak its
+   * answer key into a released result, and this row set can never drift from the
+   * points total quoted in the card footer.
+   */
+  const responseRows: ResponseRow[] = MOCK_MY_QUIZ_RESPONSES.flatMap((response): ResponseRow[] => {
+    const question = MOCK_QUIZ_QUESTION_BY_ID[response.questionId]
+    if (!question) return []
+    return [
+      {
+        id: question.id,
         question,
-        question.options.filter((option) => option.isCorrect).map((option) => option.id),
-      ),
-      pointsAwarded: response?.pointsAwarded ?? 0,
-      maxPoints: question.points,
-      explanation: question.explanation,
-    }
+        outcome: response.outcome,
+        yourAnswer: optionSummary(question, response.selectedOptionIds),
+        correctAnswer: optionSummary(
+          question,
+          question.options.filter((option) => option.isCorrect).map((option) => option.id),
+        ),
+        pointsAwarded: response.pointsAwarded,
+        maxPoints: question.points,
+        explanation: question.explanation,
+      },
+    ]
   })
 
   const responseColumns: Column<ResponseRow>[] = [

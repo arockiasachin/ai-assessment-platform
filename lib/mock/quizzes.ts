@@ -9,15 +9,20 @@ import type {
 } from "./types"
 
 /**
- * Quiz domain: the published question set for Quiz 1, its attempts, and the
- * per-question item analysis.
+ * Quiz domain: the Quiz 1 question bank, its attempts, and the per-question
+ * item analysis.
  *
- * Two deliberate edge cases:
- *  - question 5 is still a DRAFT (generated questions are drafts until the
- *    teacher publishes them), so it has no responses to analyse;
- *  - question 6 has only 3 responses — below the item-analysis threshold — so
+ * The bank holds five questions that were actually administered plus one
+ * generated question that is still a draft, so two deliberate edge cases are
+ * visible:
+ *  - the draft question cannot appear in an attempt or in the released results
+ *    (a student never saw it), and it has 0 responses to analyse;
+ *  - question 5 has only 3 responses — below the item-analysis threshold — so
  *    its difficulty and discrimination are `null` and it is flagged
  *    `insufficient-data` rather than being reported as if it were real.
+ *
+ * The five administered questions are worth 4 points each, so they sum to the
+ * 20 points in the shared marks table for Quiz 1.
  */
 
 export const MOCK_QUIZ_QUESTIONS: QuizQuestion[] = [
@@ -26,7 +31,7 @@ export const MOCK_QUIZ_QUESTIONS: QuizQuestion[] = [
     order: 1,
     prompt: "Which value of x satisfies 3x + 7 = 22?",
     type: "MULTIPLE_CHOICE",
-    points: 3,
+    points: 4,
     topic: "Solving linear equations",
     difficulty: 0.2,
     state: "published",
@@ -61,7 +66,7 @@ export const MOCK_QUIZ_QUESTIONS: QuizQuestion[] = [
     order: 2,
     prompt: "Simplify 4(2x − 3) + 5.",
     type: "MULTIPLE_CHOICE",
-    points: 3,
+    points: 4,
     topic: "Algebraic manipulation",
     difficulty: 0.35,
     state: "published",
@@ -131,7 +136,7 @@ export const MOCK_QUIZ_QUESTIONS: QuizQuestion[] = [
     order: 4,
     prompt: "Solve 5 − 2x = 1.",
     type: "MULTIPLE_CHOICE",
-    points: 3,
+    points: 4,
     topic: "Solving linear equations",
     difficulty: 0.3,
     state: "published",
@@ -163,7 +168,7 @@ export const MOCK_QUIZ_QUESTIONS: QuizQuestion[] = [
   },
   {
     id: "q_linear_5",
-    order: 5,
+    order: 6,
     prompt: "Which pair of lines is parallel?",
     type: "MULTIPLE_CHOICE",
     points: 4,
@@ -198,10 +203,10 @@ export const MOCK_QUIZ_QUESTIONS: QuizQuestion[] = [
   },
   {
     id: "q_linear_6",
-    order: 6,
+    order: 5,
     prompt: "Select every value of x that satisfies 2x − 3 ≤ 7.",
     type: "MULTIPLE_SELECT",
-    points: 3,
+    points: 4,
     topic: "Inequalities",
     difficulty: 0.5,
     state: "published",
@@ -230,6 +235,10 @@ export const MOCK_QUIZ_QUESTIONS: QuizQuestion[] = [
 /** Finalized Quiz 1 attempts. Scores come from the shared marks table. */
 const QUIZ_1 = MOCK_ASSESSMENT_BY_ID["asm_quiz1"]
 
+/** Question lookup for pages that iterate responses rather than the bank. */
+export const MOCK_QUIZ_QUESTION_BY_ID: Record<string, QuizQuestion> = Object.fromEntries(
+  MOCK_QUIZ_QUESTIONS.map((question) => [question.id, question]),
+)
 export const MOCK_QUIZ_ATTEMPTS: QuizAttemptSummary[] = MOCK_STUDENTS.filter(
   (student) => MOCK_MARKS.quiz1[student.id] !== null,
 ).map((student, index) => {
@@ -303,19 +312,8 @@ export const MOCK_ITEM_ANALYSIS: ItemAnalysis[] = [
     note: "Sign handling is the main source of error.",
   },
   {
-    questionId: "q_linear_5",
-    order: 5,
-    prompt: "Which pair of lines is parallel?",
-    topic: "Parallel & perpendicular",
-    responses: 0,
-    percentCorrect: null,
-    discrimination: null,
-    flag: "insufficient-data",
-    note: "Draft question — not yet published, so there are no responses.",
-  },
-  {
     questionId: "q_linear_6",
-    order: 6,
+    order: 5,
     prompt: "Select every value of x that satisfies 2x − 3 ≤ 7.",
     topic: "Inequalities",
     responses: 3,
@@ -323,6 +321,17 @@ export const MOCK_ITEM_ANALYSIS: ItemAnalysis[] = [
     discrimination: null,
     flag: "insufficient-data",
     note: "Only 3 responses; below the 5-response threshold for item analysis.",
+  },
+  {
+    questionId: "q_linear_5",
+    order: 6,
+    prompt: "Which pair of lines is parallel?",
+    topic: "Parallel & perpendicular",
+    responses: 0,
+    percentCorrect: null,
+    discrimination: null,
+    flag: "insufficient-data",
+    note: "Draft question — not yet published, so it was never administered and there are no responses.",
   },
 ]
 
@@ -341,15 +350,18 @@ export const MOCK_MY_QUIZ_ATTEMPTS: QuizAttemptSummary[] = MOCK_QUIZ_ATTEMPTS.fi
  *
  * This is the raw student input the post-submission payload is built from, so
  * the awarded points are derived (see `scoreSelection`) instead of typed in
- * twice: five questions fully correct and one multi-select answered partially,
- * which is exactly the 18 / 20 in the shared marks table.
+ * twice. The four single-answer questions are correct and the multi-select is
+ * answered partly, which is exactly the 18 / 20 in the shared marks table.
+ *
+ * The draft question is deliberately absent: a student cannot have answered a
+ * question that was never published, and `MOCK_MY_QUIZ_RESPONSES` below is
+ * built from the same `published` filter the sitting itself uses.
  */
 const MY_QUIZ_1_SELECTIONS: Record<string, string[]> = {
   q_linear_1: ["q1_a"],
   q_linear_2: ["q2_a"],
   q_linear_3: ["q3_a"],
   q_linear_4: ["q4_a"],
-  q_linear_5: ["q5_a"],
   // Two options are correct; the student picked one, so partial credit applies.
   q_linear_6: ["q6_a"],
 }
@@ -390,15 +402,22 @@ function scoreSelection(
 /**
  * Per-question results the student sees AFTER submitting Quiz 1.
  *
- * Every question in the sitting has a row, including the one answered
- * partially. Summing `pointsAwarded` gives 18, the same figure as
+ * Every ADMINISTERED question in the sitting has a row — including the one
+ * answered partially — and nothing else. A draft question was never published,
+ * so it cannot appear here (that would both leak its answer key and contradict
+ * the 0 responses reported for it in the item analysis). Summing
+ * `pointsAwarded` gives 18, the same figure as
  * `MOCK_MY_QUIZ_ATTEMPTS[0].score`.
  */
-export const MOCK_MY_QUIZ_RESPONSES: QuizResponse[] = MOCK_QUIZ_QUESTIONS.map((question) => ({
-  id: `resp_quiz1_${question.id}`,
-  questionId: question.id,
-  ...scoreSelection(question, MY_QUIZ_1_SELECTIONS[question.id]),
-}))
+export const MOCK_MY_QUIZ_RESPONSES: QuizResponse[] = MOCK_QUIZ_QUESTIONS.filter(
+  (question) => question.state === "published",
+)
+  .sort((left, right) => left.order - right.order)
+  .map((question) => ({
+    id: `resp_quiz1_${question.id}`,
+    questionId: question.id,
+    ...scoreSelection(question, MY_QUIZ_1_SELECTIONS[question.id]),
+  }))
 
 /** Points earned across the responses above. Equals the attempt score (18). */
 export const MOCK_MY_QUIZ_RESPONSE_TOTAL = MOCK_MY_QUIZ_RESPONSES.reduce(
