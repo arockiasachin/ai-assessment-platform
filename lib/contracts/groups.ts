@@ -355,6 +355,30 @@ export const suggestedIndividualGradeSchema = z.object({
 })
 export type SuggestedIndividualGradeValue = z.infer<typeof suggestedIndividualGradeSchema>
 
+/**
+ * Instructor-only: the evaluator↔evaluatee pair matrix.
+ *
+ * Decision D6 (`docs/plans/wave-1.md` §4) resolved that a teacher may see who
+ * rated whom. It is standard CATME practice — an instructor needs the pairs to
+ * spot collusion and free-riding — and the anonymity promise is
+ * student-to-student, not student-to-instructor.
+ *
+ * This shape must never be attached to a student payload. A student's `received`
+ * aggregate stays identity-free (`receivedAggregateSchema`), and
+ * `tests/groups-peer-evaluation.test.ts` stringifies it to prove so.
+ */
+export const peerEvaluationPairSchema = z.object({
+  evaluatorId: z.string(),
+  evaluatorName: z.string(),
+  evaluateeId: z.string(),
+  evaluateeName: z.string(),
+  status: z.enum(["DRAFT", "SUBMITTED"]),
+  /** Dimension values; `null` while the rating is still a draft. */
+  ratings: peerEvaluationRatingsSchema.nullable(),
+  submittedAt: z.string().nullable(),
+})
+export type PeerEvaluationPair = z.infer<typeof peerEvaluationPairSchema>
+
 export const groupAnalysisSchema = z.object({
   groupId: z.string(),
   memberIds: z.array(z.string()),
@@ -372,6 +396,11 @@ export const groupAnalysisSchema = z.object({
     }),
   ),
   contributionEvidence: contributionEvidenceSchema,
+  /**
+   * Instructor-only (D6). Every row names both sides of the rating; a `DRAFT`
+   * row carries no values. Never part of a student payload.
+   */
+  peerEvaluationPairs: z.array(peerEvaluationPairSchema),
   suggestedIndividualGrades: z.array(suggestedIndividualGradeSchema).nullable(),
 })
 export type GroupAnalysisResponse = z.infer<typeof groupAnalysisSchema>

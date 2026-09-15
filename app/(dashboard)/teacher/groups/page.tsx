@@ -50,6 +50,7 @@ export default async function TeacherGroupsPage() {
         entry.analysis,
         entry.contributionEvidence,
         entry.suggestedIndividualGrades,
+        entry.peerEvaluationPairs,
       ),
     )
     milestones = milestoneList.milestones

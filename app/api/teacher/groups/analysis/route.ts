@@ -52,6 +52,7 @@ export async function GET(request: Request) {
           entry.analysis,
           entry.contributionEvidence,
           entry.suggestedIndividualGrades,
+          entry.peerEvaluationPairs,
         ),
       ),
       cohortProgress: result.cohortProgress.map((entry) => ({
