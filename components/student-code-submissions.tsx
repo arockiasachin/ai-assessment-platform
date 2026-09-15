@@ -1,107 +1,68 @@
 "use client"
 
 import { useState } from "react"
+import { useRouter } from "next/navigation"
 import { Loader2, Send } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { CodeBlock } from "@/components/ui/code-block"
+import { MetricRow } from "@/components/ui/metric-row"
+import { StatusPill } from "@/components/ui/status-pill"
 import type { StudentCodeTask, TestRunResponse } from "@/lib/contracts/code-eval"
+import { trimNumber } from "@/lib/mock/format"
 
 /**
- * Student code-submission workspace.
+ * The code editor and the submit button — the only way a student hands in code,
+ * which is why the port keeps this as a Client Component while everything around
+ * it (task picker, KPI tiles, brief, per-test results, runs) is rendered by the
+ * Server Component from server-fetched data.
  *
- * The student only ever sees their own tasks and runs. Submission limits and
- * enrollment are enforced server-side; the client merely reflects what the
- * server reports.
+ * This island makes exactly one request, the `POST` that starts a sandboxed run.
+ * It no longer refetches the task's runs on selection, and it does not own the
+ * runs list: a successful submit calls `router.refresh()`, which re-renders the
+ * Server Component so the runs and per-test tables pick up the new evidence. The
+ * returned run is also rendered inline so the student sees the outcome without
+ * leaving the editor.
+ *
+ * The starter code stays a `placeholder`, exactly as before the port: a value
+ * would make unchanged starter code submittable and spend a run from the cap.
  */
 
-type Props = { initialTasks: StudentCodeTask[] }
+type Props = { task: StudentCodeTask }
 
-async function call<T>(url: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(url, {
-    headers: { "Content-Type": "application/json" },
-    ...init,
-  })
-  const body: { success?: boolean; message?: string } = await response.json().catch(() => ({}))
-  if (!response.ok || body.success === false) {
-    throw new Error(body.message ?? "Request failed.")
-  }
-  return body as T
-}
-
-function statusVariant(status: string): "default" | "secondary" | "destructive" | "outline" {
-  if (status === "PASSED") return "default"
-  if (status === "FAILED") return "destructive"
-  return "secondary"
-}
-
-/**
- * Deterministic date rendering: without an explicit locale the Node server and
- * the browser can format the same timestamp differently, which raises a React
- * hydration error. See the same helper in `student-quiz-attempts.tsx`.
- */
-function formatDateTime(iso: string) {
-  return new Date(iso).toLocaleString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  })
-}
-
-export function StudentCodeSubmissions({ initialTasks }: Props) {
-  const [tasks, setTasks] = useState(initialTasks)
-  const [selectedId, setSelectedId] = useState<string | null>(null)
+export function StudentCodeSubmissionEditor({ task }: Props) {
+  const router = useRouter()
   const [source, setSource] = useState("")
-  const [runs, setRuns] = useState<TestRunResponse[]>([])
+  const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [busy, setBusy] = useState(false)
-
-  const selected = tasks.find((task) => task.assessmentId === selectedId) ?? null
-
-  async function refreshTasks() {
-    const body = await call<{ success: true; tasks: StudentCodeTask[] }>(
-      "/api/student/code-submissions",
-    )
-    setTasks(body.tasks)
-  }
-
-  async function selectTask(assessmentId: string) {
-    setSelectedId(assessmentId)
-    setMessage(null)
-    setError(null)
-    setBusy(true)
-    try {
-      const body = await call<{ success: true; runs: TestRunResponse[] }>(
-        `/api/student/code-submissions?assessmentId=${encodeURIComponent(assessmentId)}`,
-      )
-      setRuns(body.runs)
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Request failed.")
-    } finally {
-      setBusy(false)
-    }
-  }
+  const [returned, setReturned] = useState<TestRunResponse | null>(null)
 
   async function submit() {
-    if (!selected) return
     setBusy(true)
     setMessage(null)
     setError(null)
     try {
-      const body = await call<{ success: true; run: TestRunResponse }>(
-        "/api/student/code-submissions",
-        {
-          method: "POST",
-          body: JSON.stringify({ assessmentId: selected.assessmentId, sourceCode: source }),
-        },
+      const response = await fetch("/api/student/code-submissions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ assessmentId: task.assessmentId, sourceCode: source }),
+      })
+      const body: { success?: boolean; message?: string; run?: TestRunResponse } = await response
+        .json()
+        .catch(() => ({}))
+      if (!response.ok || body.success === false || !body.run) {
+        throw new Error(body.message ?? "Request failed.")
+      }
+      setReturned(body.run)
+      setMessage(
+        `Run complete: ${body.run.passedCount}/${body.run.totalCount} tests passed. ` +
+          "Results are evidence for your teacher, not a published grade.",
       )
-      setRuns((prev) => [body.run, ...prev])
-      setMessage(`Run complete: ${body.run.passedCount}/${body.run.totalCount} tests passed.`)
-      await refreshTasks()
+      // Re-render the Server Component so the runs and results tables include
+      // this run. Not a client-side data fetch — the server already owns them.
+      router.refresh()
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Request failed.")
     } finally {
@@ -111,33 +72,56 @@ export function StudentCodeSubmissions({ initialTasks }: Props) {
 
   return (
     <div className="grid gap-4">
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base">Code tasks</CardTitle>
-          <p className="text-xs text-muted-foreground">
-            Your code runs in an isolated container. Results are evidence for your teacher; they do
-            not publish a grade.
-          </p>
-        </CardHeader>
-        <CardContent className="flex flex-wrap gap-2">
-          {tasks.length === 0 && (
-            <p className="text-sm text-muted-foreground">No code tasks are assigned to you yet.</p>
-          )}
-          {tasks.map((task) => (
-            <Button
-              key={task.assessmentId}
-              variant={task.assessmentId === selectedId ? "default" : "outline"}
-              size="sm"
-              onClick={() => void selectTask(task.assessmentId)}
-            >
-              {task.assessmentTitle}
-              <Badge variant="secondary" className="ml-2">
-                {task.submissionsUsed}/{task.maxSubmissions} runs
-              </Badge>
-            </Button>
-          ))}
-        </CardContent>
-      </Card>
+      <div className="space-y-0.5">
+        <MetricRow
+          label="Test cases in this task"
+          value={<span className="font-mono tabular-nums">{task.testCaseCount}</span>}
+          hint="The suite runs server-side and is not shown case by case."
+        />
+        <MetricRow
+          label="Runs used"
+          value={
+            <span className="font-mono tabular-nums">
+              {task.submissionsUsed} / {task.maxSubmissions}
+            </span>
+          }
+          hint="Every sandboxed run counts, whether it passes or not."
+        />
+      </div>
+
+      {!task.canSubmit && task.blockedReason && (
+        <p role="alert" className="text-sm text-destructive">
+          {task.blockedReason}
+        </p>
+      )}
+
+      <div className="grid gap-1.5">
+        <label htmlFor="student-code-source" className="text-sm font-medium">
+          Your solution
+        </label>
+        <p className="text-sm text-muted-foreground">
+          The starter code is shown in the editor until you type over it. Runs are capped and
+          sandboxed; nothing here publishes a mark.
+        </p>
+        <textarea
+          id="student-code-source"
+          className="min-h-64 w-full rounded-md border border-input bg-background p-3 font-mono text-sm"
+          aria-label={`Code submission for ${task.assessmentTitle}`}
+          placeholder={task.starterCode ?? "Write your solution here"}
+          value={source}
+          onChange={(event) => setSource(event.target.value)}
+        />
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2">
+        <Button disabled={busy || !task.canSubmit || !source.trim()} onClick={() => void submit()}>
+          {busy ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
+          <span className="ml-1">Submit for evaluation</span>
+        </Button>
+        <Badge variant="secondary">
+          {task.submissionsUsed} / {task.maxSubmissions} runs used
+        </Badge>
+      </div>
 
       {message && (
         <p
@@ -153,107 +137,33 @@ export function StudentCodeSubmissions({ initialTasks }: Props) {
         </p>
       )}
 
-      {selected && (
-        <>
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base">
-                {selected.assessmentTitle}
-                <span className="ml-2 text-xs font-normal text-muted-foreground">
-                  {selected.language === "python" ? "Python 3.12" : "Node.js 22"} ·{" "}
-                  {selected.testCaseCount} test cases · due {formatDateTime(selected.dueDate)}
+      {returned && returned.results.length > 0 && (
+        <div className="grid gap-2">
+          <p className="text-xs font-medium text-muted-foreground">
+            Per-test results from this run
+          </p>
+          <ul className="grid gap-2">
+            {returned.results.map((result) => (
+              <li
+                key={result.testCaseId}
+                className="rounded border border-border/70 bg-muted/30 p-2 text-xs"
+              >
+                <StatusPill status={result.passed ? "passed" : "failed"} dot />
+                <span className="ml-2 font-medium">{result.name}</span>
+                <span className="ml-2 text-muted-foreground">
+                  {result.category} · {trimNumber(result.earnedPoints)}/{trimNumber(result.points)}{" "}
+                  pts
                 </span>
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="grid gap-3">
-              {selected.instructions && (
-                <p className="rounded-lg border border-border bg-muted/30 p-3 text-sm">
-                  {selected.instructions}
-                </p>
-              )}
-              {!selected.canSubmit && (
-                <p className="text-sm text-destructive">{selected.blockedReason}</p>
-              )}
-              <textarea
-                className="min-h-64 w-full rounded-md border border-input bg-background p-3 font-mono text-sm"
-                aria-label={`Code submission for ${selected.assessmentTitle}`}
-                placeholder={selected.starterCode ?? "Write your solution here"}
-                value={source}
-                onChange={(event) => setSource(event.target.value)}
-              />
-              <div>
-                <Button
-                  disabled={busy || !selected.canSubmit || !source.trim()}
-                  onClick={() => void submit()}
-                >
-                  {busy ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
-                  <span className="ml-1">Submit for evaluation</span>
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base">Your runs</CardTitle>
-            </CardHeader>
-            <CardContent className="grid gap-3">
-              {runs.map((testRun) => (
-                <div key={testRun.id} className="rounded-lg border border-border p-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm">
-                      {testRun.passedCount}/{testRun.totalCount} passed · {testRun.earnedPoints}/
-                      {testRun.maxPoints} pts
-                    </span>
-                    <Badge variant={statusVariant(testRun.status)}>{testRun.status}</Badge>
-                  </div>
-                  {testRun.timedOut && (
-                    <p className="mt-1 text-xs text-destructive">
-                      Stopped by the time limit before all tests completed.
-                    </p>
-                  )}
-                  {testRun.memoryExceeded && (
-                    <p className="mt-1 text-xs text-destructive">Stopped by the memory limit.</p>
-                  )}
-                  <details className="mt-2">
-                    <summary className="cursor-pointer text-xs text-muted-foreground">
-                      Per-test results
-                    </summary>
-                    <div className="mt-2 grid gap-2">
-                      {testRun.results.map((result) => (
-                        <div
-                          key={result.testCaseId}
-                          className="rounded border border-border/70 bg-muted/30 p-2 text-xs"
-                        >
-                          <span
-                            className={
-                              result.passed
-                                ? "text-emerald-700 [@media(prefers-color-scheme:dark)]:text-emerald-400"
-                                : "text-destructive"
-                            }
-                          >
-                            {result.passed ? "PASS" : "FAIL"}
-                          </span>
-                          <span className="ml-2 font-medium">{result.name}</span>
-                          <span className="ml-2 text-muted-foreground">{result.category}</span>
-                          <p className="mt-1 text-muted-foreground">{result.message}</p>
-                          {result.stderr && (
-                            <pre className="mt-1 max-h-24 overflow-auto whitespace-pre-wrap text-destructive">
-                              {result.stderr}
-                            </pre>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  </details>
-                </div>
-              ))}
-              {runs.length === 0 && (
-                <p className="text-sm text-muted-foreground">No runs yet for this task.</p>
-              )}
-            </CardContent>
-          </Card>
-        </>
+                {result.message && <p className="mt-1 text-muted-foreground">{result.message}</p>}
+                {result.stderr && (
+                  <CodeBlock dense wrap maxHeight="sm" className="mt-1">
+                    {result.stderr}
+                  </CodeBlock>
+                )}
+              </li>
+            ))}
+          </ul>
+        </div>
       )}
     </div>
   )
