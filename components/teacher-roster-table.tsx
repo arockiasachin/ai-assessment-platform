@@ -23,7 +23,10 @@ import type { TeacherRosterRow } from "@/lib/teacher-roster"
  * narrowed locally, so there is no fetch and nothing to go stale.
  */
 export function TeacherRosterTable({ rows }: { rows: TeacherRosterRow[] }) {
-  const [offering, setOffering] = useState(rows[0]?.offeringId ?? ALL)
+  // Default to every offering rather than the first one: a teacher with several
+  // offerings would otherwise see one roster by default with no indication the
+  // others existed. The mockup is single-course, but the data is not.
+  const [offering, setOffering] = useState(ALL)
   const [query, setQuery] = useState("")
   const [marking, setMarking] = useState(ALL)
 
@@ -31,7 +34,10 @@ export function TeacherRosterTable({ rows }: { rows: TeacherRosterRow[] }) {
     const seen = new Map<string, string>()
     for (const row of rows)
       if (!seen.has(row.offeringId)) seen.set(row.offeringId, row.offeringLabel)
-    return [...seen].map(([value, label]) => ({ value, label }))
+    return [
+      { value: ALL, label: "All offerings" },
+      ...[...seen].map(([value, label]) => ({ value, label })),
+    ]
   }, [rows])
 
   const scoped = useMemo(
@@ -53,9 +59,20 @@ export function TeacherRosterTable({ rows }: { rows: TeacherRosterRow[] }) {
     })
   }, [scoped, query, marking])
 
-  // Every tile derives from the scoped rows, so none can contradict the table.
+  // The tiles describe the selected offering, NOT the filtered view — so with the
+  // Marking filter set to "Nothing released yet" the table can be all em dashes
+  // while the Marked tile still reads its real count. That is deliberate (a tile
+  // is a property of the cohort, not of the current search); `resultCount` is the
+  // one figure that follows the filters.
   const enrolled = scoped.length
-  const groupsFormed = new Set(scoped.map((row) => row.groupName).filter(Boolean)).size
+  // Scoped to the offering as well as the name: group names are unique only
+  // within an offering (`@@unique([offeringId, name])`), so counting bare names
+  // across offerings would undercount two teams that share a name.
+  const groupsFormed = new Set(
+    scoped
+      .filter((row) => row.groupName !== null)
+      .map((row) => `${row.offeringId}:${row.groupName}`),
+  ).size
   const notPlaced = scoped.filter((row) => row.groupName === null).length
   const marked = scoped.filter((row) => row.avgPercent !== null).length
 

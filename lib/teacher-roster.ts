@@ -68,7 +68,7 @@ export function offeringLabel(offering: {
   classRoom: { name: string; section: string | null }
   term: string
   /** `CourseOffering.academicYear` is an `Int` in the schema. */
-  academicYear: number | string
+  academicYear: number
 }): string {
   const room = offering.classRoom.section
     ? `${offering.classRoom.name} ${offering.classRoom.section}`
@@ -144,7 +144,7 @@ export async function listRosterForTeacher(user: AuthUser): Promise<TeacherRoste
               registerNumber: true,
               user: { select: { email: true } },
               groupMemberships: {
-                select: { group: { select: { name: true, offeringId: true } } },
+                select: { leftAt: true, group: { select: { name: true, offeringId: true } } },
               },
             },
           },
@@ -155,39 +155,24 @@ export async function listRosterForTeacher(user: AuthUser): Promise<TeacherRoste
   })
 
   const assessmentIds = offerings.flatMap((offering) => offering.assessments.map((a) => a.id))
-  if (assessmentIds.length === 0) {
-    return offerings.flatMap((offering) =>
-      offering.enrollments.map((enrollment) =>
-        toTeacherRosterRow({
-          offeringId: offering.id,
-          offeringLabel: offeringLabel(offering),
-          studentId: enrollment.student.id,
-          studentName: enrollment.student.fullName,
-          registerNumber: enrollment.student.registerNumber,
-          email: enrollment.student.user.email,
-          groupName:
-            enrollment.student.groupMemberships.find((m) => m.group.offeringId === offering.id)
-              ?.group.name ?? null,
-          marks: [],
-          submittedCount: 0,
-          assessmentCount: 0,
-        }),
-      ),
-    )
-  }
 
-  const [grades, submissions] = await Promise.all([
-    prisma.grade.findMany({
-      where: { assessmentId: { in: assessmentIds }, publishedAt: { not: null } },
-      select: { assessmentId: true, studentId: true, points: true, maxPoints: true },
-    }),
-    prisma.submission.findMany({
-      // A saved draft is not a hand-in, so it is excluded here for the same
-      // reason the submissions queue excludes it from its "Submitted" tile.
-      where: { assessmentId: { in: assessmentIds }, status: { not: "DRAFT" } },
-      select: { assessmentId: true, studentId: true },
-    }),
-  ])
+  // Skip the bulk reads when the teacher has no assessments at all, rather than
+  // duplicating the row-building below. Empty maps produce the same result.
+  const [grades, submissions] =
+    assessmentIds.length === 0
+      ? [[], []]
+      : await Promise.all([
+          prisma.grade.findMany({
+            where: { assessmentId: { in: assessmentIds }, publishedAt: { not: null } },
+            select: { assessmentId: true, studentId: true, points: true, maxPoints: true },
+          }),
+          prisma.submission.findMany({
+            // A saved draft is not a hand-in, so it is excluded here for the same
+            // reason the submissions queue excludes it from its "Submitted" tile.
+            where: { assessmentId: { in: assessmentIds }, status: { not: "DRAFT" } },
+            select: { assessmentId: true, studentId: true },
+          }),
+        ])
 
   const offeringOfAssessment = new Map<string, string>()
   for (const offering of offerings) {
@@ -224,9 +209,16 @@ export async function listRosterForTeacher(user: AuthUser): Promise<TeacherRoste
         studentName: enrollment.student.fullName,
         registerNumber: enrollment.student.registerNumber,
         email: enrollment.student.user.email,
+        // `leftAt === null` is required: a soft-removed membership keeps its row
+        // (`lib/groups/service.ts` sets `leftAt` rather than deleting), and every
+        // other read in the repo filters it. Without it a student the teacher
+        // removed still shows as placed, and is missing from "Not placed".
+        // `find` is safe because `@@unique([groupId, studentId])` plus the
+        // active-membership rule leaves at most one per offering.
         groupName:
-          enrollment.student.groupMemberships.find((m) => m.group.offeringId === offering.id)?.group
-            .name ?? null,
+          enrollment.student.groupMemberships.find(
+            (m) => m.leftAt === null && m.group.offeringId === offering.id,
+          )?.group.name ?? null,
         marks: marksByKey.get(key) ?? [],
         submittedCount: submittedByKey.get(key) ?? 0,
         assessmentCount: offering.assessments.length,

@@ -57,7 +57,7 @@ describe("nav scope: mockup tree is unchanged", () => {
     }
   })
 
-  it("returns the full, unfiltered section list", () => {
+  it("returns the section list a mockup page would link", () => {
     for (const role of MOCKUP_ROLES) {
       const total = navSectionsFor(role, "mockup").reduce((n, s) => n + s.items.length, 0)
       const expected = allNavItems().filter((entry) => entry.role === role).length
@@ -168,6 +168,36 @@ describe("app-only nav items", () => {
         `${item.href} has no page under app/(dashboard)`,
       ).toBe(true)
     }
+  })
+
+  it("cannot leak into the mockup tree through a raw-constant consumer", () => {
+    // The regression this guards: `app/mockup/page.tsx` iterated the raw
+    // `NAV_SECTIONS` instead of `navSectionsFor(role, "mockup")`, so the mockup
+    // index rendered a card linking to the real `/teacher/offerings` — walking a
+    // reviewer out of the mockup tree and into the authenticated app. The tests
+    // above could not see it, because they only exercise the helpers while the
+    // index read the constant directly.
+    //
+    // So assert on the SOURCE, not just the helpers: no file under `app/mockup`
+    // may reference `NAV_SECTIONS`. Mockup pages must go through
+    // `navSectionsFor`, which is what applies the `appOnly` filter.
+    const offenders: string[] = []
+    const walk = (dir: string) => {
+      for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+        const full = path.join(dir, entry.name)
+        if (entry.isDirectory()) walk(full)
+        else if (entry.name.endsWith(".tsx") || entry.name.endsWith(".ts")) {
+          // Strip comments: prose may legitimately name the constant.
+          const code = fs
+            .readFileSync(full, "utf8")
+            .replace(/\/\*[\s\S]*?\*\//g, "")
+            .replace(/\/\/.*$/gm, "")
+          if (/\bNAV_SECTIONS\b/.test(code)) offenders.push(path.relative(repoRoot, full))
+        }
+      }
+    }
+    walk(mockupDir)
+    expect(offenders, "mockup files must use navSectionsFor, not NAV_SECTIONS").toEqual([])
   })
 })
 

@@ -82,7 +82,7 @@ describe("toTeacherRosterRow", () => {
     expect(result.avgPercent).not.toBe(0)
   })
 
-  it("returns null when the only mark is a genuine zero out of nothing graded", () => {
+  it("keeps a genuine zero mark as 0, distinct from no mark at all", () => {
     // A real 0/10 is a scored zero, so it must average to 0 — the distinction is
     // between "no mark" (null) and "scored zero" (0).
     const result = toTeacherRosterRow(row({ marks: [{ points: 0, maxPoints: 10 }] }))

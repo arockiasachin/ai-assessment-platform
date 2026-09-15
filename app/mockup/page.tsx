@@ -12,10 +12,10 @@ import {
 
 import {
   BRAND,
-  NAV_SECTIONS,
   PREVIEW_ROLES,
   ROLE_META,
   allNavItems,
+  navSectionsFor,
 } from "@/components/shell/nav-config"
 import { PageHeader } from "@/components/shell/page-header"
 import { SectionCard } from "@/components/ui/section-card"
@@ -138,7 +138,14 @@ export default function MockupIndexPage() {
           </div>
 
           <div className="space-y-6">
-            {NAV_SECTIONS[role].map((section) => (
+            {/*
+             * `navSectionsFor(role, "mockup")`, NOT the raw `NAV_SECTIONS`: it is
+             * what filters out `appOnly` items, which have no mockup page to link
+             * to. Reading the raw constant here rendered a card pointing at the
+             * real `/teacher/offerings`, walking the reviewer out of the mockup
+             * tree and into the authenticated app.
+             */}
+            {navSectionsFor(role, "mockup").map((section) => (
               <div key={section.id}>
                 <h3 className="mb-2 text-xs font-semibold tracking-wider text-muted-foreground uppercase">
                   {section.heading}
