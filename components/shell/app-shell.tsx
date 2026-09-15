@@ -6,7 +6,7 @@ import { PanelLeftClose, PanelLeftOpen } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
-import { ROLE_META, roleFromPathname, type MockupRole } from "@/components/shell/nav-config"
+import { ROLE_META, BRAND, roleFromPathname, type MockupRole } from "@/components/shell/nav-config"
 import { SideNav } from "@/components/shell/side-nav"
 import { TopBar } from "@/components/shell/top-bar"
 
@@ -58,6 +58,19 @@ export function AppShell({ children, role: roleProp, defaultRole = "teacher" }: 
           )}
         >
           <div className="flex h-14 shrink-0 items-center gap-2 border-b border-border px-2">
+            {/*
+             * Icon-only rail (md–lg, and the collapsed lg rail): the role label
+             * is `sr-only` and the collapse toggle only exists from `lg`, so
+             * without a mark this 56px strip is an empty band with a border
+             * under it. The top bar's brand mark anchors it, and stays
+             * `aria-hidden` because the role label still names the workspace.
+             */}
+            <span
+              aria-hidden="true"
+              className="mx-auto hidden size-7 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground md:flex lg:hidden"
+            >
+              <BRAND.icon className="size-4" />
+            </span>
             <span
               className={cn(
                 "truncate px-1.5 text-xs font-semibold tracking-wider text-muted-foreground uppercase",

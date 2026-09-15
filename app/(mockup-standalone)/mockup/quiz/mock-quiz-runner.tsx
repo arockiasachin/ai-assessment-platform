@@ -171,7 +171,7 @@ export function MockQuizRunner() {
                         className={cn(
                           "flex cursor-pointer items-start gap-3 rounded-lg border p-3 transition-colors",
                           isSelected
-                            ? "border-primary bg-primary/5"
+                            ? "border-primary bg-primary/5 dark:bg-primary/10"
                             : "border-border hover:bg-muted/50",
                         )}
                       >
