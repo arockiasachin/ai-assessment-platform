@@ -150,6 +150,11 @@ If **E2** resolves to "derive location as `classRoom.name`", rows 5, 6, 8 and 9 
   else in the repo maintains this flag, which is precisely why the reader must filter on `startAt` and
   not on it. The seed is where that gets documented by example.
 - **Do not invent a `topic` or a `sizeLabel`** to fill the mockup's columns (decisions M1, M3).
+- **Do not leave the offering as a ~50-week year.** B2 established that a "teaching week" is one of a
+  semester's **15 instructional weeks**, and the current seed runs `2026-01-05 → 2026-12-18` with all
+  assessments in November–December — so a weekly series would be empty for the first six weeks and
+  meaningless everywhere. **Set `startsOn`/`endsOn` to a realistic 15-week term and move the assessment
+  due dates inside it.** This is a seed requirement created by B2, not a preference.
 - **Do not add a second offering just for this.** One active and one past already exist, which is
   exactly what cross-scope isolation needs.
 
@@ -334,31 +339,149 @@ needs no change.
 
 ## 5. Decisions
 
-**Resolved:** M1 (drop topic), M2 (list-only), E1 (add `Assessment.releasedAt` — now slice S5),
-E2 (derive location as `classRoom.name`), E3 (filter `ASSESSMENT` events out of "All events").
+**Resolved for Wave 2's shape:** M1 (drop topic), M2 (list-only), E1 (add `Assessment.releasedAt` — now
+slice S5), E2 (derive location as `classRoom.name`), E3 (filter `ASSESSMENT` events out of "All events").
 
-**Outstanding: Group B only** — and it is settled **now** rather than deferred, per the owner. Its
-questions are below; answering them unblocks Wave 3 and does not block this wave's slices.
+**Group B is settled now** rather than deferred, per the owner, so Wave 3 is not gated on an undefined
+metric. It was researched rather than guessed — see §5.1.
 
-### Group B — settled now, so Wave 3 is unblocked
+### 5.1 The institutional convention, researched
 
-Wave 2's slices do not depend on these, but they gate the analytics and retake pages, and leaving six
-undefined metrics in the plan is how a wave ends up guessing. Each is a **human call**.
+The metrics below are not free inventions. VIT Vellore's academic regulations define a relative-grading
+model, and the platform is built for that institution, so the natural definitions are the institution's
+own. Source: [`Academic Regulations`](https://vit.ac.in/sites/default/files/academic/Academic-Regulations.pdf)
+(§9.5, Table-5) and the [FAT process manual](https://vitonline.in/wp-content/uploads/2025/02/VIT-OL-Examinations-.pdf).
 
-- **B1. What is "topic mastery"?** Options: (a) correct/total over `Question.subtopic` across the
-  offering's responses; (b) percentage of a _student's_ questions in that subtopic; (c) average of
-  per-student topic percentages. (a) and (c) can differ by double digits on seeded data. The threshold
-  also needs a decision — reuse `CourseOffering.analyticsSettings` rather than a new constant.
-- **B2. What is a "score-trend series"?** The mockup's `W1..W6` with a deliberate `null` week has no
-  schema equivalent. Bucketing by calendar week between `startsOn`/`endsOn` is the obvious reading —
-  but the seed's offering spans ~50 weeks, which makes a six-point chart absurd. **This is a product
-  question: is "teaching week" a real noun?**
-- **B3. "At risk".** Wave 1 **D3** already decided it has no backing and dropped it. Keep dropped
-  unless someone defines the signal and threshold.
-- **B4. `completionPercent`.** Matches nothing derivable. **Drop, consistently** — not a real call.
-- **B6. `RetakeRecommendation.reason`.** The mockup shows a _diagnosis_ ("two sign errors on Q4"). The
-  platform can honestly produce "3 of 5 failed" and nothing more; a diagnosis means asking a model,
-  which is a new feature with its own explainability contract.
+| Rule                          | Value                                                                                                                                                     |
+| ----------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Continuous assessment / final | **CAT 30% + FAT 70%** for theory; 60/40 for lab and project courses                                                                                       |
+| CAT structure                 | Two CATs, 90 minutes, **50 marks each, scaled to 15**; CAT-II is open-book                                                                                |
+| **What "class" means**        | A **unique combination of course-slot-faculty** — _not_ pooled across the branch or programme                                                             |
+| Grade bands                   | `S` ≥ mean+1.5σ (with ≥90% min); `A` mean+0.5σ…+1.5σ; `B` mean−0.5σ…+0.5σ; `C` mean−1.0σ…−0.5σ; `D` mean−1.5σ…−1.0σ; `E` mean−2.0σ…−1.5σ; `F` < mean−2.0σ |
+| Class average                 | the **midpoint of the `B` band**                                                                                                                          |
+| Pass boundary                 | `F` band floor is `max(mean − 2σ, 50)` — if `mean − 2σ < 50`, **50 is used instead**                                                                      |
+| Rounding                      | each grand total is **rounded up to the next integer** _before_ mean and σ are computed                                                                   |
+| `S` cap                       | if the `S` boundary exceeds 100, the **top 3 or top 5%** of the class get `S`                                                                             |
+| **Semester length**           | **15 instructional (non-exam) weeks**; an `L` lecture is 50 minutes per week                                                                              |
+
+**One correction to the premise this was researched from.** The owner asked about VIT's "pooled average
+system". The regulations are explicit that relative grading is **class-wise, not pooled across the
+branch** — the class is a single course-slot-faculty combination, and pooling across it is precisely
+what the system exists to avoid. Pooling _does_ happen, but between **components**: CAT-I, CAT-II and
+digital assignments are pooled into one continuous-assessment mark, and that is pooled with the FAT into
+a grand total. So "pooled" describes how a student's own marks combine, not how the cohort is defined.
+
+**Mastery computation is standard elsewhere**, and agrees with the above: for a topic, mastery is
+`sum(points earned on its items) ÷ sum(points possible) × 100` — **not** the average of per-assessment
+percentages, which gives a different (and wrong) answer when item counts differ. Unattempted items must
+either be excluded or counted as incorrect, and the same choice applied consistently. A threshold
+(commonly 80%) is applied _after_ the percentage, not baked into it.
+
+### 5.2 B1 — RESOLVED: cohort mastery, question-weighted, relative to the class
+
+**Cohort mastery over the offering**, computed as points earned ÷ points possible across the
+offering's finalised responses for that `Question.subtopic`, excluding unattempted items. This is the
+recommended reading of "average in relation to the whole class or course offering", and it is
+defensible on three counts: it matches the standard mastery formula above, it matches how the platform
+already computes a class average (`classAveragePercentage` in `lib/student-assessments.ts` is
+published-only across enrolled students, i.e. class-wise rather than cohort-pooled), and it is the same
+shape VIT uses — one grand total per student, aggregated over the class.
+
+- **Question-weighted, not student-weighted.** Averaging per-student percentages weights a student who
+  answered two items the same as one who answered twenty. The two differ by double digits on seeded
+  data, and the weighted form answers "how did the class do on this topic" rather than "how does the
+  average student do".
+- **The threshold reuses `CourseOffering.analyticsSettings`**, not a new constant — the same place the
+  intervention and item-analysis thresholds already live, so a teacher configures them in one spot.
+- **`null`, not `0`, below the threshold** — the mockup already renders two `null` roles for "below the
+  reporting threshold", and the item-analysis guard already withholds `difficultyIndex` on small
+  samples. Reuse that minimum.
+- **A relative band is a Wave 3 follow-up, not Wave 2 work.** Because the institution grades on
+  σ-bands, a teacher-facing "where does this class sit" view could later show the mastery mean against
+  `mean ± kσ`. That needs the cohort's σ, which nothing computes today. Recorded, not built.
+
+### 5.3 B2 — RESOLVED: a "teaching week" is one of the semester's instructional weeks
+
+**The answer to "is a teaching week a real noun" is yes — it is defined by the institution.** VIT's
+regulations specify a semester of **15 instructional (non-exam) weeks**, with a lecture of 50 minutes
+per week. So `W1..W6` is the first six weeks of a term, and the mockup's deliberate `null` at W3 is a
+week with no assessed work — which is a real thing in a 15-week term.
+
+That makes the weekly bucket the right _axis_, and the reason the seeded data looked absurd is a
+**seed defect, not a conceptual one**: the demo offering runs `2026-01-05 → 2026-12-18`, a ~50-week
+year, while its assessments fall in November and December. Weeks 1–6 are therefore all empty and the
+chart is meaningless.
+
+**So:** bucket by calendar week from the offering's `startsOn`, `null` for weeks with no assessed work,
+and **fix the seed's offering to a realistic 15-week term** whose assessments fall inside it (this
+becomes part of S6). Two consequences to honour:
+
+- The series length is **the term's**, not a fixed six — six points was the mockup's illustration.
+- `startsOn`/`endsOn` are nullable, so a series needs a defined behaviour when they are missing:
+  **render nothing rather than a wrong axis**, and say why.
+
+### 5.4 B3 — RESOLVED: at-risk = below the institution's own pass boundary
+
+**Define the rule, and define it as VIT defines failure**: a student is **at risk** when their grand
+total falls below the pass boundary, `max(mean − 2σ, 50)`, computed over **published** marks only.
+
+This is better than the three options the plan originally offered, because it is not invented: it is
+the institution's own `F`/`E` line, with its own floor rule for high-averaging classes (where the
+regulations explicitly award `E` and pass a student whose marks exceed 50 while sitting below the
+band). It also means the alert and the grade sheet cannot disagree about who is failing.
+
+Two boundaries that must hold:
+
+- **Published marks only.** An unreleased mark is not a fact a student-facing or teacher-facing alert
+  may act on, and Wave 1 already established that a class average is published-only.
+- **The cohort is the offering's enrolled students** (the class-wise definition above), not a whole
+  programme — which is what `CourseOffering` already models.
+
+Consequence: this **re-opens Wave 1's D3**, which dropped a per-student at-risk rule because nothing
+derived one. D3 was right at the time — there was no definition. There is one now, so the rule is
+implementable; it belongs to Wave 3 alongside the rest of the analytics work, and the σ computation it
+needs is the same one B1's relative band would use.
+
+### 5.5 B4 and B5 — no decision needed
+
+- **B4. `completionPercent`.** Matches nothing derivable (the parent plan recorded that 62 matches
+  neither 58% nor 69%). **Drop it, consistently**, as Wave 1's D9 already did on three other pages.
+- **B5. Median.** Derivable in one extra query over the same marks, and unlike the other tiles its
+  definition is unambiguous — the mockup's own copy says why it matters ("less sensitive to a single
+  weak script"). **Derive it.** It is also the honest companion to a mean-and-σ system: VIT grades on
+  mean and σ, and a median next to the mean tells a teacher whether one paper is distorting the cohort.
+
+### 5.6 B6 — RESOLVED: factual, not diagnostic
+
+The retake reason is a **factual restatement** — "3 of 5 questions failed on Quiz 1" — never a
+diagnosis like the mockup's "two sign errors on Q4". The platform can honestly count failures; it
+cannot honestly characterise _why_ without asking a model, which would be a new feature with its own
+explainability surface and review flow.
+
+### 5.7 B7 — RESOLVED: teacher-defined retake policy, practice from a limited pool
+
+Owner's answer, recorded as a **feature spec** rather than a UI decision, because it reopens Wave 1's D4:
+
+- **Practice draws from a limited question set.** The questions **may or may not repeat** those in the
+  original assessment — so practice is _not_ simply a re-run of the sitting.
+- **The retake policy is the teacher's to set**, at minimum: a fixed number of retakes (e.g. **one**),
+  or **retake only on approved request**.
+- **"Practise" on a recommendation row therefore starts practice**, not a graded attempt.
+
+**This reopens D4**, which decided practice attempts are _not persisted_ — on the grounds that the
+attempt cap is status-based and therefore cannot distinguish practice from graded. That remains true,
+so the feature needs the thing D4 deferred:
+
+|                    |                                                                                                                                                                        |
+| ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `QuizAttempt.kind` | `GRADED \| PRACTICE`, and `COUNTED_STATUSES` becomes kind-aware (count only `GRADED`)                                                                                  |
+| Retake policy      | a per-assessment setting — `maxAttempts` already exists and could cover the count; the **approval-gated** variant needs a request/approve record and a teacher surface |
+| Practice pool      | a way to select which questions practice draws from, and whether they may overlap the assessment's                                                                     |
+| Audit              | an approval decision is a teacher action on a student's record, so it wants an `AuditLog` row                                                                          |
+
+That is a **Wave 3 slice, not Wave 2**, and it is now specified rather than open. It also means the
+student retake page cannot ship as a pure port: the "Practise" affordance has no backing until this
+lands.
 
 ### Materials
 
@@ -467,8 +590,10 @@ Stated plainly, because each affects a decision above:
   differs, the reader and the retriever would disagree**, which is the worst outcome available here.
 - **Whether `MOCK_ITEM_ANALYSIS` or the real `itemAnalysisResponseSchema` is the intended design** for
   the quiz-ai item-analysis tab. They carry genuinely different fields. Affects a later slice.
-- **How the seeded offering dates interact with a weekly series** — ~50 weeks, which is part of why
-  B2 is a product question rather than a query.
+- **The seeded offering dates** — resolved by B2 into a seed requirement (§2.4): the term must become a
+  realistic 15 instructional weeks with assessments inside it. What remains unverified is whether the
+  platform has any _other_ consumer that assumes a year-long offering; the seed change should be checked
+  against the analytics and export readers before it lands.
 - **The Wave 1 test figures** were not re-run during this pass (two agents shared the database, and the
   harness drops the schema). The test-file count here is 101, which is one more than Wave 1's
   documented 99 - the difference is unverified.
