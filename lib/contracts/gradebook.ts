@@ -52,6 +52,15 @@ export const courseRatingItemSchema = z.object({
   id: z.string(),
   rating: z.number().int().min(1).max(5),
   comment: z.string().nullable(),
+  /**
+   * Whether the retention purge removed this rating's free text.
+   *
+   * `comment: null` alone is ambiguous — it means either "the student left no
+   * comment" or "the purge cleared it", and those are different facts to put in
+   * front of a teacher. The purge keeps the number and stamps `purgedAt`, so this
+   * is what distinguishes them.
+   */
+  purged: z.boolean(),
   studentName: z.string(),
   registerNumber: z.string(),
   updatedAt: z.string(),

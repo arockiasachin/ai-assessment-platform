@@ -1,38 +1,32 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
-import { MessageSquare, Sparkles, Star } from "lucide-react"
-import { Badge } from "@/components/ui/badge"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { useMemo } from "react"
+import { MessageSquare, Star } from "lucide-react"
+
+import { Callout } from "@/components/ui/callout"
+import { EmptyState } from "@/components/ui/empty-state"
+import { MetricRow } from "@/components/ui/metric-row"
+import { SectionCard } from "@/components/ui/section-card"
+import { StatCard } from "@/components/ui/stat-card"
+import { StatusPill } from "@/components/ui/status-pill"
+import { TruncatedText } from "@/components/ui/truncated-text"
 import type { CourseOfferingRatingsReport } from "@/lib/contracts"
+import { formatDate } from "@/lib/mock/format"
 
-export function TeacherRatingsReport() {
-  const [offerings, setOfferings] = useState<CourseOfferingRatingsReport[]>([])
-  const [isLoading, setIsLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-
-  useEffect(() => {
-    const load = async () => {
-      setIsLoading(true)
-      setError(null)
-      try {
-        const response = await fetch("/api/teacher/reports/ratings", { cache: "no-store" })
-        if (!response.ok) {
-          setError("Unable to load rating analytics.")
-          return
-        }
-        const data = (await response.json()) as { offerings: CourseOfferingRatingsReport[] }
-        setOfferings(data.offerings)
-      } catch {
-        setError("Unable to load rating analytics.")
-      } finally {
-        setIsLoading(false)
-      }
-    }
-
-    void load()
-  }, [])
-
+/**
+ * Course-feedback report.
+ *
+ * Takes its rows as **props** from the server component rather than fetching on
+ * mount. The previous version ran a client `useEffect` fetch, which is the
+ * deferred P1 finding (`docs/quality/a11y-perf-audit.md`) — porting the page was
+ * the moment to fix it rather than carry it forward.
+ *
+ * The report card half of the mockup is absent: it needs per-student marks across
+ * an offering, which no server query on this page provides yet
+ * (`docs/plans/wave-1.md` §D3/§5). "At risk" and "Completion" are absent for the
+ * same reason — nothing derives them. What remains is entirely real.
+ */
+export function TeacherRatingsReport({ offerings }: { offerings: CourseOfferingRatingsReport[] }) {
   const totals = useMemo(() => {
     const count = offerings.reduce((sum, row) => sum + row.ratingsCount, 0)
     const weighted = offerings.reduce(
@@ -46,120 +40,117 @@ export function TeacherRatingsReport() {
     }
   }, [offerings])
 
-  if (isLoading) {
-    return <p className="py-10 text-center text-sm text-muted-foreground">Loading reports…</p>
-  }
-
-  if (error) {
-    return <p className="py-10 text-center text-sm text-destructive">{error}</p>
+  if (offerings.length === 0) {
+    return (
+      <SectionCard title="Course feedback">
+        <EmptyState
+          title="No rating data yet"
+          description="Ratings open once a course has finished, so an in-progress offering will legitimately have none."
+        />
+      </SectionCard>
+    )
   }
 
   return (
     <div className="space-y-6">
-      <Card className="border-primary/20 bg-gradient-to-br from-primary/10 via-background to-background shadow-sm">
-        <CardContent className="flex flex-col gap-3 pt-6 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <Badge
-              variant="outline"
-              className="mb-2 w-fit gap-1.5 border-primary/30 bg-background/70 text-primary"
-            >
-              <Sparkles className="size-3.5" />
-              Feedback intelligence
-            </Badge>
-            <p className="text-sm font-semibold">Student sentiment and rating trends</p>
-            <p className="text-xs text-muted-foreground">
-              See what learners are saying about your course delivery.
-            </p>
-          </div>
-          <Badge variant="secondary" className="w-fit">
-            {offerings.length} offerings
-          </Badge>
-        </CardContent>
-      </Card>
-
-      <div className="grid gap-3 sm:grid-cols-3">
-        <Card className="shadow-sm">
-          <CardHeader>
-            <CardTitle className="text-sm">Total ratings</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-2xl font-semibold">{totals.count}</p>
-          </CardContent>
-        </Card>
-        <Card className="shadow-sm">
-          <CardHeader>
-            <CardTitle className="text-sm">Average score</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-2xl font-semibold">
-              {totals.average !== null ? totals.average.toFixed(2) : "—"}
-            </p>
-          </CardContent>
-        </Card>
-        <Card className="shadow-sm">
-          <CardHeader>
-            <CardTitle className="text-sm">Comments shared</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-2xl font-semibold">{totals.comments}</p>
-          </CardContent>
-        </Card>
+      <div className="grid gap-4 sm:grid-cols-3">
+        <StatCard
+          label="Total ratings"
+          value={String(totals.count)}
+          hint="Across your offerings"
+          icon={Star}
+        />
+        <StatCard
+          label="Average score"
+          value={totals.average !== null ? `${totals.average.toFixed(2)} / 5` : "—"}
+          hint="Weighted by each offering's rating count"
+          icon={Star}
+        />
+        <StatCard
+          label="Comments shared"
+          value={String(totals.comments)}
+          hint="Ratings that left free text"
+          icon={MessageSquare}
+        />
       </div>
 
-      {offerings.length === 0 && (
-        <Card className="border-border/70 shadow-sm">
-          <CardContent className="py-10 text-center text-sm text-muted-foreground">
-            No teacher-owned offerings with rating data yet.
-          </CardContent>
-        </Card>
-      )}
+      <Callout tone="info" title="Feedback is attributed">
+        Students see only their own rating and the aggregate; as the instructor you see who wrote
+        what, so you can follow up on a specific concern.
+      </Callout>
 
       {offerings.map((offering) => (
-        <Card key={offering.offeringId} className="overflow-hidden shadow-sm">
-          <CardHeader className="border-b border-border/60 bg-muted/15">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <CardTitle className="text-base">{offering.courseName}</CardTitle>
-                <p className="text-xs text-muted-foreground">
-                  {offering.courseCode} · {offering.className} · {offering.term}{" "}
-                  {offering.academicYear}
-                </p>
-              </div>
-              <Badge variant="outline">{offering.ratingsCount} ratings</Badge>
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <p className="inline-flex items-center gap-1 rounded-lg border border-border bg-background px-2 py-1 text-sm">
-              <Star className="size-4" />
-              Average:{" "}
-              {offering.averageRating !== null ? offering.averageRating.toFixed(2) : "No ratings"}
-            </p>
+        <SectionCard
+          key={offering.offeringId}
+          title={offering.courseName}
+          description={`${offering.courseCode} · ${offering.className} · ${offering.academicYear} ${offering.term}`}
+          action={
+            <StatusPill
+              status={offering.ratingsCount > 0 ? "published" : "pending"}
+              label={`${offering.ratingsCount} rating${offering.ratingsCount === 1 ? "" : "s"}`}
+              dot
+            />
+          }
+        >
+          <div className="space-y-4">
+            <MetricRow
+              label="Average"
+              value={
+                offering.averageRating !== null ? `${offering.averageRating.toFixed(2)} / 5` : "—"
+              }
+              hint={offering.averageRating !== null ? undefined : "No ratings for this course yet"}
+            />
 
-            <div className="space-y-2">
-              {offering.ratings.map((rating) => (
-                <div
-                  key={rating.id}
-                  className="rounded-lg border border-border/70 bg-muted/20 px-3 py-2 text-sm shadow-sm"
-                >
-                  <p className="font-medium">
-                    {rating.studentName} ({rating.registerNumber}) · {rating.rating}/5
-                  </p>
-                  {rating.comment ? (
-                    <p className="mt-1 inline-flex items-start gap-1 text-muted-foreground">
-                      <MessageSquare className="mt-0.5 size-4" />
-                      {rating.comment}
-                    </p>
-                  ) : (
-                    <p className="mt-1 text-muted-foreground">No comment left.</p>
-                  )}
-                </div>
-              ))}
-              {offering.ratings.length === 0 && (
-                <p className="text-sm text-muted-foreground">No ratings for this course yet.</p>
-              )}
-            </div>
-          </CardContent>
-        </Card>
+            {offering.ratings.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No ratings for this course yet.</p>
+            ) : (
+              <ul className="space-y-3">
+                {offering.ratings.map((rating) => (
+                  <li
+                    key={rating.id}
+                    className="rounded-lg border border-border bg-muted/20 px-3 py-2 text-sm"
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <span className="min-w-0 font-medium">
+                        <TruncatedText width="lg">{rating.studentName}</TruncatedText>
+                        <span className="ml-2 font-mono text-xs text-muted-foreground">
+                          {rating.registerNumber}
+                        </span>
+                      </span>
+                      <span className="flex shrink-0 items-center gap-2">
+                        <span className="font-mono text-xs tabular-nums">{rating.rating}/5</span>
+                        <span className="text-xs text-muted-foreground">
+                          {formatDate(rating.updatedAt)}
+                        </span>
+                      </span>
+                    </div>
+                    {/*
+                     * Three distinct states, because `comment: null` alone cannot
+                     * tell "left no comment" from "cleared by the retention
+                     * policy" — and only one of those is the student's choice.
+                     */}
+                    {rating.purged ? (
+                      <p className="mt-1.5">
+                        <StatusPill
+                          status="archived"
+                          label="Comment removed by retention policy"
+                          dot
+                        />
+                      </p>
+                    ) : rating.comment ? (
+                      <p className="mt-1.5 flex items-start gap-1.5 text-muted-foreground">
+                        <MessageSquare className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
+                        <span>{rating.comment}</span>
+                      </p>
+                    ) : (
+                      <p className="mt-1.5 text-muted-foreground">No comment left.</p>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </SectionCard>
       ))}
     </div>
   )

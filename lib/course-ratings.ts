@@ -149,6 +149,9 @@ export async function getTeacherRatingsReport(
         id: rating.id,
         rating: rating.rating,
         comment: rating.comment,
+        // The purge nulls the free text and stamps `purgedAt`, so this is what
+        // tells "left no comment" apart from "comment removed by policy".
+        purged: rating.purgedAt !== null,
         studentName: rating.student.fullName,
         registerNumber: rating.student.registerNumber,
         updatedAt: rating.updatedAt.toISOString(),
