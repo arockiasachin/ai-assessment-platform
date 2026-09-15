@@ -45,11 +45,25 @@ export type { MockupRole }
 export type NavItem = {
   /** Visible label. Also the tooltip text when the rail is collapsed. */
   label: string
-  /** Mockup route, e.g. `/mockup/teacher/reviews`. */
+  /**
+   * Mockup route, e.g. `/mockup/teacher/reviews`. For an `appOnly` item this is
+   * the **real** path instead (e.g. `/teacher/offerings`).
+   */
   href: string
   icon: LucideIcon
   /** One line shown on the mockup index card and in the page header. */
   description: string
+  /**
+   * A page that exists only in the real app, with no mockup counterpart.
+   *
+   * The nav is one definition shared by both trees, so this flag is what keeps
+   * the mockup side honest: such an item is filtered out of `mockup` scope and
+   * out of `allNavItems`, so the mockup index can never link to a page that does
+   * not exist there and `tests/nav-scope.test.ts`'s "every mockup nav href has a
+   * mockup page" assertion stays true. `href` must be the real path; `navHref`
+   * passes it through unchanged.
+   */
+  appOnly?: boolean
 }
 
 export type NavSection = {
@@ -130,6 +144,16 @@ export const NAV_SECTIONS: Record<MockupRole, NavSection[]> = {
           href: "/mockup/teacher/classes",
           icon: Layers,
           description: "Offerings, sections, and enrolled rosters for the active term.",
+        },
+        {
+          // No mockup counterpart: the design put this on the Classes page, but
+          // the real Classes page administers offerings while the mockup shows a
+          // roster. Split so each page names what it is (docs/plans/wave-1.md §D1).
+          label: "Offerings",
+          href: "/teacher/offerings",
+          icon: Settings2,
+          description: "Enrollment limits, registration windows, and results publication.",
+          appOnly: true,
         },
         {
           label: "Assignments",
@@ -439,6 +463,10 @@ const APP_PATH_OVERRIDES: Record<string, string | null> = {
  * returns the href unchanged.
  */
 export function navHref(href: string, scope: NavScope): string | null {
+  // An app-only item already carries its real path, in both scopes. Reaching
+  // this in mockup scope is not possible through `navSectionsFor` (which filters
+  // such items out), but the passthrough keeps the function total.
+  if (!href.startsWith("/mockup")) return href
   if (scope === "mockup") return href
   const override = APP_PATH_OVERRIDES[href]
   if (override !== undefined) return override
@@ -465,13 +493,17 @@ export function brandHref(scope: NavScope, role: MockupRole = "teacher"): string
   return scope === "mockup" ? BRAND.indexHref : roleHome(role, scope)
 }
 
-/** Nav sections for `role`, with app-scope items that have no real page removed. */
+/** Nav sections for `role`, without the items that cannot be linked in `scope`. */
 export function navSectionsFor(role: MockupRole, scope: NavScope): NavSection[] {
-  if (scope === "mockup") return NAV_SECTIONS[role]
   return NAV_SECTIONS[role]
     .map((section) => ({
       ...section,
-      items: section.items.filter((item) => navHref(item.href, scope) !== null),
+      items: section.items.filter((item) =>
+        scope === "mockup"
+          ? // No mockup counterpart exists to link to.
+            !item.appOnly
+          : navHref(item.href, scope) !== null,
+      ),
     }))
     .filter((section) => section.items.length > 0)
 }
@@ -489,10 +521,18 @@ export function roleFromPathname(pathname: string, scope: NavScope = "mockup"): 
   return null
 }
 
-/** Every page in the mockup tree, flattened, with its role and section. */
+/**
+ * Every page in the **mockup** tree, flattened, with its role and section.
+ *
+ * App-only items are excluded: they have no mockup page, so including them would
+ * break the mockup index's page count and the "every nav href has a mockup page"
+ * assertion in `tests/nav-scope.test.ts`.
+ */
 export function allNavItems(): { role: MockupRole; section: NavSection; item: NavItem }[] {
   return MOCKUP_ROLES.flatMap((role) =>
-    NAV_SECTIONS[role].flatMap((section) => section.items.map((item) => ({ role, section, item }))),
+    NAV_SECTIONS[role].flatMap((section) =>
+      section.items.filter((item) => !item.appOnly).map((item) => ({ role, section, item })),
+    ),
   )
 }
 

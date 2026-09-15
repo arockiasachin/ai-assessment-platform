@@ -120,6 +120,57 @@ describe("admin is reachable but unadvertised", () => {
   })
 })
 
+describe("app-only nav items", () => {
+  const APP_ONLY = NAV_SECTIONS.teacher.flatMap((s) => s.items).filter((i) => i.appOnly)
+
+  it("exist, and carry a real path rather than a mockup one", () => {
+    expect(APP_ONLY.length).toBeGreaterThan(0)
+    for (const item of APP_ONLY) {
+      expect(item.href.startsWith("/mockup"), `${item.label} should not be a mockup href`).toBe(
+        false,
+      )
+      expect(item.href.startsWith("/"), item.label).toBe(true)
+    }
+  })
+
+  it("resolve to their real href in both scopes", () => {
+    for (const item of APP_ONLY) {
+      expect(navHref(item.href, "app"), item.label).toBe(item.href)
+      expect(navHref(item.href, "mockup"), item.label).toBe(item.href)
+    }
+  })
+
+  it("are excluded from the mockup nav, which has no page for them", () => {
+    for (const role of MOCKUP_ROLES) {
+      const hrefs = navSectionsFor(role, "mockup").flatMap((s) => s.items.map((i) => i.href))
+      for (const item of APP_ONLY) {
+        expect(hrefs, `${item.label} must not appear in mockup nav`).not.toContain(item.href)
+      }
+    }
+  })
+
+  it("are included in the app nav", () => {
+    const hrefs = navSectionsFor("teacher", "app").flatMap((s) => s.items.map((i) => i.href))
+    for (const item of APP_ONLY) expect(hrefs, item.label).toContain(item.href)
+  })
+
+  it("are excluded from allNavItems, which means the mockup tree", () => {
+    // allNavItems feeds the mockup index's page count and the "every mockup nav
+    // href has a mockup page" assertion, both of which would be wrong otherwise.
+    const hrefs = allNavItems().map((entry) => entry.item.href)
+    for (const item of APP_ONLY) expect(hrefs, item.label).not.toContain(item.href)
+  })
+
+  it("have a real page on disk, like every other app-scope href", () => {
+    for (const item of APP_ONLY) {
+      expect(
+        hasPage(dashboardDir, item.href),
+        `${item.href} has no page under app/(dashboard)`,
+      ).toBe(true)
+    }
+  })
+})
+
 describe("nav scope: app tree resolves to real pages", () => {
   it("every non-null app nav href has a real page on disk", () => {
     for (const { item } of ITEMS) {
@@ -177,13 +228,13 @@ describe("nav scope: app tree resolves to real pages", () => {
         role,
       ).toBe(true)
     }
-    // teacher loses profile and settings; submissions became a real page.
+    // teacher loses profile and settings, and gains the app-only Offerings page.
     const teacherApp = navSectionsFor("teacher", "app").reduce((n, s) => n + s.items.length, 0)
     const teacherMockup = navSectionsFor("teacher", "mockup").reduce(
       (n, s) => n + s.items.length,
       0,
     )
-    expect(teacherApp).toBe(teacherMockup - 2)
+    expect(teacherApp).toBe(teacherMockup - 2 + 1)
   })
 
   it("anchors the brand on the signed-in role's home", () => {

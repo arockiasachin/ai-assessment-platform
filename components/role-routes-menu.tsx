@@ -18,6 +18,7 @@ import {
   RefreshCw,
   Route,
   Share2,
+  Settings2,
   Sparkles,
   Terminal,
   Users,
@@ -57,6 +58,7 @@ const teacherRoutes: RouteItem[] = [
   { label: "Activity log", href: "/teacher/observability", icon: ClipboardList },
   { label: "Export", href: "/teacher/export", icon: Share2 },
   { label: "Classes", href: "/teacher/classes", icon: Layers },
+  { label: "Offerings", href: "/teacher/offerings", icon: Settings2 },
   { label: "Planner", href: "/teacher/planner", icon: CalendarDays },
   { label: "Reports", href: "/teacher/reports", icon: ClipboardList },
 ]
