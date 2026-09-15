@@ -46,6 +46,12 @@ export type FilterBarProps = {
  * Inert by design — there is no state and no submit handler, so reviewers can
  * judge the composition without a data layer. Every control is still properly
  * labelled, so the a11y tree is unchanged once it is wired up.
+ *
+ * The `items` prop on the `Select` root is not optional in spirit: Base UI's
+ * `Select.Value` renders the raw value unless the root knows the value→label
+ * map, which is how a filter ends up displaying `below-floor` instead of
+ * `Below 78%`. Passing the same options array the popup renders keeps the
+ * trigger and the menu in agreement by construction.
  */
 export function FilterBar({
   searchLabel = "Search",
@@ -85,7 +91,7 @@ export function FilterBar({
             <Label htmlFor={select.id} className="text-xs text-muted-foreground">
               {select.label}
             </Label>
-            <Select defaultValue={select.value}>
+            <Select defaultValue={select.value} items={select.options}>
               <SelectTrigger id={select.id} size="sm" className="w-full sm:w-44">
                 <SelectValue placeholder={select.placeholder} />
               </SelectTrigger>

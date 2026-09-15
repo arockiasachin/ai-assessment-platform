@@ -22,6 +22,12 @@ import { AuthFeedback } from "../auth-feedback"
 
 /** Administrators are provisioned by invitation, so they cannot self-register. */
 const SELF_SERVICE_ROLES: MockupRole[] = ["student", "teacher"]
+
+/** Base UI needs the value→label map on the root to label the trigger. */
+const ROLE_ITEMS = SELF_SERVICE_ROLES.map((role) => ({
+  value: role,
+  label: ROLE_META[role].label,
+}))
 const MIN_PASSWORD_LENGTH = 12
 
 type Feedback =
@@ -134,6 +140,7 @@ export function RegisterForm() {
             <Label htmlFor="register-role">I am joining as</Label>
             <Select
               value={role}
+              items={ROLE_ITEMS}
               onValueChange={(value) => {
                 if (value === "student" || value === "teacher") setRole(value)
               }}

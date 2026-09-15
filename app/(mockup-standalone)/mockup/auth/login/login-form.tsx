@@ -21,6 +21,13 @@ import { AuthFeedback } from "../auth-feedback"
 
 const ROLES: MockupRole[] = ["admin", "teacher", "student"]
 
+/**
+ * Base UI renders the label of the selected item only when the `Select` root
+ * knows the value→label map, so the trigger would otherwise read "admin"
+ * instead of "Administrator".
+ */
+const ROLE_ITEMS = ROLES.map((role) => ({ value: role, label: ROLE_META[role].label }))
+
 type Feedback =
   | { kind: "none" }
   | { kind: "error"; title: string; message: string }
@@ -76,6 +83,7 @@ export function LoginForm() {
             <Label htmlFor="login-role">Sign in as</Label>
             <Select
               value={role}
+              items={ROLE_ITEMS}
               onValueChange={(value) => {
                 if (value === "admin" || value === "teacher" || value === "student") setRole(value)
               }}
