@@ -160,6 +160,22 @@ Both are dropped from the ported roster rather than faked, per the plan's rule t
 number nothing derives. They can return when Wave 3 defines a per-student rule and a real activity
 source.
 
+The KPI row was replaced for the same reason. The mockup's "At risk" and "Course completion" have no
+derivation (the second matches nothing at all), so the tiles now count what the table proves:
+Enrolled, Groups formed, Not placed, Marked. On the seeded data every tile agrees with the table — 5
+enrolled, 3 marked matching 3 averages and 2 em-dashes, 2 not placed matching 2 "Not placed" cells.
+
+#### Shipped — both halves
+
+Part 1 (`c9e53a0`): the `appOnly` nav flag, and `/teacher/offerings` rendering the existing
+`TeacherClassesManager` unchanged. Offerings was also added to the **old** nav
+(`components/role-routes-menu.tsx`), which the 22 unported pages still use, so the admin screen stays
+reachable from both shells during the transition.
+
+Part 2 (`a11c73c`): `/teacher/classes` is the roster, with a pure mapper under test and no client
+fetch. `resolveTeacherStaffId` was consolidated into `lib/teacher-staff.ts` rather than becoming a
+ninth copy.
+
 ### D2 — Does `teacher/submissions` become a real page? _(RESOLVED — option A)_
 
 **Decision: yes, as a read-only queue.** `/teacher/submissions` becomes a browse-and-filter view
