@@ -25,17 +25,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { formatDateTime } from "@/lib/format"
 import type { StudentAssessmentItem, StudentAssessmentsPayload } from "@/lib/student-assessments"
-
-function formatDateTime(iso: string) {
-  return new Date(iso).toLocaleString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  })
-}
 
 function round(value: number, places = 1) {
   const factor = 10 ** places
@@ -416,12 +407,13 @@ export function StudentAssessmentsView({
                         <p className="mt-1 font-medium">
                           {assessment.score !== null
                             ? `${assessment.score}/${assessment.maxMarks} (${round(assessment.percentage ?? 0)}%)`
-                            : assessment.hasMark
+                            : assessment.hasMark && !assessment.published
                               ? // A mark exists but has not been released. Saying
                                 // "Not graded" here would be untrue, and showing
                                 // the value would leak an unreleased mark.
                                 "Marked — awaiting release"
-                              : // `null` renders as an em dash, never 0.
+                              : // No mark at all: `null` renders as an em dash,
+                                // never 0.
                                 "—"}
                         </p>
                       </div>

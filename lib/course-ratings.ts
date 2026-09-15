@@ -153,8 +153,9 @@ export async function getTeacherRatingsReport(
         id: rating.id,
         rating: rating.rating,
         comment: rating.comment,
-        // The purge nulls the free text and stamps `purgedAt`, so this is what
-        // tells "left no comment" apart from "comment removed by policy".
+        // Stamped by the sweep on every rating in the offering, comment or not
+        // — so it means "processed", not "a comment was removed". The UI makes
+        // an offering-level claim for that reason.
         purged: rating.purgedAt !== null,
         studentName: rating.student.fullName,
         registerNumber: rating.student.registerNumber,

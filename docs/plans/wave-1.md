@@ -81,20 +81,21 @@ Do these before or alongside the first port; each is small and unblocks several 
 
 ## 3. Readiness by page
 
-Twelve pages. "Backend" = does the read path exist and is it tested.
+Thirteen pages. "Backend" = does the read path exist and is it tested. Every row shipped.
 
 | Page                          | Backend                                                       | Shape                                                    | Risk       | Verdict                                                                                           |
 | ----------------------------- | ------------------------------------------------------------- | -------------------------------------------------------- | ---------- | ------------------------------------------------------------------------------------------------- |
+| `teacher/reviews`             | Complete, tested                                              | Rebuild presentation                                     | Low        | **SHIPPED** (`2927e8b`) — the Wave 0 pilot                                                        |
 | `student/peer-evaluation`     | Complete, tested                                              | Mockup read-only, real is a **form**                     | Low        | **SHIPPED** (`8dd7ad1`) — merged; threshold from the server (D5)                                  |
-| `student/quizzes`             | Complete, tested                                              | Rebuild presentation                                     | Low        | **Best-backed.** Sitting renders from the read-only retake (D4); no persisted practice attempt    |
-| `teacher/reports`             | Ratings half complete + tested; report-card half **no query** | Re-skin + new work                                       | Low/Med    | **Ship the ratings half first**; drop "At risk" and "Completion" (D3)                             |
-| `teacher/rubrics`             | Complete; `listRubricsForTeacher` **untested**                | Mockup read-only vs real **editor**                      | Low        | Add a read-only summary panel; render weight as relative, no sum claim (D8)                       |
+| `student/quizzes`             | Complete, tested                                              | Rebuild presentation                                     | Low        | **SHIPPED** (`918c5f9`) — sitting from the read-only retake (D4); no persisted practice attempt   |
+| `teacher/reports`             | Ratings half complete + tested; report-card half **no query** | Re-skin + new work                                       | Low/Med    | **SHIPPED** (`b5c03af`) — ratings half; "At risk" and "Completion" dropped (D3)                   |
+| `teacher/rubrics`             | Complete; `listRubricsForTeacher` **untested**                | Mockup read-only vs real **editor**                      | Low        | **SHIPPED** (`3ea556b`) — read-only panel beside the editor; weight relative, no sum claim (D8)   |
 | `auth/login`, `auth/register` | Working, tested                                               | Pure re-skin                                             | **Lowest** | **SHIPPED** (`08ac76a`, fixes `46a4a58`)                                                          |
 | `teacher/code-tasks`          | Complete, tested                                              | Real = list + client detail; mockup = single-task detail | Med        | **SHIPPED** (`2aba04b`) — detail server-fetched; mutations stay a client island                   |
 | `student/code-submissions`    | Complete, tested                                              | Mockup read-only vs real **editor**                      | Med        | **SHIPPED** (`ea93ace`, contract `1c28f5c`) — merged; runs server-fetched; marks/limits carried   |
 | `student/courses`             | Complete, **GET untested**                                    | Rebuild presentation                                     | Med        | **SHIPPED** (`bc19afe`) — query extracted; distribution aggregate added; peer ratings not ported  |
 | `teacher/groups`              | Complete, tested                                              | Rebuild presentation                                     | Med        | **SHIPPED** (`2f73979`, pair matrix `f4d2ffb`) — server-selected detail; four client fetches gone |
-| `student/assessments`         | Complete, **GET untested**                                    | Rebuild presentation                                     | Med        | Preserve the submission editor; expose `published`                                                |
+| `student/assessments`         | Complete, **GET untested**                                    | Rebuild presentation                                     | Med        | **SHIPPED** (`37f1225`, fixed `ac91e16`) — server-fetched; `hasMark`/`published` exposed          |
 | `teacher/classes`             | Complete, tested                                              | **Different screen**                                     | **High**   | **SHIPPED** (`a11c73c`, fixes `04f698b`)                                                          |
 | `teacher/submissions`         | Data layer exists as a route only                             | **No page**                                              | **High**   | **SHIPPED** (`6069f08`, fixes `d293685`)                                                          |
 
@@ -351,12 +352,16 @@ so plainly rather than let "Wave 1 done" imply more:
 | `teacher/assignments`, `teacher/export`, `teacher/observability`, `teacher/quiz-generation` | Not yet scoped. Each has a working backend, so they are Wave 1-shaped work that this wave did not include.                                                                           |
 | `teacher`, `student`                                                                        | The two dashboards. Both render `GradebookProvider` client-side data and are the largest single fetch-on-mount instances left; porting them means converting that provider first.    |
 
-1. **Slice 1 — auth re-skin.** `login` + `register`. The only purely presentational pair. Four
+1. **Slice 1 — auth re-skin.** `login` + `register`. The only purely presentational pair. **Seven**
    mockup-only affordances must **not** be carried over: the login **role selector** (no backend,
    would let a user pick a workspace they have no account in), **forgot-password** (dead end),
-   **remember-me** (no cookie parameter), and the register **"Full name"** field
-   (`registerRequestSchema` accepts no name). Also: `MIN_PASSWORD_LENGTH = 12` is client-only today
-   and the "Pending verification" state does not exist — the route signs the user in immediately.
+   **remember-me** (no cookie parameter), the register **"Full name"** field
+   (`registerRequestSchema` accepts no name), the register **"pending verification"** screen (the
+   route signs the user in immediately), the register **acceptable-use checkbox** (nothing records
+   acceptance), and its **12-character password minimum** (`MIN_PASSWORD_LENGTH = 12` is client-only
+   today while the contract accepts `min(1)`, so a client-only rule would reject registrations the
+   server would accept). The login identifier must stay a username-or-email `text` input, not the
+   mockup's `type="email"`.
 2. **Slice 2 — `student/peer-evaluation`.** Merge, don't replace. Fixes D5 by using the server
    constant. Needs a small contract addition for per-teammate completion and `role`.
 3. **Slice 3 — `student/quizzes`.** Best-backed data layer; needs the `getStudentAttempt` payload

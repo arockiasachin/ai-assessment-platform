@@ -61,11 +61,21 @@ export const SUBMISSION_STATE_TO_STATUS: Record<SubmissionState, StatusKey> = {
   RESUBMITTED: "resubmitted",
 }
 
+/**
+ * Submission status → label.
+ *
+ * **These are status words and must match `STATUS_META` in
+ * `components/ui/status-pill.tsx`**, which is the vocabulary of record: `GRADED`
+ * says "Graded" there, so it says "Graded" here. Do not use "Marked" for a
+ * *status* — "marked" is the verb for the act and the noun for the quantity
+ * ("Marks: 22.5/30", "Not marked", "3 marked, withheld"), which is a different
+ * thing and is why both words exist on the same pages.
+ */
 export const SUBMISSION_STATE_LABEL: Record<SubmissionState, string> = {
   DRAFT: "Draft",
   SUBMITTED: "Submitted",
   LATE: "Late",
-  GRADED: "Marked",
+  GRADED: "Graded",
   RESUBMITTED: "Resubmitted",
 }
 

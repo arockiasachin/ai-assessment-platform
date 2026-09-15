@@ -34,13 +34,7 @@ import type {
   TestRunResponse,
 } from "@/lib/contracts/code-eval"
 import { TEST_RUN_STATE_TO_STATUS } from "@/lib/labels"
-import {
-  formatDate,
-  formatDateTime,
-  formatDuration,
-  formatPercent,
-  trimNumber,
-} from "@/lib/mock/format"
+import { formatDate, formatDateTime, formatDuration, formatPercent, trimNumber } from "@/lib/format"
 import { initialsFromEmail, roleLabelFromRole } from "@/lib/user-identity"
 
 export const dynamic = "force-dynamic"

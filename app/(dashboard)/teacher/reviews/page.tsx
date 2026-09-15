@@ -9,7 +9,11 @@ import { listEvaluationCandidatesForTeacher, listReviewQueueForTeacher } from "@
 import { initialsFromEmail, roleLabelFromRole } from "@/lib/user-identity"
 
 // The root layout supplies the "· Rubrix" suffix.
-export const metadata: Metadata = { title: "Review queue" }
+export const dynamic = "force-dynamic"
+
+// Matches the nav label ("Reviews"). The Wave 0 pilot predated this convention;
+// every sibling page sets both, and the plan's §8 recommends it explicitly.
+export const metadata: Metadata = { title: "Reviews" }
 
 export default async function TeacherReviewsPage() {
   const user = await getSessionUser()

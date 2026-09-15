@@ -13,7 +13,7 @@ import { SectionCard } from "@/components/ui/section-card"
 import { StatusPill, type StatusKey } from "@/components/ui/status-pill"
 import { SUCCESS_TEXT } from "@/components/ui/tone"
 import type { CodeTaskResponse, SimilarityPair } from "@/lib/contracts/code-eval"
-import { formatConfidence, formatDateTime } from "@/lib/mock/format"
+import { formatConfidence, formatDateTime } from "@/lib/format"
 
 /**
  * The mutating half of the teacher code-task workspace.

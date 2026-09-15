@@ -53,12 +53,14 @@ export const courseRatingItemSchema = z.object({
   rating: z.number().int().min(1).max(5),
   comment: z.string().nullable(),
   /**
-   * Whether the retention purge removed this rating's free text.
+   * Whether this rating was processed by a retention sweep.
    *
-   * `comment: null` alone is ambiguous — it means either "the student left no
-   * comment" or "the purge cleared it", and those are different facts to put in
-   * front of a teacher. The purge keeps the number and stamps `purgedAt`, so this
-   * is what distinguishes them.
+   * **It does not mean "a comment was removed."** The purge stamps `purgedAt` on
+   * every rating in an offering, comment or not — the marker is what makes the
+   * sweep idempotent (`where: purgedAt: null`) and what the operator's count
+   * reports. So after a purge, a rating where the student never wrote anything is
+   * indistinguishable here from one whose text was redacted, and the UI must make
+   * an **offering-level** claim rather than a per-row one.
    */
   purged: z.boolean(),
   studentName: z.string(),

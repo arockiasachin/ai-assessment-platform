@@ -8,6 +8,7 @@ import { Callout } from "@/components/ui/callout"
 import { SectionCard } from "@/components/ui/section-card"
 import { StatCard } from "@/components/ui/stat-card"
 import { StatusPill, type StatusKey } from "@/components/ui/status-pill"
+import { formatDateTime } from "@/lib/format"
 import type {
   QuizAttemptSummary,
   QuizAttemptView,
@@ -49,29 +50,13 @@ async function call<T>(url: string, init?: RequestInit): Promise<T> {
 const ATTEMPT_STATUS: Record<string, { key: StatusKey; label: string }> = {
   IN_PROGRESS: { key: "in-progress", label: "In progress" },
   SUBMITTED: { key: "submitted", label: "Submitted" },
-  GRADED: { key: "graded", label: "Scored" },
+  GRADED: { key: "graded", label: "Graded" },
   EXPIRED: { key: "missed", label: "Expired" },
   ABANDONED: { key: "missed", label: "Abandoned" },
 }
 
 function attemptStatus(status: string) {
   return ATTEMPT_STATUS[status] ?? { key: "pending" as StatusKey, label: status }
-}
-
-/**
- * Deterministic date rendering. Without an explicit locale the server (Node,
- * `en-US`) and the browser (the user's locale) format the same timestamp
- * differently, which makes the hydrated output disagree with the server HTML and
- * raises a React hydration error. Pinning the locale keeps both renders equal.
- */
-function formatDateTime(iso: string) {
-  return new Date(iso).toLocaleString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  })
 }
 
 export function StudentQuizAttempts({ initialQuizzes }: Props) {

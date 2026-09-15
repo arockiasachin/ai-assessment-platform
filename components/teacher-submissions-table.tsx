@@ -17,7 +17,7 @@ import {
   SUBMISSION_STATE_LABEL,
   SUBMISSION_STATE_TO_STATUS,
 } from "@/lib/labels"
-import { formatDateTime, formatPoints } from "@/lib/mock/format"
+import { formatDateTime, formatPoints } from "@/lib/format"
 import type { TeacherSubmissionRow } from "@/lib/teacher-submissions"
 
 /**

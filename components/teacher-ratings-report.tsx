@@ -11,7 +11,7 @@ import { StatCard } from "@/components/ui/stat-card"
 import { StatusPill } from "@/components/ui/status-pill"
 import { TruncatedText } from "@/components/ui/truncated-text"
 import type { CourseOfferingRatingsReport } from "@/lib/contracts"
-import { formatDate } from "@/lib/mock/format"
+import { formatDate } from "@/lib/format"
 
 /**
  * Course-feedback report.

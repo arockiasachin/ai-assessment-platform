@@ -9,6 +9,8 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { StatusPill } from "@/components/ui/status-pill"
+import { GRADE_SOURCE_LABEL, REVIEW_STATE_LABEL, REVIEW_STATE_TO_STATUS } from "@/lib/labels"
 import type { EvaluationCandidate, ReviewQueueItem } from "@/lib/rubric-grading/contracts"
 
 /**
@@ -27,19 +29,8 @@ type Decision =
   | { action: "override"; points: number; reason: string }
 
 // The app themes via `prefers-color-scheme`, so the `.dark`-scoped Tailwind
-// `dark:` variant never activates; the explicit media variant keeps these
-// status chips readable on a dark page.
-function statusTone(status: string): string {
-  if (status === "AUTO_ACCEPTED")
-    return "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 [@media(prefers-color-scheme:dark)]:text-emerald-400"
-  if (status === "OVERRIDDEN")
-    return "border-violet-500/30 bg-violet-500/10 text-violet-700 [@media(prefers-color-scheme:dark)]:text-violet-400"
-  if (status === "NEEDS_REVIEW")
-    return "border-amber-500/30 bg-amber-500/10 text-amber-700 [@media(prefers-color-scheme:dark)]:text-amber-400"
-  if (status === "REJECTED") return "border-destructive/30 bg-destructive/10 text-destructive"
-  return "border-border bg-muted/20 text-foreground"
-}
-
+// `dark:` variant never activates; the explicit media variant keeps this chip
+// readable on a dark page.
 function confidenceTone(confidence: number): string {
   return confidence < 0.6
     ? "border-destructive/30 bg-destructive/10 text-destructive"
@@ -162,9 +153,15 @@ export function TeacherReviewQueue({
               <Sparkles className="size-3.5" />
               Rubric review queue
             </Badge>
-            <h3 className="text-lg font-semibold tracking-tight">
+            {/*
+             * h2, not h3: `PageHeader` above is the page's `<h1>` and this page
+             * renders no `SectionCard`, so the only heading emitter below the h1
+             * is here — an h3 skipped a level. (The same defect was fixed on
+             * student/assessments after the shell swap.)
+             */}
+            <h2 className="text-lg font-semibold tracking-tight">
               Approve AI suggestions criterion by criterion
-            </h3>
+            </h2>
             <p className="text-sm text-muted-foreground">
               Nothing publishes without an explicit accept or override. Model output can never
               overwrite a published grade.
@@ -228,7 +225,7 @@ export function TeacherReviewQueue({
       </Card>
 
       <div className="space-y-4">
-        <h3 className="text-sm font-semibold tracking-tight">Needs review ({items.length})</h3>
+        <h2 className="text-sm font-semibold tracking-tight">Needs review ({items.length})</h2>
         {items.length === 0 && (
           <Card className="border-border/70 shadow-sm">
             <CardContent className="py-10 text-center text-sm text-muted-foreground">
@@ -255,12 +252,17 @@ export function TeacherReviewQueue({
                     </p>
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
-                    <Badge variant="outline" className={statusTone(item.review.status)}>
-                      {item.review.status}
-                    </Badge>
+                    {/* Mapped to the shared vocabulary rather than printing the
+                        raw enum: `REVIEW_STATE_LABEL` and `GRADE_SOURCE_LABEL`
+                        exist for exactly these two enums. */}
+                    <StatusPill
+                      status={REVIEW_STATE_TO_STATUS[item.review.status]}
+                      label={REVIEW_STATE_LABEL[item.review.status]}
+                      dot
+                    />
                     <Badge variant="outline">
                       {item.grade
-                        ? `${item.grade.points}/${item.grade.maxPoints} · ${item.grade.source}`
+                        ? `${item.grade.points}/${item.grade.maxPoints} · ${GRADE_SOURCE_LABEL[item.grade.source]}`
                         : "No draft"}
                     </Badge>
                     {published && (

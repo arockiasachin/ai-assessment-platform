@@ -52,7 +52,7 @@ import {
   MILESTONE_STATE_LABEL,
   MILESTONE_STATE_TO_STATUS,
 } from "@/lib/labels"
-import { formatDate, formatDateTime, trimNumber } from "@/lib/mock/format"
+import { formatDate, formatDateTime, trimNumber } from "@/lib/format"
 import { initialsFromEmail, roleLabelFromRole } from "@/lib/user-identity"
 
 export const dynamic = "force-dynamic"

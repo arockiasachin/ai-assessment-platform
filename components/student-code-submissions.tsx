@@ -10,7 +10,7 @@ import { CodeBlock } from "@/components/ui/code-block"
 import { MetricRow } from "@/components/ui/metric-row"
 import { StatusPill } from "@/components/ui/status-pill"
 import type { StudentCodeTask, TestRunResponse } from "@/lib/contracts/code-eval"
-import { trimNumber } from "@/lib/mock/format"
+import { trimNumber } from "@/lib/format"
 
 /**
  * The code editor and the submit button — the only way a student hands in code,
