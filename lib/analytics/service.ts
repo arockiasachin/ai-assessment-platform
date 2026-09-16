@@ -20,6 +20,7 @@ import {
   type InterventionThresholds,
 } from "./alerts"
 import { FINALIZED_STATUSES, GRADED } from "@/lib/quiz-attempts/kinds"
+import { getRetakeStateForStudent, type RetakeState } from "@/lib/quiz-attempts/retake-state"
 import { buildCohortDistribution, type CohortDistribution, type CohortScore } from "./cohort"
 import { gatherRegimeInputs } from "./grading-regime"
 import { buildRosterForOffering } from "./at-risk"
@@ -509,6 +510,8 @@ export type AdaptiveRetake = {
     selectedOptionIds: string[]
     isCorrect: boolean | null
   }[]
+  /** What the student may do about this assessment — practise, retake, or request an approval. */
+  retake: RetakeState
   generatedAt: string
 }
 
@@ -570,6 +573,11 @@ export async function getAdaptiveRetakeForStudent(
     .filter((question) => selected.has(question.id))
     .map((question) => serializeQuestionForStudent(question))
 
+  // The read-only half of the rules `startQuizAttempt` enforces, so the page can offer a real
+  // action rather than a button that will fail.
+  const retakeState = await getRetakeStateForStudent(student.studentId, assessment.id)
+  if (retakeState === null) throw new AnalyticsError(404, "Assessment not found.")
+
   const responseByQuestion = new Map(
     (latest?.responses ?? []).map((response) => [response.questionId, response]),
   )
@@ -588,6 +596,7 @@ export async function getAdaptiveRetakeForStudent(
   return {
     assessment: { id: assessment.id, title: assessment.title, maxMarks: assessment.maxMarks },
     sourceAttemptId: latest?.id ?? null,
+    retake: retakeState,
     totalQuestions: selection.totalQuestions,
     questionIds: selection.questionIds,
     failedQuestionIds: selection.failedQuestionIds,

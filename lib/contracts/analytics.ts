@@ -356,6 +356,27 @@ export const retakePreviousResponseSchema = z.object({
 })
 export type RetakePreviousResponse = z.infer<typeof retakePreviousResponseSchema>
 
+/**
+ * What the student may do about this assessment, so the page can offer a real action rather than
+ * a button that will fail.
+ *
+ * Mirrors `getRetakeStateForStudent`, which is the read-only half of the rules
+ * `startQuizAttempt` enforces — one source, so the page and the gate cannot disagree.
+ */
+export const retakeStateSchema = z.object({
+  policy: z.enum(["NONE", "FIXED", "APPROVAL"]),
+  gradedAttemptsUsed: z.number().int(),
+  sittingCap: z.number().int(),
+  canRetake: z.boolean(),
+  /** Why not, when `canRetake` is false. */
+  blockedReason: z.string().nullable(),
+  /** The student's request state, on an `APPROVAL` assessment. */
+  requestStatus: z.enum(["PENDING", "APPROVED", "REJECTED"]).nullable(),
+  /** Practice opens only once the deadline has passed or a graded attempt was submitted. */
+  canPractise: z.boolean(),
+})
+export type RetakeStateValue = z.infer<typeof retakeStateSchema>
+
 export const adaptiveRetakeResponseSchema = z.object({
   success: z.literal(true),
   assessment: z.object({
@@ -371,6 +392,8 @@ export const adaptiveRetakeResponseSchema = z.object({
   includeUnanswered: z.boolean(),
   questions: z.array(generatedQuestionForStudentSchema),
   previousResponses: z.array(retakePreviousResponseSchema),
+  /** Present so the page can offer practise or request an approval. */
+  retake: retakeStateSchema,
   generatedAt: z.string(),
 })
 export type AdaptiveRetakeResponse = z.infer<typeof adaptiveRetakeResponseSchema>

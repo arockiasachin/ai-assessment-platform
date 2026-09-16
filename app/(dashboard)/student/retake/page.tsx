@@ -1,10 +1,11 @@
 import { redirect } from "next/navigation"
 
 import { RoleGuard } from "@/components/role-guard"
-import { RolePageShell } from "@/components/role-page-shell"
+import { AppShell, PageHeader } from "@/components/shell"
 import { StudentAdaptiveRetake } from "@/components/student-adaptive-retake"
 import { getSessionUser } from "@/lib/auth"
 import { listStudentRetakableAssessmentsForStudent } from "@/lib/analytics/service"
+import { initialsFromEmail, roleLabelFromRole } from "@/lib/user-identity"
 
 export const dynamic = "force-dynamic"
 
@@ -16,13 +17,22 @@ export default async function StudentRetakePage() {
 
   return (
     <RoleGuard role="student">
-      <RolePageShell
+      <AppShell
+        scope="app"
         role="student"
-        title="Adaptive retake"
-        description="A targeted retake built only from the questions you got wrong (or left blank) on your latest attempt, rather than the whole quiz."
+        user={{
+          name: user.email,
+          email: user.email,
+          initials: initialsFromEmail(user.email),
+          roleLabel: roleLabelFromRole(user.role),
+        }}
       >
+        <PageHeader
+          title="Retake"
+          description="A targeted retake built from the questions you got wrong or left blank on your latest attempt. Practise as often as you like; a graded retake is subject to your teacher's policy."
+        />
         <StudentAdaptiveRetake initialAssessments={assessments} />
-      </RolePageShell>
+      </AppShell>
     </RoleGuard>
   )
 }
