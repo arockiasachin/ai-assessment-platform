@@ -1,4 +1,4 @@
-import type { MaterialView } from "@/lib/materials"
+import type { StudentMaterialView } from "@/lib/materials"
 import { MATERIAL_KIND_LABEL } from "@/lib/labels"
 
 /**
@@ -15,7 +15,7 @@ import { MATERIAL_KIND_LABEL } from "@/lib/labels"
  * it" was never going to be available for the kind filter.
  */
 
-export type MaterialKindFilter = "all" | MaterialView["kind"]
+export type MaterialKindFilter = "all" | StudentMaterialView["kind"]
 
 export type MaterialFilters = {
   search: string
@@ -29,9 +29,9 @@ export type MaterialFilters = {
  * user did not ask for.
  */
 export function filterMaterials(
-  materials: readonly MaterialView[],
+  materials: readonly StudentMaterialView[],
   filters: MaterialFilters,
-): MaterialView[] {
+): StudentMaterialView[] {
   const needle = filters.search.trim().toLowerCase()
 
   return materials.filter((material) => {
@@ -55,7 +55,9 @@ export type MaterialKindOption = { value: string; label: string }
  * Only offers kinds that are actually present. A menu entry that can only ever
  * produce an empty table is worse than a shorter menu.
  */
-export function materialKindOptions(materials: readonly MaterialView[]): MaterialKindOption[] {
+export function materialKindOptions(
+  materials: readonly StudentMaterialView[],
+): MaterialKindOption[] {
   const present = [...new Set(materials.map((material) => material.kind))].sort()
   return [
     { value: "all", label: "All kinds" },
@@ -78,7 +80,7 @@ export type MaterialKpis = {
  * `pending` is `total - indexed` rather than a second count of empty-chunk rows,
  * so the two cards cannot disagree if a material somehow had neither state.
  */
-export function deriveMaterialKpis(materials: readonly MaterialView[]): MaterialKpis {
+export function deriveMaterialKpis(materials: readonly StudentMaterialView[]): MaterialKpis {
   const total = materials.length
   const indexed = materials.filter((material) => material.indexed).length
   return {

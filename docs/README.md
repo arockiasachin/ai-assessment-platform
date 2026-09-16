@@ -60,11 +60,14 @@ mockups to the backend that already exists behind them:
   corrections to the parent plan (`teacher/classes` is a different screen, not a re-skin, and
   `teacher/submissions` has no real page at all — since resolved: it is now a read-only queue, see
   §D2).
-- [`plans/wave-2.md`](./plans/wave-2.md) — the Wave 2 plan. Wave 1 was a presentation port; this one is
-  not. It scopes the three pages whose readers **do not exist** (`student/resources`, `student/events`,
-  `teacher/planner`), with the two library slices ordered before their pages, and records the finding
-  that decides demo value: the seed data exists but is **monotonous** — 2 materials with no file, 4
-  calendar events all of one kind — and there is **no way to create a `Material` at all**.
+  - [`plans/wave-2.md`](./plans/wave-2.md) — the Wave 2 plan. Wave 1 was a presentation port; this one is
+    not. It scopes the three pages whose readers **do not exist** (`student/resources`, `student/events`,
+    `teacher/planner`), with the two library slices ordered before their pages, and records the finding
+    that decides demo value: the seed data exists but is **monotonous** — 2 materials with no file, 4
+    calendar events all of one kind — and there is **no way to create a `Material` at all**. Progress:
+    the `student/resources` reader and page have landed (S1–S3); `student/events` and `teacher/planner`
+    still need their readers, and the calendar reader is blocked on the `Assessment` release concept
+    (S5), because an unreleased assessment's event must be hidden from a student.
 
 ## Shipped feature pods
 

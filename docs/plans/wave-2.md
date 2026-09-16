@@ -13,17 +13,25 @@ rather than in the composition.
 
 **Wave 2 = the three "no reader at all" pages, plus an optional trailing re-skin.**
 
-| Slice  | Content                                                     | Ships independently |
-| ------ | ----------------------------------------------------------- | ------------------- |
-| **S1** | `lib/materials.ts` + pure mapper + tests. **No page.**      | yes                 |
-| **S2** | **Seed: materials** — the 8 rows in §2.2, indexed for real  | yes                 |
-| **S3** | `student/resources` page                                    | yes                 |
-| **S4** | `lib/calendar.ts` + pure mapper + tests. **No page.**       | yes                 |
-| **S5** | **`Assessment` release**: migration, publish action, audit  | yes                 |
-| **S6** | **Seed: calendar** — the 10 rows in §2.3, with `releasedAt` | yes                 |
-| **S7** | `student/events` page                                       | yes                 |
-| **S8** | `teacher/planner` page                                      | yes                 |
-| **S9** | `teacher/observability` re-skin (optional, droppable)       | yes                 |
+| Slice  | Content                                                     | Ships independently | Status                                 |
+| ------ | ----------------------------------------------------------- | ------------------- | -------------------------------------- |
+| **S1** | `lib/materials.ts` + pure mapper + tests. **No page.**      | yes                 | **landed** `86d5c8a`                   |
+| **S2** | **Seed: materials** — the 8 rows in §2.2, indexed for real  | yes                 | **landed** `b789540`                   |
+| **S3** | `student/resources` page                                    | yes                 | **landed** `0996858`                   |
+| **S4** | `lib/calendar.ts` + pure mapper + tests. **No page.**       | yes                 | pending (blocked on S5's `releasedAt`) |
+| **S5** | **`Assessment` release**: migration, publish action, audit  | yes                 | pending                                |
+| **S6** | **Seed: calendar** — the 10 rows in §2.3, with `releasedAt` | yes                 | pending                                |
+| **S7** | `student/events` page                                       | yes                 | pending                                |
+| **S8** | `teacher/planner` page                                      | yes                 | pending                                |
+| **S9** | `teacher/observability` re-skin (optional, droppable)       | yes                 | pending                                |
+
+Two corrections to the slice order, recorded here rather than silently renumbered. **S4 is blocked
+on S5**, not the other way round: the plan's §3.3 already says the calendar reader depends on the
+release concept, because an unreleased assessment's event must be absent for a student and present
+for its teacher. And **S5 changes the seed** (`releasedAt` must be populated on the assessments that
+should be visible, alongside §2.3's ten rows), so S5 and S6 are coupled more tightly than "one
+schema change, then one seed slice" implies. Neither correction changes the total work; both change
+what can be verified in isolation, which is why they are written down.
 
 The three pages are the only ones where a **reader must be written that does not exist**. The parent
 plan warned about under-budgeting exactly this: _"'Missing reader' is not 'missing model' … budget

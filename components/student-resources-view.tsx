@@ -12,7 +12,7 @@ import { StatCard } from "@/components/ui/stat-card"
 import { StatusPill } from "@/components/ui/status-pill"
 import { formatDate } from "@/lib/format"
 import { MATERIAL_KIND_LABEL } from "@/lib/labels"
-import type { MaterialView } from "@/lib/materials"
+import type { StudentMaterialView } from "@/lib/materials"
 import {
   deriveMaterialKpis,
   filterMaterials,
@@ -50,7 +50,7 @@ const KPI_ICONS: Record<string, LucideIcon> = {
   chunks: Boxes,
 }
 
-const columns: Column<MaterialView>[] = [
+const columns: Column<StudentMaterialView>[] = [
   {
     id: "title",
     header: "Material",
@@ -121,7 +121,7 @@ const columns: Column<MaterialView>[] = [
   },
 ]
 
-export function StudentResourcesView({ materials }: { materials: MaterialView[] }) {
+export function StudentResourcesView({ materials }: { materials: StudentMaterialView[] }) {
   const [search, setSearch] = useState("")
   const [kind, setKind] = useState<MaterialKindFilter>("all")
 

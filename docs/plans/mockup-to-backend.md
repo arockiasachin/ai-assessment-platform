@@ -122,14 +122,14 @@ endpoints, and the data is already covered by tests.
 Three features have a Prisma model but **no query, route, or real page**. The corresponding real
 pages are literally stubs (`FuturePagePlaceholder` — verified, exactly 3):
 
-| Real page                  | Mockup              | Model exists                                         | Missing                                                                                      |
-| -------------------------- | ------------------- | ---------------------------------------------------- | -------------------------------------------------------------------------------------------- |
-| `student/resources` (stub) | `student/resources` | `Material` (schema `:383`), `MaterialChunk` (`:405`) | A list query. Only `lib/vector/embed.ts` touches these today, for indexing.                  |
-| `student/events` (stub)    | `student/events`    | `CalendarEvent` (`schema:268`)                       | A calendar query/route. Only the 4–5 "upcoming" rows leak out via `gradebook-db.ts:242,402`. |
-| `teacher/planner` (stub)   | `teacher/planner`   | `CalendarEvent`                                      | Calendar CRUD.                                                                               |
+| Real page                | Mockup              | Model exists                                         | Missing                                                                                      |
+| ------------------------ | ------------------- | ---------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| `student/resources`      | `student/resources` | `Material` (schema `:383`), `MaterialChunk` (`:405`) | **Landed in Wave 2** (`lib/materials.ts`, S1) — no longer a reader gap.                      |
+| `student/events` (stub)  | `student/events`    | `CalendarEvent` (`schema:268`)                       | A calendar query/route. Only the 4–5 "upcoming" rows leak out via `gradebook-db.ts:242,402`. |
+| `teacher/planner` (stub) | `teacher/planner`   | `CalendarEvent`                                      | Calendar CRUD.                                                                               |
 
-These three mockup pages are **design ahead of the backend** — the only ones where the backend
-must be built, and only as readers over models that already exist.
+Two of these three mockup pages are still **design ahead of the backend** — the only ones where the
+backend must be built, and only as readers over models that already exist.
 
 ### Wave 3 — needs derivation, not new tables
 

@@ -31,6 +31,13 @@ import type { AuthUser } from "@/lib/session"
 /**
  * The view model this module returns.
  *
+ * **Named `StudentMaterialView`, not `MaterialView`.** `lib/mock/types.ts` already
+ * exports a `MaterialView`, and the two are genuinely different shapes: the mockup's
+ * carries three fields that no column backs. Reusing its name for a narrower type
+ * would mean same name, different fields across the tree — the kind of collision
+ * that makes a reader trust the wrong definition. The mockup's type is left alone
+ * because the mockup still draws those three columns as a design reference.
+ *
  * Three fields the mockup rendered are **absent on purpose** (decisions M1, M3 in
  * `docs/plans/wave-2.md`):
  *
@@ -43,7 +50,7 @@ import type { AuthUser } from "@/lib/session"
  *   it writes every chunk or throws, so a material is indexed or it is not, which
  *   `indexed` already expresses.
  */
-export type MaterialView = {
+export type StudentMaterialView = {
   id: string
   title: string
   /** Matches `MaterialKind`; the assignment below proves the two cannot drift. */
@@ -87,7 +94,7 @@ export type MaterialQueryRow = {
  * `undefined`, because the UI branches on it to decide between "indexed" and "Not
  * searchable yet". A missing chunk count would silently render the wrong one.
  */
-export function toMaterialView(row: MaterialQueryRow): MaterialView {
+export function toMaterialView(row: MaterialQueryRow): StudentMaterialView {
   return {
     id: row.id,
     title: row.title,
@@ -109,7 +116,7 @@ export function toMaterialView(row: MaterialQueryRow): MaterialView {
  * `lib/teacher-submissions.ts`): a missing profile is a broken invariant, but it is
  * not worth taking a whole page down for, and the page has an honest empty state.
  */
-export async function listMaterialsForStudent(user: AuthUser): Promise<MaterialView[]> {
+export async function listMaterialsForStudent(user: AuthUser): Promise<StudentMaterialView[]> {
   const student = await prisma.studentProfile.findUnique({
     where: { userId: user.id },
     select: { id: true },

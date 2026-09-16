@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 
-import type { MaterialView } from "@/lib/materials"
+import type { StudentMaterialView } from "@/lib/materials"
 import {
   deriveMaterialKpis,
   filterMaterials,
@@ -19,7 +19,7 @@ import {
  * filter work" would be unanswerable by machine.
  */
 
-function material(overrides: Partial<MaterialView> = {}): MaterialView {
+function material(overrides: Partial<StudentMaterialView> = {}): StudentMaterialView {
   return {
     id: "mat_1",
     title: "Linear equations — lecture notes",
@@ -34,7 +34,7 @@ function material(overrides: Partial<MaterialView> = {}): MaterialView {
   }
 }
 
-const fixtures: MaterialView[] = [
+const fixtures: StudentMaterialView[] = [
   material({ id: "a", title: "Linear equations", kind: "DOCUMENT", indexed: true, chunks: 5 }),
   material({ id: "b", title: "Graphing lines", kind: "SLIDE_DECK", indexed: true, chunks: 4 }),
   material({
