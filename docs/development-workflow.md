@@ -154,6 +154,21 @@ test database and then applies the committed migration history with `prisma migr
 `TEST_DATABASE_URL` is unset, so the pure unit tests still run offline. The suite-level framing is
 in [`../tests/README.md`](../tests/README.md).
 
+## Restart the dev server after a schema or structural change
+
+`next dev` caches the generated Prisma client and the route tree in the running process. Two
+changes therefore need a restart, and both fail in ways that look like code bugs:
+
+| Change                                | Symptom if you do not restart                                                                                                 |
+| ------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `prisma generate` (any schema change) | `Unknown field "<newColumn>" for select statement on model "X"` as a **500**, though `tsc` is clean and the migration applied |
+| A new `layout.tsx` in a route group   | Routes under it render **without** the layout — e.g. no `id="app-main"`, no skip link — while still returning 200             |
+
+Both have cost real debugging time in this repo. The rule: after `prisma generate`, or after
+adding/removing a layout, kill and restart `npm run dev` before trusting a browser check.
+`curl` against the running server is the fastest confirmation — for an app-scope page,
+`grep -c 'id="app-main"'` on the response should be `1`.
+
 ## Commit conventions
 
 Conventional Commits, imperative mood, lowercase type. The scopes observed in this history:

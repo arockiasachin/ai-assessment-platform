@@ -1,17 +1,46 @@
-import { RoleGuard } from "@/components/role-guard"
-import { RolePageShell } from "@/components/role-page-shell"
-import { TeacherAssignmentsManager } from "@/components/teacher-assignments-manager"
+import type { Metadata } from "next"
+import { redirect } from "next/navigation"
 
+import { RoleGuard } from "@/components/role-guard"
+import { AppShell, PageHeader } from "@/components/shell"
+import { TeacherAssignmentsManager } from "@/components/teacher-assignments-manager"
+import { getSessionUser } from "@/lib/auth"
+import { initialsFromEmail, roleLabelFromRole } from "@/lib/user-identity"
+
+export const dynamic = "force-dynamic"
+
+export const metadata: Metadata = { title: "Assignments" }
+
+/**
+ * Assignments — manual creation and JSON quiz import.
+ *
+ * Still a client island for the write paths: `TeacherAssignmentsManager` posts to
+ * `/api/gradebook/assessments` and then calls the provider's `refresh()`, which is why the seeded
+ * provider in `app/(dashboard)/layout.tsx` keeps `refresh()` working rather than dropping the
+ * client fetch entirely.
+ */
 export default async function TeacherAssignmentsPage() {
+  const user = await getSessionUser()
+  if (!user || user.role !== "teacher") redirect("/login")
+
   return (
     <RoleGuard role="teacher">
-      <RolePageShell
+      <AppShell
+        scope="app"
         role="teacher"
-        title="Assignments"
-        description="Create assignments manually or import quiz assessments from JSON."
+        user={{
+          name: user.email,
+          email: user.email,
+          initials: initialsFromEmail(user.email),
+          roleLabel: roleLabelFromRole(user.role),
+        }}
       >
+        <PageHeader
+          title="Assignments"
+          description="Create assignments manually or import quiz assessments from JSON."
+        />
         <TeacherAssignmentsManager />
-      </RolePageShell>
+      </AppShell>
     </RoleGuard>
   )
 }
