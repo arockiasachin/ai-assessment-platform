@@ -209,9 +209,36 @@ response floor (`lib/mock/quizzes.ts:323`), which conflicts with the 10 B1 says 
 | **D4b. Reshape it**             | A plain list of _the subtopics on this assessment_ (a token, not a mastery score), which is honest about what a free-text tag supports. | Small; reuses existing data.                                                |
 | **D4c. Ship it with guards**    | Exact-string grouping, `responses`-descending, a minimum-samples threshold, plus a seed bump so the demo shows something.               | Sells a free-text vocabulary as an analytic axis; the labels stay unstable. |
 
-**No option should produce a per-topic mastery number from an uncontrolled tag
-vocabulary.** A controlled vocabulary — a tag table or an enum — is a product/schema
-change and belongs in Wave 5, not here.
+**RESOLVED: D4b — reshape it.** Implemented in `lib/analytics/subtopics.ts`.
+
+No option should produce a per-topic mastery number from an uncontrolled tag
+vocabulary. The decisive evidence arrived by running the new reader against the seeded
+assessment, and it is starker than the dossier predicted:
+
+```
+tag                  questions  responses  marks
+solving equations            2          6      2
+slope                        1          3      1
+systems of equations         1          3      1
+```
+
+**Under B1's reuse of the item-analysis minimum (10 answered), every one of those three
+rows is `null`.** The mockup's entire surface would render as three "insufficient data"
+rows, on the exact data the product is demonstrated with. And the tag set is precisely
+the three strings the seed passed in — with `solving equations` silently carrying two
+questions.
+
+So the mastery chart was never going to render, and a per-topic number attributed to a
+label the model invented is not worth building. What ships instead answers the question
+the data _can_ support — **which topics does this assessment cover, and how much of it is
+each one** — with no mastery score, no threshold and no `null`-because-small-sample.
+
+Two properties the implementation commits to, both tested: **no normalisation** (tags
+differing by case or whitespace stay separate tokens, because merging them would be
+inventing a taxonomy in a string heuristic), and **untagged questions are counted
+separately** rather than given a name like "Uncategorised", which would put a fabricated
+token beside real ones. A controlled vocabulary — a tag table or an enum — remains a
+Wave 5 schema decision.
 
 ### 7.2 There is no canonical "class average" — **new decision D5**
 
