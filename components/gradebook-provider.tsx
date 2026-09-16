@@ -28,7 +28,7 @@ type NewAssessment = {
   maxMarks: number
 }
 
-type GradebookPayload = {
+export type GradebookPayload = {
   students: Student[]
   courses: Course[]
   assessments: Assessment[]
@@ -68,22 +68,49 @@ type GradebookContextValue = {
 
 const GradebookContext = createContext<GradebookContextValue | null>(null)
 
-export function GradebookProvider({ children }: { children: ReactNode }) {
+/**
+ * @param initialPayload Server-fetched gradebook data. **When provided, the mount fetch is
+ *   skipped**, so the first render is already populated instead of showing an empty shell that
+ *   fills in a moment later. That is the P1 finding from `docs/quality/a11y-perf-audit.md`:
+ *   the payload was always fetched client-side on mount, so every dashboard route rendered twice
+ *   and flashed.
+ * @param initialRole The signed-in user's role, **seeded rather than inferred**. `role` defaulted
+ *   to `"teacher"`, and the dashboard header renders `role === "teacher" ? "Teacher view" : …`, so
+ *   a student's page server-rendered the *teacher* label until hydration corrected it.
+ */
+export function GradebookProvider({
+  children,
+  initialPayload,
+  initialRole,
+}: {
+  children: ReactNode
+  initialPayload?: GradebookPayload | null
+  initialRole?: Role
+}) {
   const pathname = usePathname()
-  const [role, setRole] = useState<Role>("teacher")
-  const [isLoading, setIsLoading] = useState(true)
+  const seeded = initialPayload ?? null
+
+  const [role, setRole] = useState<Role>(initialRole ?? "teacher")
+  // Seeded means not loading — the data is already here.
+  const [isLoading, setIsLoading] = useState(seeded === null)
   const [loadError, setLoadError] = useState<string | null>(null)
-  const [selectedStudentId, setSelectedStudentId] = useState<string>("")
+  const [selectedStudentId, setSelectedStudentId] = useState<string>(
+    seeded?.selectedStudentId ?? seeded?.students[0]?.id ?? "",
+  )
   const [courseFilter, setCourseFilter] = useState<string | "all">("all")
   const [search, setSearch] = useState("")
-  const [students, setStudents] = useState<Student[]>([])
-  const [courses, setCourses] = useState<Course[]>([])
-  const [assessments, setAssessments] = useState<Assessment[]>([])
-  const [quizzes, setQuizzes] = useState<Quiz[]>([])
-  const [upcomingEvents, setUpcomingEvents] = useState<UpcomingEvent[]>([])
-  const [marks, setMarks] = useState<MarksMap>({})
-  const [classAverages, setClassAverages] = useState<Record<string, number | null>>({})
-  const [offerings, setOfferings] = useState<Offering[]>([])
+  const [students, setStudents] = useState<Student[]>(seeded?.students ?? [])
+  const [courses, setCourses] = useState<Course[]>(seeded?.courses ?? [])
+  const [assessments, setAssessments] = useState<Assessment[]>(seeded?.assessments ?? [])
+  const [quizzes, setQuizzes] = useState<Quiz[]>(seeded?.quizzes ?? [])
+  const [upcomingEvents, setUpcomingEvents] = useState<UpcomingEvent[]>(
+    seeded?.upcomingEvents ?? [],
+  )
+  const [marks, setMarks] = useState<MarksMap>(seeded?.marks ?? {})
+  const [classAverages, setClassAverages] = useState<Record<string, number | null>>(
+    seeded?.classAverages ?? {},
+  )
+  const [offerings, setOfferings] = useState<Offering[]>(seeded?.offerings ?? [])
 
   const applyPayload = (payload: GradebookPayload) => {
     setStudents(payload.students)
@@ -129,9 +156,10 @@ export function GradebookProvider({ children }: { children: ReactNode }) {
   // visitors, so fetching on the unauthenticated /mockup tree only produces
   // console noise. Skip it there; real dashboard routes are unaffected.
   //
-  // NOTE: this is a scope guard, not the fix for the P1 "fetch on mount"
-  // finding. The proper fix is to server-render the payload and pass it in as
-  // initial state; see docs/quality/a11y-perf-audit.md.
+  // The P1 "fetch on mount" finding is now fixed for the dashboard subtree, which mounts a
+  // seeded provider from `app/(dashboard)/layout.tsx`. This guard still matters for the rest of
+  // the tree — notably `/mockup` and `/quiz`, which keep the fetch-on-mount behaviour because
+  // they sit outside `(dashboard)` and get the root provider.
   const isMockupRoute = pathname.startsWith("/mockup")
 
   useEffect(() => {
@@ -139,9 +167,14 @@ export function GradebookProvider({ children }: { children: ReactNode }) {
       setIsLoading(false)
       return
     }
+    // **Seeded means do not fetch.** Running the fetch anyway would re-apply the payload over
+    // state the user may already have touched — `applyPayload` resets `selectedStudentId` and
+    // re-clamps `courseFilter` — so "seed and also fetch" is strictly worse than either alone.
+    // `refresh()` stays available for the write paths that need fresh rows.
+    if (seeded !== null) return
     void loadGradebook()
     // eslint-disable-next-line react-hooks/exhaustive-deps -- loadGradebook is stable per render and intentionally not a dependency
-  }, [isMockupRoute])
+  }, [isMockupRoute, seeded])
 
   const setMark = (studentId: string, assessmentId: string, score: number | null) => {
     setMarks((prev) => {

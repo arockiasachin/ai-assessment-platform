@@ -97,7 +97,17 @@ is a design decision, not a mechanical fix, so it is deferred — see "needs a h
 1. **Retune `--success` / `--warning` for text use** (see table above). Either darken the tokens
    (re-tints charts/progress) or migrate the handful of `text-success`/`text-warning` call sites to
    darker shades. This is a visual-design call.
-2. **Server-render the dashboard gradebook** (P1/P2). The clean fix is to fetch the gradebook
-   payload in a Server Component and pass it into `GradebookProvider` (and likewise seed
-   `StudentAssessmentsView` / `TeacherSubmissionsManager`), then keep the client fetch only for
-   refresh. That touches `app/layout.tsx`, which is shared across the parallel Phase work.
+2. **Server-render the dashboard gradebook** (P1/P2) — **resolved for the `(dashboard)` subtree.**
+   `app/(dashboard)/layout.tsx` fetches the payload once and mounts a seeded `GradebookProvider`
+   (`initialPayload` / `initialRole`), so the first render is already populated and the role is
+   correct server-side. A nested provider was used rather than changing the root one, because
+   `app/layout.tsx` cannot receive props from a page and `/quiz` plus the whole `/mockup` tree
+   should keep their existing behaviour.
+
+   Verified in the server HTML: `/student` now renders `Student view` (it rendered `Teacher view`
+   before, since `role` defaulted to `"teacher"`) and carries the student's register number before
+   hydration.
+
+   Still outstanding from the same finding: `StudentAssessmentsView` and `TeacherSubmissionsManager`
+   keep their own client fetches. Both are page-scoped rather than subtree-wide, so the fix is a
+   prop per page rather than a layout, and neither is on the dashboard path this covered.
