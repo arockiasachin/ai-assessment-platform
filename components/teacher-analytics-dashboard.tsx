@@ -293,7 +293,9 @@ export function TeacherAnalyticsDashboard({
                   <p className="mt-2 text-xs text-muted-foreground">
                     {items.cohort.count} finalized attempt(s) · average{" "}
                     {formatPercent(items.cohort.average)} · pass rate{" "}
-                    {formatPercent(items.cohort.passRate)} (≥ {items.cohort.passThreshold}%).
+                    {formatPercent(items.cohort.passRate)} (≥ {items.cohort.passThreshold}%). Bars
+                    bin this assessment&apos;s marks on VIT&apos;s absolute scale; a VIT letter is
+                    awarded for a course grand total, not for one assessment.
                   </p>
                 </>
               ) : (

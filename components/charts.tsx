@@ -84,12 +84,27 @@ const GRADE_COLORS: Record<string, string> = {
   F: "var(--chart-4)",
 }
 
-export function GradeDistributionChart({ data }: { data: { grade: string; count: number }[] }) {
+export function GradeDistributionChart({
+  data,
+  /**
+   * What the bars are, for the title and the screen-reader description.
+   *
+   * Defaults to "marks", not "grades", because that is what the caller passes: the distribution
+   * of **one assessment's marks** on VIT's absolute band boundaries. A VIT letter is awarded for
+   * a *course grand total*, so calling these grades would claim a course grade per assessment —
+   * the bands are a useful scale to bin marks against, and the wording has to say so or the
+   * chart reads as something it is not.
+   */
+  noun = "marks",
+}: {
+  data: { grade: string; count: number }[]
+  noun?: string
+}) {
   return (
     <ChartContainer config={distConfig} className="h-[260px] w-full">
       <BarChart
         data={data}
-        title="Grade distribution"
+        title={`Distribution of ${noun}`}
         desc={describeData(
           data,
           (entry) => `${entry.grade}: ${entry.count}`,

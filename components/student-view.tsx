@@ -17,7 +17,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { filterAssessments, scorePct } from "@/lib/analytics"
-import { courseLetter, formatDate, initials, round } from "@/lib/gradebook"
+import { formatDate, initials, round } from "@/lib/gradebook"
 
 export function StudentView() {
   const {
@@ -157,7 +157,13 @@ export function StudentView() {
         <StatCard
           label="Overall average"
           value={overall === null ? "—" : `${round(overall)}%`}
-          sub={overall === null ? "No marks yet" : `Grade ${courseLetter(overall)}`}
+          // **No letter here, and the reason is not the banding.** This is an unweighted mean
+          // of per-assessment percentages across *every* course the student is taking, and
+          // VIT awards a letter per course — so there is no course whose letter this could
+          // be. `courseLetter` would have produced a plausible-looking grade for a number
+          // that has no grade at all, which is the same class of error as showing the wrong
+          // band: it looks authoritative and is meaningless.
+          sub={overall === null ? "No marks yet" : `Across ${graded.length} assessments`}
           icon={TrendingUp}
           accent="primary"
         />
