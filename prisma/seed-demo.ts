@@ -101,6 +101,44 @@ const CODE_TASK_ID = "demo-code-task"
 const GROUP_ID = "demo-group-alpha"
 const LTI_REGISTRATION_ID = "demo-lti-registration"
 
+/**
+ * Every calendar event this seed owns, with a stable id.
+ *
+ * The ids are not cosmetic. `CalendarEvent`'s three links (`classId`,
+ * `offeringId`, `assessmentId`) are all `onDelete: SetNull`, so a teardown that
+ * deletes the offering without deleting the event does not remove the event — it
+ * **orphans** it, leaving a row whose links are all null. That is exactly the shape
+ * of a deliberately institution-wide event, so an orphan is indistinguishable from
+ * a holiday and becomes visible to every student, including one enrolled in
+ * nothing.
+ *
+ * This is not hypothetical: it is what the seed did before these ids existed. Every
+ * run added events and cleaned up none, so a handful of runs left a pile of
+ * duplicated `Due: …` rows with no course and no location, and the calendar reader
+ * had no way to tell them apart from legitimate institution-wide events. Stable ids
+ * give the teardown an exact set to remove, which is the same fix the materials
+ * list needed.
+ */
+const EVENT_DUE_BY_ASSESSMENT: Record<string, string> = {
+  // Bracket syntax is required, not stylistic: `{ QUIZ_ASSESSMENT_ID: … }` would use
+  // the *literal name* as the key, so a lookup by the assessment's real id would
+  // miss and the event would silently get a generated id the teardown cannot see.
+  [QUIZ_ASSESSMENT_ID]: "demo-event-due-quiz",
+  [ESSAY_ASSESSMENT_ID]: "demo-event-due-essay",
+  [CODE_ASSESSMENT_ID]: "demo-event-due-code",
+  [GROUP_ASSESSMENT_ID]: "demo-event-due-group",
+}
+
+const CALENDAR_EVENT_IDS = [
+  ...Object.values(EVENT_DUE_BY_ASSESSMENT),
+  "demo-event-lecture-graphing",
+  "demo-event-lecture-systems",
+  "demo-event-midterm-break",
+  "demo-event-quiz-reminder",
+  "demo-event-lecture-slope-recap",
+  "demo-event-revision-session",
+]
+
 const STUDENT_NAMES = [
   { fullName: "Demo Student One", registerNumber: "DEMO-0001" },
   { fullName: "Demo Student Two", registerNumber: "DEMO-0002" },
@@ -108,6 +146,50 @@ const STUDENT_NAMES = [
   { fullName: "Demo Student Four", registerNumber: "DEMO-0004" },
   { fullName: "Demo Student Five", registerNumber: "DEMO-0005" },
 ]
+
+/**
+ * The demo term is anchored to the moment the seed runs, not to fixed dates.
+ *
+ * This is deliberate, and it replaced a fixed `2026-01-05 → 2026-12-18` window.
+ * Two things forced it:
+ *
+ * 1. **A fixed window silently expires.** The seed drives the quiz attempt flow
+ *    through the real services, and `lib/quiz-attempts/eligibility.ts` blocks a new
+ *    attempt once `dueDate` has passed — so once a hard-coded due date went by,
+ *    `prisma:seed:demo` would start *throwing* rather than merely looking stale.
+ *    Anchoring to today keeps the demo runnable whenever it is run.
+ * 2. **The calendar needs genuinely past and future events.** §2.3 of the plan
+ *    specifies offsets (`+3 days`, `−7 days`) precisely so the "Upcoming" panel has
+ *    something to include *and* something to exclude. An absolute term cannot stay
+ *    in sync with relative events: seed it after the term ended and every event
+ *    would fall outside the term it belongs to.
+ *
+ * The trade-off is that absolute dates differ between runs. For a demo fixture
+ * that is the right side of the trade — a shifted date is invisible, an expired
+ * seed is not. Anything asserting on a *specific* date would be wrong to; the
+ * contract is the shape (a 15-week term containing today), and
+ * `tests/demo-seed-shape.test.ts` asserts exactly that.
+ */
+const NOW = new Date()
+const DAY_MS = 24 * 60 * 60 * 1000
+
+/** A date `days` from now; negative is in the past. */
+function fromNow(days: number, hourUtc = 8): Date {
+  const at = new Date(NOW.getTime() + days * DAY_MS)
+  at.setUTCHours(hourUtc, 0, 0, 0)
+  return at
+}
+
+/**
+ * B2 established that a "teaching week" is one of a semester's **15 instructional
+ * weeks**, so the demo term is 15 weeks with today inside it — today is week 7.
+ * A weekly series over this window therefore has real weeks on both sides of the
+ * present rather than being empty until the deadlines cluster at the end, which is
+ * what the previous 50-week window with November-only assessments produced.
+ */
+const TERM_WEEKS = 15
+const TERM_START = fromNow(-42)
+const TERM_END = fromNow(-42 + TERM_WEEKS * 7)
 
 export const DEMO_IDS = {
   teacherUserId: TEACHER_USER_ID,
@@ -152,6 +234,7 @@ export const DEMO_ACCOUNTS = {
 
 export type DemoSeedSummary = {
   materials: number
+  calendarEvents: number
   materialChunks: number
   questions: number
   publishedQuestions: number
@@ -212,6 +295,23 @@ async function deleteDemoData(): Promise<void> {
   // Dependency order matters: every row that references a staff profile with
   // `onDelete: Restrict` (Assessment.createdById, CourseOffering.teacherId) has
   // to go before the profile it points at.
+  //
+  // Calendar events must go **before** the assessments, offerings and class rooms
+  // they point at. Their three links are all `onDelete: SetNull`, so deleting a
+  // parent does not delete the event — it strips one link and leaves the row, and a
+  // row with no links at all is exactly what an intentionally institution-wide
+  // event looks like. The second clause cleans up rows earlier runs already
+  // orphaned, which the calendar reader would otherwise show to every student as a
+  // duplicated `Due: …` with no course and no location. Deleting an unscoped event
+  // here is safe because this seed recreates its own (the mid-term break) below.
+  await prisma.calendarEvent.deleteMany({
+    where: {
+      OR: [
+        { id: { in: CALENDAR_EVENT_IDS } },
+        { offeringId: null, classId: null, assessmentId: null },
+      ],
+    },
+  })
   await prisma.group.deleteMany({ where: { id: GROUP_ID } })
   await prisma.assessment.deleteMany({
     where: {
@@ -334,8 +434,9 @@ async function createCourseAndOfferings() {
       term: "Term-1",
       academicYear: 2026,
       studentLimit: 30,
-      startsOn: new Date("2026-01-05T08:00:00.000Z"),
-      endsOn: new Date("2026-12-18T08:00:00.000Z"),
+      // A 15-week term containing today; see the note on `TERM_START`.
+      startsOn: TERM_START,
+      endsOn: TERM_END,
       analyticsSettings: {
         intervention: { pendingReviews: 1 },
       },
@@ -551,8 +652,18 @@ async function createAssessments() {
    * With every assessment released, the two branches render identically and a
    * broken filter demos as working — the same failure mode as the Wave 1 seed bugs.
    *
-   * The releases are set a fortnight before each due date, which is the realistic
-   * shape: a teacher opens the assessment, then the deadline approaches.
+   * Two constraints shape the dates, and both are load-bearing:
+   *
+   * - **`dueDate` must stay in the future.** The quiz is delivered through the real
+   *   attempt flow further down this file, and a passed deadline makes
+   *   `startQuizAttempt` throw, which would break seeding rather than just look odd.
+   * - **`releasedAt` must not be in the future.** Releasing *is* making an
+   *   assessment visible, so a release instant ahead of now would be a contradiction
+   *   — and the student reader would show it while claiming it was released later.
+   *
+   * The lead times therefore differ (a fortnight for the quiz, longer for the
+   * others), which is also what a real course looks like: teachers open assessments
+   * as each unit begins, not all at one fixed distance from the deadline.
    */
   const assessmentRows = [
     {
@@ -560,40 +671,51 @@ async function createAssessments() {
       title: "Linear Equations Check-in (AI-generated)",
       type: "QUIZ" as const,
       maxMarks: 20,
-      dueDate: new Date("2026-11-30T08:00:00.000Z"),
+      dueDate: fromNow(12),
       maxAttempts: 5,
-      releasedAt: new Date("2026-11-16T08:00:00.000Z") as Date | null,
+      releasedAt: fromNow(-2) as Date | null,
     },
     {
       id: ESSAY_ASSESSMENT_ID,
       title: "Describing a linear model (rubric-graded)",
       type: "DESCRIPTIVE" as const,
       maxMarks: 30,
-      dueDate: new Date("2026-12-04T08:00:00.000Z"),
+      dueDate: fromNow(26),
       maxAttempts: null,
-      releasedAt: new Date("2026-11-20T08:00:00.000Z") as Date | null,
+      releasedAt: fromNow(-1) as Date | null,
     },
     {
       id: CODE_ASSESSMENT_ID,
       title: "Fix the slope calculator",
       type: "CODE" as const,
       maxMarks: 10,
-      dueDate: new Date("2026-12-08T08:00:00.000Z"),
+      dueDate: fromNow(33),
       maxAttempts: 3,
-      releasedAt: new Date("2026-11-24T08:00:00.000Z") as Date | null,
+      releasedAt: fromNow(0) as Date | null,
     },
     {
       id: GROUP_ASSESSMENT_ID,
       title: "Linear models group project",
       type: "GROUP_PROJECT" as const,
       maxMarks: 20,
-      dueDate: new Date("2026-12-11T08:00:00.000Z"),
+      dueDate: fromNow(47),
       maxAttempts: 1,
       // The unreleased one. Its calendar event still exists and its teacher still
       // sees it; a student must not.
       releasedAt: null,
     },
   ]
+
+  /**
+   * A sentence per assessment event, so the calendar's description column is not a
+   * wall of em dashes (§2.3).
+   */
+  const ASSESSMENT_EVENT_DETAIL: Record<string, string> = {
+    [QUIZ_ASSESSMENT_ID]: "Covers solving and graphing linear equations. Two attempts allowed.",
+    [ESSAY_ASSESSMENT_ID]: "Describe how a linear model changes when the slope changes.",
+    [CODE_ASSESSMENT_ID]: "The tests show the expected behaviour; make them pass.",
+    [GROUP_ASSESSMENT_ID]: "Submit one project per group, with each member's contribution noted.",
+  }
 
   for (const assessment of assessmentRows) {
     await prisma.assessment.create({
@@ -614,16 +736,116 @@ async function createAssessments() {
 
     await prisma.calendarEvent.create({
       data: {
+        id: EVENT_DUE_BY_ASSESSMENT[assessment.id],
         classId: ACTIVE_CLASS_ID,
         offeringId: ACTIVE_OFFERING_ID,
         assessmentId: assessment.id,
         title: `Due: ${assessment.title}`,
+        // §2.3: the four existing assessment events keep their dates but gain a
+        // real sentence each, so the calendar's description column is not a wall of
+        // em dashes.
+        description: ASSESSMENT_EVENT_DETAIL[assessment.id],
         eventType: "ASSESSMENT",
         startAt: assessment.dueDate,
         isUpcoming: true,
       },
     })
   }
+
+  /**
+   * The six non-assessment events (§2.3 rows 5–10).
+   *
+   * They exist to make branches of the calendar page **reachable**, which is the
+   * difference between a demo that works and a demo that looks like it works:
+   *
+   * | Event                        | The branch it exists to exercise                            |
+   * | ---------------------------- | ----------------------------------------------------------- |
+   * | Lecture — graphing (row 5)   | `CLASS` kind *with* an `endAt`, and a location                |
+   * | Lecture — systems (row 6)    | a class *without* a description (em dash)                     |
+   * | Mid-term break (row 7)       | `HOLIDAY`, and the **no-location** case → renders `—`         |
+   * | Quiz 1 closes (row 8)        | `REMINDER` kind, *without* an `endAt`                         |
+   * | Lecture — slope recap (9)    | **a past event** — so "Upcoming" visibly omits something      |
+   * | Revision session (row 10)    | past, **and** on the other offering — cross-offering isolation |
+   *
+   * Rows 9 and 10 are the important ones. Without a past event the "Upcoming" panel
+   * and the table beneath it render the *same* rows, so neither a test nor a
+   * reviewer can tell whether the upcoming filter does anything — which is exactly
+   * what the previous seed produced with all four events in the future.
+   *
+   * `isUpcoming` is set `false` on the two past events, and **nothing reads it**:
+   * the plan records that it is a stored flag whose only writer is this file, so the
+   * reader filters on `startAt` instead. The seed sets it honestly anyway, because a
+   * fixture that writes a flag the code ignores is a fixture that will mislead the
+   * next person to read it.
+   */
+  const classEvent = (id: string, days: number, title: string, description: string | null) => {
+    const startAt = fromNow(days, 9)
+    return {
+      id,
+      classId: ACTIVE_CLASS_ID,
+      offeringId: ACTIVE_OFFERING_ID,
+      title,
+      description,
+      eventType: "CLASS" as const,
+      startAt,
+      // A 90-minute class, so `endAt` is a real span rather than a rounded hour.
+      endAt: new Date(startAt.getTime() + 90 * 60 * 1000),
+      isUpcoming: days >= 0,
+    }
+  }
+
+  await prisma.calendarEvent.createMany({
+    data: [
+      classEvent(
+        "demo-event-lecture-graphing",
+        3,
+        "Lecture — graphing linear functions",
+        "Bring the practice set.",
+      ),
+      classEvent("demo-event-lecture-systems", 10, "Lecture — solving systems", null),
+      {
+        // No offering and no class: an institution-wide holiday. This is the only
+        // event that renders a `—` location, so it is the em-dash rule on live data.
+        id: "demo-event-midterm-break",
+        classId: null,
+        offeringId: null,
+        title: "Mid-term break",
+        description: "No classes this week.",
+        eventType: "HOLIDAY" as const,
+        startAt: fromNow(21, 0),
+        endAt: fromNow(28, 0),
+        isUpcoming: true,
+      },
+      {
+        id: "demo-event-quiz-reminder",
+        classId: ACTIVE_CLASS_ID,
+        offeringId: ACTIVE_OFFERING_ID,
+        title: "Quiz 1 closes this Friday",
+        description: null,
+        eventType: "REMINDER" as const,
+        startAt: fromNow(5, 9),
+        // No `endAt`: a reminder is an instant, not a span.
+        endAt: null,
+        isUpcoming: true,
+      },
+      classEvent("demo-event-lecture-slope-recap", -7, "Lecture — slope recap", null),
+      {
+        id: "demo-event-revision-session",
+        classId: PAST_CLASS_ID,
+        offeringId: PAST_OFFERING_ID,
+        title: "Revision session",
+        description: null,
+        eventType: "CLASS" as const,
+        // A **fixed** date, unlike the rows above, because the past offering is a
+        // fixed historical fact: its term ran in 2025. Dating this event relative to
+        // today would place it outside the very term it belongs to, which reads as a
+        // seeding bug. It is still in the past, which is the branch it exists for.
+        startAt: new Date("2025-04-14T09:00:00.000Z"),
+        endAt: new Date("2025-04-14T10:30:00.000Z"),
+        isUpcoming: false,
+      },
+    ],
+  })
 }
 
 /**
@@ -1109,6 +1331,7 @@ async function createLtiRegistration() {
 async function countSummary(): Promise<DemoSeedSummary> {
   const [
     materials,
+    calendarEvents,
     materialChunks,
     questions,
     publishedQuestions,
@@ -1130,6 +1353,7 @@ async function countSummary(): Promise<DemoSeedSummary> {
     ltiRegistrations,
   ] = await Promise.all([
     prisma.material.count({ where: { id: { in: MATERIAL_IDS } } }),
+    prisma.calendarEvent.count({ where: { id: { in: CALENDAR_EVENT_IDS } } }),
     prisma.materialChunk.count({
       where: { materialId: { in: MATERIAL_IDS } },
     }),
@@ -1175,6 +1399,7 @@ async function countSummary(): Promise<DemoSeedSummary> {
 
   return {
     materials,
+    calendarEvents,
     materialChunks,
     questions,
     publishedQuestions,

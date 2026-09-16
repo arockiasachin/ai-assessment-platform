@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
 
-import { seedDemo } from "@/prisma/seed-demo"
+import { DEMO_IDS, seedDemo } from "@/prisma/seed-demo"
 
 import { disconnectTestDatabase, prisma as db, truncateAll } from "./helpers/db"
 
@@ -145,6 +145,127 @@ describe("demo seed — shape and legibility", () => {
       for (const row of rows) {
         expect(row.releasedAt!.getTime()).toBeLessThan(row.dueDate.getTime())
       }
+    })
+  })
+
+  describe("calendar", () => {
+    it("covers every EventType the calendar page renders", async () => {
+      const rows = await db.calendarEvent.findMany({ select: { eventType: true } })
+      const kinds = new Set(rows.map((row) => row.eventType))
+
+      for (const kind of ["CLASS", "ASSESSMENT", "HOLIDAY", "REMINDER"]) {
+        expect(kinds, `no calendar event of type ${kind}`).toContain(kind)
+      }
+    })
+
+    it("has both a past event and a future one", async () => {
+      // Without a past event, the "Upcoming" panel and the table beneath it render
+      // the same rows, so neither a test nor a reviewer can tell whether the
+      // upcoming filter does anything. The previous seed had four future events
+      // only, which is exactly that blind spot.
+      const past = await db.calendarEvent.count({ where: { startAt: { lt: new Date() } } })
+      const future = await db.calendarEvent.count({ where: { startAt: { gte: new Date() } } })
+
+      expect(past).toBeGreaterThan(0)
+      expect(future).toBeGreaterThan(0)
+    })
+
+    it("has events with an endAt and events without one", async () => {
+      // A class is a span; a deadline and a reminder are instants.
+      expect(await db.calendarEvent.count({ where: { endAt: { not: null } } })).toBeGreaterThan(0)
+      expect(await db.calendarEvent.count({ where: { endAt: null } })).toBeGreaterThan(0)
+    })
+
+    it("has an event with no offering and no class, for the em-dash location case", async () => {
+      // §2.5: at least one unscoped event must exist. `exactly one` is asserted
+      // below, after a second run, where that count also guards against orphans.
+      const unscoped = await db.calendarEvent.count({
+        where: { offeringId: null, classId: null },
+      })
+      expect(unscoped).toBeGreaterThan(0)
+    })
+
+    it("does not pile up events, and does not orphan them, when run twice", async () => {
+      // Re-seeding inside the test is what makes this bite. A single run cannot
+      // expose the bug: `truncateAll()` clears the database first, so there is
+      // nothing to leak. The damage needs a *second* run, which deletes the
+      // offerings and assessments while the events pointing at them survive.
+      //
+      // **This is the orphan guard.** `CalendarEvent`'s three links are all
+      // `onDelete: SetNull`, so dropping a parent nulls the link instead of removing
+      // the event. A row with every link nulled is exactly the shape of a
+      // deliberately institution-wide event, so an orphan is indistinguishable from
+      // a holiday and gets shown to every student as a course-less, location-less
+      // `Due: …`. The seed did precisely this before stable event ids existed: every
+      // run added ten events and removed none.
+      //
+      // Both assertions belong here rather than in separate tests. Asserting the
+      // unscoped count before this re-seed would pass vacuously -- there are no
+      // orphans until a second run creates them -- which is a test that cannot fail
+      // in the situation it is meant to catch.
+      const before = await db.calendarEvent.count()
+
+      await seedDemo()
+
+      expect(await db.calendarEvent.count()).toBe(before)
+      expect(
+        await db.calendarEvent.count({
+          where: { offeringId: null, classId: null, assessmentId: null },
+        }),
+      ).toBe(1)
+    })
+  })
+
+  describe("the demo term", () => {
+    it("is a 15-week term containing today", async () => {
+      // B2 established that a "teaching week" is one of a semester's 15
+      // instructional weeks. A ~50-week window with every deadline at the end made a
+      // weekly series empty for its first six weeks and meaningless everywhere.
+      const offering = await db.courseOffering.findUniqueOrThrow({
+        where: { id: DEMO_IDS.activeOfferingId },
+        select: { startsOn: true, endsOn: true },
+      })
+
+      expect(offering.startsOn).not.toBeNull()
+      expect(offering.endsOn).not.toBeNull()
+
+      const weeks = Math.round(
+        (offering.endsOn!.getTime() - offering.startsOn!.getTime()) / (7 * 24 * 60 * 60 * 1000),
+      )
+      expect(weeks).toBe(15)
+
+      const now = new Date()
+      expect(offering.startsOn!.getTime()).toBeLessThanOrEqual(now.getTime())
+      expect(offering.endsOn!.getTime()).toBeGreaterThanOrEqual(now.getTime())
+    })
+
+    it("keeps every assessment due date inside the term", async () => {
+      const offering = await db.courseOffering.findUniqueOrThrow({
+        where: { id: DEMO_IDS.activeOfferingId },
+        select: { startsOn: true, endsOn: true },
+      })
+      const assessments = await db.assessment.findMany({
+        where: { offeringId: DEMO_IDS.activeOfferingId },
+        select: { dueDate: true },
+      })
+
+      expect(assessments.length).toBeGreaterThan(0)
+      for (const assessment of assessments) {
+        expect(assessment.dueDate.getTime()).toBeGreaterThanOrEqual(offering.startsOn!.getTime())
+        expect(assessment.dueDate.getTime()).toBeLessThanOrEqual(offering.endsOn!.getTime())
+      }
+    })
+
+    it("keeps the quiz's deadline in the future", async () => {
+      // The seed delivers the quiz through the real attempt flow, and
+      // `lib/quiz-attempts/eligibility.ts` blocks a new attempt once `dueDate` has
+      // passed -- so a past deadline makes seeding throw rather than merely look
+      // stale. This is the assertion that would catch a re-anchoring mistake.
+      const quiz = await db.assessment.findUniqueOrThrow({
+        where: { id: DEMO_IDS.quizAssessmentId },
+        select: { dueDate: true },
+      })
+      expect(quiz.dueDate.getTime()).toBeGreaterThan(new Date().getTime())
     })
   })
 })
