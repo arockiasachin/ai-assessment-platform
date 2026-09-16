@@ -395,6 +395,38 @@ define and edit them, and a minimum-CAT gate that applied to anybody.
 - **The create contract is unchanged** (`Quiz | Assignment`). Teachers can weight the kinds that
   exist; authoring descriptive/code/group assessments from the gradebook remains a product decision.
 
+### The grading-policy editor: logic extracted, and verified in a browser
+
+The editor (`components/offering-grading-policy.tsx`) shipped without a test, because this
+repository deliberately has no DOM environment. It writes a value that changes **every student's
+final grade**, so leaving it unverified was the weakest part of the work.
+
+#### Added
+
+- **`lib/grading/policy-view.ts`** — the editor's pure logic, extracted so it is testable without a
+  DOM, following the pattern the viewer pages already use (`lib/materials-view.ts`,
+  `lib/planner-view.ts`, `lib/calendar-view.ts`, `lib/observability-view.ts`). The component now
+  holds only rendering and the fetch.
+- **`tests/grading-policy-view.test.ts`** — 29 cases. The load-bearing ones are the `null` cases:
+  `minimumCatPercent: null` means "this course has no CAT gate", which is _different_ from a gate at
+  zero, and forms are where meanings get flattened. A round trip that turned `null` into `0` would
+  pass every type check and quietly change who may sit the final exam. Mutation-tested: sending a
+  disabled gate's placeholder number fails 3 cases; loading a `null` gate as an enabled gate at zero
+  fails 2.
+
+#### Verified
+
+- **The editor renders correctly**, confirmed in a browser as the teacher rather than inferred from
+  tests. The configured offering shows `CAT 40% / FAT 60%`, the derived membership
+  ("4 assessment(s) · Final: Linear models group project (derived from due dates)"), the advisory
+  note, and all five verdicts — including the **em dash** for a student with nothing marked, which is
+  the display half of the null-vs-zero rule. The unconfigured offering shows **both** callouts ("No
+  policy stored yet" and "Not enough assessments").
+- **Toggling the gate checkbox disables the minimum-CAT field**, and **wrote nothing** — the audit
+  trail still holds exactly one `offering.grading_config.updated` row, from an earlier API test and
+  not from the browser session. That is the Save button being the only write path, checked rather
+  than assumed.
+
 ### The three audit follow-ups: similarity key, creator index, and the letters
 
 #### Fixed

@@ -6,8 +6,19 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Callout } from "@/components/ui/callout"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { StatusPill, type StatusKey } from "@/components/ui/status-pill"
+import { StatusPill } from "@/components/ui/status-pill"
 import type { OfferingGradingResponse } from "@/lib/contracts/courses"
+import {
+  catPercentLabel,
+  catStatusLabel,
+  catStatusPill,
+  gradingDraftToRequest,
+  gradingPolicySummary,
+  toGradingDraft,
+  type GradingDraft,
+  weightsSumTo100,
+  weightSum,
+} from "@/lib/grading/policy-view"
 
 /**
  * The CAT/FAT grading policy for one offering.
@@ -36,43 +47,10 @@ import type { OfferingGradingResponse } from "@/lib/contracts/courses"
  * grading queries to look at the page.
  */
 
-const STATUS_LABEL: Record<string, string> = {
-  eligible: "Eligible for FAT",
-  "below-cat-minimum": "Below CAT minimum",
-  "insufficient-cat-work": "Too little marked",
-  "no-cat-gate": "No CAT gate",
-}
-
-const STATUS_PILL: Record<string, StatusKey> = {
-  eligible: "passed",
-  "below-cat-minimum": "failed",
-  "insufficient-cat-work": "insufficient-data",
-  "no-cat-gate": "draft",
-}
-
-type Draft = {
-  catWeight: string
-  fatWeight: string
-  finalAssessmentId: string
-  minimumCatPercent: string
-  gateDisabled: boolean
-}
-
-function toDraft(payload: OfferingGradingResponse): Draft {
-  return {
-    catWeight: String(payload.config.catWeight),
-    fatWeight: String(payload.config.fatWeight),
-    finalAssessmentId: payload.config.finalAssessmentId ?? "",
-    minimumCatPercent:
-      payload.config.minimumCatPercent === null ? "30" : String(payload.config.minimumCatPercent),
-    gateDisabled: payload.config.minimumCatPercent === null,
-  }
-}
-
 export function OfferingGradingPolicy({ offeringId }: { offeringId: string }) {
   const [open, setOpen] = useState(false)
   const [payload, setPayload] = useState<OfferingGradingResponse | null>(null)
-  const [draft, setDraft] = useState<Draft | null>(null)
+  const [draft, setDraft] = useState<GradingDraft | null>(null)
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -91,7 +69,7 @@ export function OfferingGradingPolicy({ offeringId }: { offeringId: string }) {
       }
       const data = (await response.json()) as OfferingGradingResponse
       setPayload(data)
-      setDraft(toDraft(data))
+      setDraft(toGradingDraft(data))
     } finally {
       setLoading(false)
     }
@@ -114,12 +92,12 @@ export function OfferingGradingPolicy({ offeringId }: { offeringId: string }) {
 
   const save = async () => {
     if (!draft) return
-    const cat = Number(draft.catWeight)
-    const fat = Number(draft.fatWeight)
-
-    // The contract enforces this too; checking here turns a round trip into an inline message.
-    if (!Number.isFinite(cat) || !Number.isFinite(fat) || Math.abs(cat + fat - 100) > 0.001) {
-      setError("CAT and FAT weights must sum to 100.")
+    // Validation and body-building live in `lib/grading/policy-view.ts`, where they are tested
+    // without a DOM. A rejection here is the same rule the contract enforces, surfaced inline so the
+    // teacher sees it beside the field rather than as a round trip.
+    const request = gradingDraftToRequest(draft)
+    if (!request.ok) {
+      setError(request.message)
       return
     }
 
@@ -130,12 +108,7 @@ export function OfferingGradingPolicy({ offeringId }: { offeringId: string }) {
       const response = await fetch(`/api/teacher/offerings/${offeringId}/grading`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          catWeight: cat,
-          fatWeight: fat,
-          finalAssessmentId: draft.finalAssessmentId === "" ? null : draft.finalAssessmentId,
-          minimumCatPercent: draft.gateDisabled ? null : Number(draft.minimumCatPercent),
-        }),
+        body: JSON.stringify(request.body),
       })
       const data = (await response.json()) as OfferingGradingResponse | { message?: string }
       if (!response.ok) {
@@ -144,28 +117,22 @@ export function OfferingGradingPolicy({ offeringId }: { offeringId: string }) {
       }
       const saved = data as OfferingGradingResponse
       setPayload(saved)
-      setDraft(toDraft(saved))
+      setDraft(toGradingDraft(saved))
       setMessage("Grading policy saved.")
     } finally {
       setSaving(false)
     }
   }
 
-  const sum = draft ? Number(draft.catWeight) + Number(draft.fatWeight) : 0
-  const sumOk = draft !== null && Math.abs(sum - 100) < 0.001
+  const sum = draft ? weightSum(draft) : 0
+  const sumOk = draft !== null && weightsSumTo100(draft)
 
   return (
     <div className="rounded-lg border border-border/60 bg-background px-3 py-2">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <p className="text-sm font-medium">Grading policy</p>
-          <p className="text-xs text-muted-foreground">
-            {payload === null
-              ? "CAT / FAT weights and the FAT gate."
-              : payload.usingDefaults
-                ? "Not set — the export weights every assessment equally."
-                : `CAT ${payload.config.catWeight}% / FAT ${payload.config.fatWeight}%`}
-          </p>
+          <p className="text-xs text-muted-foreground">{gradingPolicySummary(payload)}</p>
         </div>
         <Button type="button" size="sm" variant="outline" onClick={toggle} aria-expanded={open}>
           {open ? "Hide" : "Edit policy"}
@@ -323,7 +290,7 @@ export function OfferingGradingPolicy({ offeringId }: { offeringId: string }) {
                   type="button"
                   size="sm"
                   variant="ghost"
-                  onClick={() => setDraft(toDraft(payload))}
+                  onClick={() => setDraft(toGradingDraft(payload))}
                   disabled={saving}
                 >
                   Reset
@@ -355,14 +322,14 @@ export function OfferingGradingPolicy({ offeringId }: { offeringId: string }) {
                           </span>
                           <span className="flex items-center gap-2">
                             <span className="font-mono text-xs tabular-nums">
-                              {row.catPercent === null ? "—" : `${row.catPercent}%`}
+                              {catPercentLabel(row.catPercent)}
                             </span>
                             <Badge variant="outline">
                               {row.markedCount}/{row.totalCount} marked
                             </Badge>
                             <StatusPill
-                              status={STATUS_PILL[row.status] ?? "pending"}
-                              label={STATUS_LABEL[row.status] ?? row.status}
+                              status={catStatusPill(row.status)}
+                              label={catStatusLabel(row.status)}
                             />
                           </span>
                         </li>

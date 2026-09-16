@@ -253,6 +253,7 @@ were implemented and tested; nothing called them.
 | Read/write with ownership, validation and an audit row           | `lib/grading/offering-config-service.ts`                  |
 | `GET`/`PUT /api/teacher/offerings/[offeringId]/grading`          | `app/api/teacher/offerings/[offeringId]/grading/route.ts` |
 | The teacher's editor, per offering                               | `components/offering-grading-policy.tsx`                  |
+| The editor's pure logic, so it is testable                       | `lib/grading/policy-view.ts`                              |
 | The export reads the stored policy                               | `lib/lms-export/service.ts`                               |
 
 ### Four decisions worth recording
@@ -293,6 +294,31 @@ were implemented and tested; nothing called them.
   so it gets no upcoming calendar event — a deadline that has passed is not upcoming.
 - **A widening defect.** `AssessmentRow.type` was `string` while the column is a five-value enum,
   which is why the policy's input type rejected the row. Typed as the enum.
+
+### How the editor was verified
+
+The editor was the one piece shipped without a test, because this repository deliberately has no DOM
+environment (`vitest.config.mts` pins `environment: "node"`). Two things closed that:
+
+1. **The logic was extracted to `lib/grading/policy-view.ts`** and tested — 29 cases, following the
+   pattern the viewer pages already use (`lib/materials-view.ts`, `lib/planner-view.ts`, …). The
+   component now holds only rendering and the fetch. Mutation-tested: sending a disabled gate's
+   placeholder number instead of `null` fails 3 cases; loading a `null` gate as an enabled gate at
+   zero fails 2.
+2. **The render was confirmed in a real browser** — signed in as the teacher, both offerings, both
+   callouts, the roster, and the disabled-gate interaction.
+
+What the render confirmed, since a passing unit test cannot: the stored offering shows
+`CAT 40% / FAT 60%` with the derived membership ("4 assessment(s) · Final: Linear models group
+project (derived from due dates)"), the advisory note, and all five verdicts — including the em dash
+for a student with nothing marked, which is the display half of the null-vs-zero rule. The
+unconfigured offering shows **both** callouts ("No policy stored yet" and "Not enough assessments"),
+which is the branch that stops a teacher assuming the displayed default is already in force.
+
+Toggling the gate checkbox disabled the minimum-CAT field as intended, and **wrote nothing** —
+confirmed by the audit trail still holding exactly one `offering.grading_config.updated` row, from an
+earlier API test and not from the browser session. That is the Save button being the only write path,
+checked rather than assumed.
 
 ### Not done, and deliberately
 
