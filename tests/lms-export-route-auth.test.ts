@@ -233,7 +233,6 @@ describe("student export routes", () => {
         fullName: "Sam",
         registerNumber: "R1",
         percentage: 80,
-        letter: "B",
         completedWeight: 100,
         totalWeight: 100,
         incomplete: false,

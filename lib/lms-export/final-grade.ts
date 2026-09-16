@@ -1,5 +1,4 @@
 import type { FinalGradeConfig } from "@/lib/contracts/lms-export"
-import { letterGrade } from "@/lib/gradebook"
 
 import { assessmentWeight, categoryForAssessment, totalWeight } from "./weights"
 
@@ -98,7 +97,27 @@ export type FinalGradeCategoryResult = {
 
 export type FinalGradeComputation = {
   percentage: number | null
-  letter: string | null
+  /**
+   * **No letter.** Deliberately absent, and it was removed rather than corrected.
+   *
+   * The platform cannot compute a VIT letter honestly. VIT runs two regimes —
+   * relative for theory above 10 students, absolute for smaller classes and for every
+   * lab, project, soft-skills and NGCR course — and choosing between them needs the
+   * course's **category**, which this schema does not model (there is no
+   * `CourseCategory` field), plus the cohort's mean and σ. Without the category the
+   * regime is unknown, and the two regimes disagree about both the band widths and the
+   * pass line.
+   *
+   * The field it used to carry was `letterGrade(percentage)` — fixed `A/B/C/D/F` with
+   * no `E`, passing at 60. That is wrong under VIT absolute (`D` is 55-60, `E` is
+   * 50-55, pass is 50) and describes bands that do not exist under VIT relative. It
+   * reached the LMS export payload, which is an institutional record: a letter that
+   * disagrees with the result sheet is worse than no letter.
+   *
+   * Restoring one needs, in order: a `CourseCategory` on the course, the cohort's
+   * published marks to compute `mean ± kσ`, and then `resolveGradingRegime` +
+   * `absoluteLetter` / `gradeBandRanges` from `lib/analytics/grading-bands.ts`.
+   */
   completedWeight: number
   totalWeight: number
   incomplete: boolean
@@ -171,7 +190,6 @@ export function computeFinalGrade(
 
   return {
     percentage,
-    letter: percentage === null ? null : letterGrade(percentage),
     completedWeight,
     totalWeight: configuredTotal,
     incomplete: completedWeight < configuredTotal || excludedUnpublishedInConfig.length > 0,

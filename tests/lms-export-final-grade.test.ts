@@ -65,7 +65,9 @@ describe("computeFinalGrade", () => {
     ])
     const final = computeFinalGrade(config, resolved)
     expect(final.percentage).toBe(83)
-    expect(final.letter).toBe("B")
+    // No letter assertion: the export deliberately carries no letter, because the
+    // platform cannot know which of VIT's two regimes applies without a course
+    // category. See the note on `FinalGradeComputation`.
     expect(final.completedWeight).toBe(100)
     expect(final.incomplete).toBe(false)
     expect(final.categories.map((category) => category.score)).toEqual([80, 87.5])
@@ -118,7 +120,6 @@ describe("computeFinalGrade", () => {
       resolveMarks([{ assessmentId: "a1", modern: pub(20, 20, null) }]),
     )
     expect(final.percentage).toBeNull()
-    expect(final.letter).toBeNull()
     expect(final.completedWeight).toBe(0)
   })
 })

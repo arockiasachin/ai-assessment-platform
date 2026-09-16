@@ -203,7 +203,6 @@ function buildStudentFinalGrade(context: ExportContext, student: StudentRow): St
     fullName: student.fullName,
     registerNumber: student.registerNumber,
     percentage: computation.percentage,
-    letter: computation.letter,
     completedWeight: computation.completedWeight,
     totalWeight: computation.totalWeight,
     incomplete: computation.incomplete,

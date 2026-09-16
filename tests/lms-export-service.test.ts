@@ -124,7 +124,6 @@ describe("weighted final grade service", () => {
 
     const p1 = byId.get(s1.profileId)!
     expect(p1.percentage).toBe(83)
-    expect(p1.letter).toBe("B")
     expect(p1.marks.map((mark) => mark.origin)).toEqual([
       "modern-grade",
       "modern-grade",

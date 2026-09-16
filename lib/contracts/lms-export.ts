@@ -117,7 +117,6 @@ export const studentFinalGradeSchema = z.object({
   fullName: z.string(),
   registerNumber: z.string(),
   percentage: z.number().nullable(),
-  letter: z.string().nullable(),
   /** Sum of the weights of categories that had at least one usable mark. */
   completedWeight: z.number(),
   totalWeight: z.number(),

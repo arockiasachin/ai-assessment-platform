@@ -310,7 +310,6 @@ export function TeacherLmsExport({ offerings, initialOfferingId, initialExport }
                     <TableCell className="text-right">
                       {formatPercent(student.percentage)}
                     </TableCell>
-                    <TableCell className="text-right">{student.letter ?? "—"}</TableCell>
                     <TableCell className="text-right">
                       {student.completedWeight}/{student.totalWeight}
                     </TableCell>

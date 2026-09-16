@@ -347,17 +347,41 @@ does the platform have the right to compute a letter at all". Both regimes are n
 implemented and testable (`resolveGradingRegime`, `absoluteLetter`), which is what the
 platform actually needed.
 
-**The live defect: the exported letter is wrong under both regimes.** `letterGrade`
-(`lib/gradebook.ts:95`) emits `A/B/C/D/F` — no `E`, passing at 60 — and
-`computeFinalGrade` puts it in the LMS export payload
-(`lib/lms-export/final-grade.ts:174`, reaching a consumer at `lms-export/service.ts:206`).
-Against VIT absolute it is wrong twice (`D` is 55–60, `E` is 50–55, pass is 50);
-against VIT relative those bands do not exist at all.
+**The live defect: the exported letter is wrong under both regimes — REMOVED.** The
+`letter` field is gone from `FinalGradeComputation`, the export contract, the
+serializer and the UI table (`lib/lms-export/*`, `components/teacher-lms-export.tsx`).
 
-**An exported letter that disagrees with the result sheet is worse than no letter**, and
-it is already shipping. This is raised rather than changed, because fixing it alters an
-institutional record and there are three defensible answers — none of which is the
-implementer's to pick silently. It is the decision below.
+It carried `letterGrade(percentage)` — `A/B/C/D/F`, no `E`, passing at 60 — reaching the
+LMS export payload. Against VIT absolute that is wrong twice (`D` is 55–60, `E` is
+50–55, pass is 50); against VIT relative those bands do not exist. **An exported letter
+that disagrees with the result sheet is worse than no letter**, and it was already
+shipping, so removal is the honest fix rather than a correction.
+
+**It was not replaced, because it cannot be honestly computed yet.** Choosing between
+the two regimes needs the course's **category**, and the schema has no `CourseCategory`
+field — so the platform cannot tell a theory course from a lab, and therefore cannot
+know which band set or pass line applies. Restoring a letter needs, in order: a
+`CourseCategory` on the course, the cohort's published marks for `mean ± kσ`, and then
+`resolveGradingRegime` + `absoluteLetter`/`gradeBandRanges`. The reasoning is recorded
+on the type itself so the next reader does not re-add the old call.
+
+**The same unbacked letter is still displayed in-app in five places**, and they are
+_not_ changed here because they are product surfaces rather than records, and each needs
+the same missing field:
+
+| Site                                  | Shows                       |
+| ------------------------------------- | --------------------------- |
+| `lib/gradebook.ts:95` (`letterGrade`) | the source of all of them   |
+| `components/student-view.tsx:160`     | the student's overall grade |
+| `components/grade-badge.tsx:35`       | every grade badge           |
+| `components/quiz-runner.tsx:337`      | the post-quiz grade         |
+| `lib/analytics/cohort.ts:78`          | the histogram's A–F buckets |
+| `lib/analytics/legacy.ts:61`          | mark-map bands              |
+
+Each is defensible as a _rough in-app indicator_ and indefensible as a VIT letter. Either
+they become percentages, or they carry a visible "not an official grade" marker — but
+that is a product call, not a cleanup. What is certain is that none of them should be
+exported or stored, which is now the case.
 
 Three further holes the regulation does not close, so nothing should be built on them:
 the `S`/`A` gap when `mean + 1.5σ < 90` (a mark at 88 satisfies neither row), whether
