@@ -15,19 +15,23 @@ import {
   formatDate,
   type MaterialView,
 } from "@/lib/mock"
+import { MATERIAL_KIND_LABEL as KIND_LABEL } from "@/lib/labels"
 
 export const metadata: Metadata = {
   title: "Resources",
 }
 
-const KIND_LABEL: Record<MaterialView["kind"], string> = {
-  DOCUMENT: "Document",
-  SLIDE_DECK: "Slide deck",
-  VIDEO: "Video",
-  TRANSCRIPT: "Transcript",
-  LINK: "Link",
-  OTHER: "Other",
-}
+/**
+ * Design reference only. The real page is
+ * `app/(dashboard)/student/resources/page.tsx`, which renders the same
+ * composition from `lib/materials.ts`.
+ *
+ * This mockup still draws a **Topic** column and a **size**, which the real page
+ * deliberately does not have: there is no topic column, and no file is stored so
+ * there is no size (decisions M1, M3 in `docs/plans/wave-2.md`). The labels come
+ * from the shared map so at least the wording cannot drift while this file is
+ * still standing.
+ */
 
 /** Indexing state is a pipeline status, so it maps onto the shared vocabulary. */
 const INDEX_STATUS: Record<string, StatusKey> = {

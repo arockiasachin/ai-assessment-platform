@@ -37,6 +37,24 @@ export const ASSESSMENT_KIND_LABEL: Record<AssessmentKind, string> = {
   ASSIGNMENT: "Assignment",
 }
 
+/**
+ * Material kinds. Shared so the mockup and the real resources page cannot drift —
+ * `OTHER` is deliberately unreachable in demo data (see `docs/plans/wave-2.md`
+ * §2.2) but still needs a label, because the column is nullable-free and a real
+ * upload could produce it.
+ */
+export const MATERIAL_KIND_LABEL: Record<
+  "DOCUMENT" | "SLIDE_DECK" | "VIDEO" | "TRANSCRIPT" | "LINK" | "OTHER",
+  string
+> = {
+  DOCUMENT: "Document",
+  SLIDE_DECK: "Slide deck",
+  VIDEO: "Video",
+  TRANSCRIPT: "Transcript",
+  LINK: "Link",
+  OTHER: "Other",
+}
+
 export const REVIEW_STATE_TO_STATUS: Record<ReviewState, StatusKey> = {
   PENDING: "pending",
   AUTO_ACCEPTED: "graded",
