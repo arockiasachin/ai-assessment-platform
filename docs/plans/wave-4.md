@@ -1,5 +1,10 @@
 # Wave 4 — admin
 
+Status: **Wave 4 complete (A1–A4, plus the close-out in §6–§9).** The definition of done in
+[`mockup-to-backend.md`](./mockup-to-backend.md) §8 is satisfied: every real page renders behind
+auth, `lib/mock` is scoped to the design-reference tree by an enforced test, and that tree is kept and
+tagged `design-reference-v1`. What remains is the decisions listed in §6–§9, not unfinished slices.
+
 The last wave before the decision list. Follows [Wave 3](./wave-3.md).
 
 Admin is **structurally different** from the other three waves, and the difference changes the work:

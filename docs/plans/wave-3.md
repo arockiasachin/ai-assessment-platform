@@ -1,5 +1,11 @@
 # Wave 3 — derivations, not new tables
 
+Status: **Wave 3 complete (T1–T8).** The open decision it was written around — σ-bands versus fixed
+bands — is resolved in §7.6, and the one place an absolute letter is still rendered is a labelled
+mark-distribution chart. Two things it did not cover landed later and are recorded in
+[`wave-4.md`](./wave-4.md) §8: the CAT/FAT policy it specified needed wiring into the product, not
+just implementing; and §9 closed the follow-ups.
+
 Follows [Wave 1](./wave-1.md) (the presentation port, 13 pages) and
 [Wave 2](./wave-2.md) (the three pages whose reader did not exist). Those two were
 about _moving data to a page_. This one is about **computing numbers that no column
