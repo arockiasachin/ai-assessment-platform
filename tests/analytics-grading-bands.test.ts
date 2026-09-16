@@ -1,12 +1,15 @@
 import { describe, expect, it } from "vitest"
 
 import {
+  ABSOLUTE_PASS_MARK,
+  absoluteLetter,
   BAND_LOWER_OFFSETS,
   ceilGrandTotals,
   gradeBandRanges,
   RELATIVE_LETTERS,
   RELATIVE_PASS_CAP,
   relativeLetter,
+  resolveGradingRegime,
   sBandNeedsRankRule,
 } from "@/lib/analytics/grading-bands"
 
@@ -240,6 +243,98 @@ describe("BAND_LOWER_OFFSETS", () => {
       expect(BAND_LOWER_OFFSETS[ordered[index]]).toBeLessThan(
         BAND_LOWER_OFFSETS[ordered[index - 1]],
       )
+    }
+  })
+})
+
+describe("absoluteLetter (Table-6)", () => {
+  it("classifies every band boundary the way the table does", () => {
+    const cases: [number, string][] = [
+      [100, "S"],
+      [90, "S"],
+      [89.99, "A"],
+      [80, "A"],
+      [79.99, "B"],
+      [70, "B"],
+      [69.99, "C"],
+      [60, "C"],
+      [59.99, "D"],
+      [55, "D"],
+      [54.99, "E"],
+      [50, "E"],
+    ]
+    for (const [mark, expected] of cases) {
+      expect(absoluteLetter(mark), `mark ${mark}`).toBe(expected)
+    }
+  })
+
+  it("fails below 50", () => {
+    expect(absoluteLetter(49.99)).toBe("F")
+    expect(absoluteLetter(0)).toBe("F")
+  })
+
+  it("has a D/E split the platform never had", () => {
+    // `letterGrade` in lib/gradebook.ts has no E at all and passes at 60. Table-6 puts
+    // D at 55-60 and E at 50-55, which is the difference between a pass and a fail for
+    // a student on 52.
+    expect(absoluteLetter(57)).toBe("D")
+    expect(absoluteLetter(52)).toBe("E")
+    expect(absoluteLetter(52)).not.toBe("F")
+  })
+
+  it("passes at 50, matching ABSOLUTE_PASS_MARK", () => {
+    expect(absoluteLetter(ABSOLUTE_PASS_MARK)).toBe("E")
+    expect(absoluteLetter(ABSOLUTE_PASS_MARK - 0.01)).toBe("F")
+  })
+
+  it("can be asked for the lower band at a boundary", () => {
+    expect(absoluteLetter(80, { upperInclusive: false })).toBe("B")
+    expect(absoluteLetter(60, { upperInclusive: false })).toBe("D")
+  })
+
+  it("returns null for a non-finite mark rather than a defaulted letter", () => {
+    expect(absoluteLetter(Number.NaN)).toBeNull()
+    expect(absoluteLetter(Number.POSITIVE_INFINITY)).toBeNull()
+  })
+
+  it("covers the whole 0-100 range with no gap", () => {
+    // A gap would return null and render nothing, which is worse than a wrong letter
+    // only because it is silent.
+    for (let mark = 0; mark <= 100; mark += 0.5) {
+      expect(absoluteLetter(mark), `mark ${mark}`).not.toBeNull()
+    }
+  })
+})
+
+describe("resolveGradingRegime", () => {
+  it("grades a theory course relatively above 10 students", () => {
+    expect(resolveGradingRegime("THEORY", 11)).toBe("relative")
+    expect(resolveGradingRegime("THEORY", 60)).toBe("relative")
+  })
+
+  it("grades a theory course absolutely at 10 or fewer", () => {
+    // The regulation says "less than or equal to 10", so exactly 10 is absolute. An
+    // off-by-one here would put a 10-student class on σ bands it never had.
+    expect(resolveGradingRegime("THEORY", 10)).toBe("absolute")
+    expect(resolveGradingRegime("THEORY", 3)).toBe("absolute")
+    expect(resolveGradingRegime("THEORY", 1)).toBe("absolute")
+  })
+
+  it("treats a lab-embedded theory course the same as theory", () => {
+    expect(resolveGradingRegime("LAB_EMBEDDED_THEORY", 40)).toBe("relative")
+    expect(resolveGradingRegime("LAB_EMBEDDED_THEORY", 10)).toBe("absolute")
+  })
+
+  it("grades labs, projects, soft skills, extra-curricular and NGCR absolutely regardless of size", () => {
+    for (const category of [
+      "LABORATORY",
+      "PROJECT",
+      "SOFT_SKILLS",
+      "EXTRA_CURRICULAR",
+      "NGCR",
+    ] as const) {
+      expect(resolveGradingRegime(category, 40), category).toBe("absolute")
+      expect(resolveGradingRegime(category, 500), category).toBe("absolute")
     }
   })
 })

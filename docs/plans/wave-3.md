@@ -49,7 +49,7 @@ after their readers, matching the order that worked in Wave 2.
 
 ## 3. Decisions
 
-### D1 — **OPEN, and it blocks T2.** Does the platform use σ-bands or absolute bands?
+### D1 — **RESOLVED** (see §7.6): VIT runs _two_ regimes, and both are now implemented
 
 This is the one thing Wave 3 must settle before writing an at-risk rule, and it was
 not visible until the existing code was read.
@@ -134,7 +134,9 @@ generated sentence.
   calendar week from `startsOn`, `null` for weeks with no assessed work, series length =
   the term's. Implemented in T1.
 - **B3 — at-risk** = below `max(mean − 2σ, 50)` over **published marks only**, cohort =
-  the offering's enrolled students. **Blocked on D1.**
+  the offering's enrolled students. **No longer blocked:** the boundary is
+  `min(mean − 2σ, 50)` (§7.6 corrected the inversion), and the regime that applies is a
+  function of the course category and headcount.
 - **B5 — median**, derived beside the mean. The honest companion to a mean-and-σ system:
   a median that disagrees with the mean tells a teacher one script is distorting the
   cohort.
@@ -304,6 +306,63 @@ attemptNumber])`, numbered `max(all) + 1` (`:563-564`). A student who practises 
   appears on the dashboard but not on `/teacher/classes`.
 
 ### 7.5 T8 — the Topics tab needs four things that do not exist
+
+The tab shell, the item-analysis reader and the `subtopic` data exist. Missing: the
+mastery aggregation, a contract schema, **a teacher-scoped materials reader** (the Wave
+2 reader is student-only — `listMaterialsForStudent`), and an `offeringId` on the page's
+props (`GenerationAssessmentSummary` has none). Purely additive, and it depends on D4 —
+which resolved to a token list rather than a mastery chart, so the aggregation it needs
+is `lib/analytics/subtopics.ts` rather than the mastery formula this section originally
+assumed.
+
+### 7.6 VIT grading, verified — D1 resolved, and a **live defect** found
+
+The banding research went to the primary sources: Academic Regulations **v4.0** (72nd
+Academic Council, AY 2021-22 onwards) and **v5.0** (79th/80th Council, AY 2025-26
+onwards), plus the FAT process manual. Four entries in the table Wave 2 recorded were
+wrong, and one of them was implemented.
+
+**The formula was inverted, and it is fixed.** §5.4 defined at-risk as
+`max(mean − 2σ, 50)`. The regulation says **`min`**, in three places, all agreeing:
+below 50 the pass bar _drops_ to `mean − 2σ`, and above 50 nobody at or above 50 fails
+because the F-band student "will be awarded `E` grade and declared pass". I had written
+`max` and asserted in a doc comment that it was VIT's own line, which is the worst kind
+of wrong — it told a reader the rule had been checked. Fixed in `statistics.ts` and
+`grading-bands.ts`; `PASS_FLOOR` became `PASS_BOUNDARY_CAP`, because the name was part
+of the error.
+
+**The other three corrections** (made in `wave-2.md` §5.1): theory weighting is
+**CAM 60 + FAT 40**, not 30/70 — the 30/70 figure is VIT _Online_, a different
+directorate, and the repo had cited it beside the Vellore regulations as if they
+described the same programmes. Project courses have **no FAT**. And the table was
+missing the regime rules entirely: relative grading applies only to theory and
+lab-embedded theory with **> 10** students; ≤ 10, and every lab, project, soft-skills,
+extra-curricular and NGCR course, is graded **absolutely**.
+
+**RESOLVED — D1, and the answer is not one of the three options offered.** There are
+two regimes, they are chosen institutionally by **(course category, headcount)**, they
+share a letter set but not band widths, and each has its own pass line. So the question
+was never "which banding does the platform use" but "which regime is this course, and
+does the platform have the right to compute a letter at all". Both regimes are now
+implemented and testable (`resolveGradingRegime`, `absoluteLetter`), which is what the
+platform actually needed.
+
+**The live defect: the exported letter is wrong under both regimes.** `letterGrade`
+(`lib/gradebook.ts:95`) emits `A/B/C/D/F` — no `E`, passing at 60 — and
+`computeFinalGrade` puts it in the LMS export payload
+(`lib/lms-export/final-grade.ts:174`, reaching a consumer at `lms-export/service.ts:206`).
+Against VIT absolute it is wrong twice (`D` is 55–60, `E` is 50–55, pass is 50);
+against VIT relative those bands do not exist at all.
+
+**An exported letter that disagrees with the result sheet is worse than no letter**, and
+it is already shipping. This is raised rather than changed, because fixing it alters an
+institutional record and there are three defensible answers — none of which is the
+implementer's to pick silently. It is the decision below.
+
+Three further holes the regulation does not close, so nothing should be built on them:
+the `S`/`A` gap when `mean + 1.5σ < 90` (a mark at 88 satisfies neither row), whether
+the `≥ 80` S-cap condition in v5.0 is the general S floor or only the cap case, and which
+students count in the cohort (absentees, `N`-graded, withdrawn).
 
 The tab shell, the item-analysis reader and the `subtopic` data exist. Missing: the
 mastery aggregation, a contract schema, **a teacher-scoped materials reader** (the Wave

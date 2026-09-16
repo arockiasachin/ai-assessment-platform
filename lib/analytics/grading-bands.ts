@@ -13,8 +13,12 @@
  * C  mean − 1.0σ … mean − 0.5σ
  * D  mean − 1.5σ … mean − 1.0σ
  * E  mean − 2.0σ … mean − 1.5σ
- * F  < mean − 2.0σ, floored at 50
+ * F  < mean − 2.0σ, **capped** at 50 (see `passBoundary`)
  * ```
+ *
+ * Note the last line: the pass line is `min(mean − 2σ, 50)`, so on a hard paper the
+ * `E`/`F` boundary drops below 50 and on a generous one it stays at 50. The research
+ * that corrected this is recorded in `docs/plans/wave-3.md` §7.6.
  *
  * **This is deliberately separate from `letterGrade` in `lib/gradebook.ts`**, which
  * uses fixed absolute bands (`A ≥ 90, B ≥ 80, …`) and feeds the exported final grade.
@@ -212,4 +216,117 @@ export function relativeLetter(
  */
 export function ceilGrandTotals(percentages: readonly number[]): number[] {
   return percentages.map((percentage) => Math.ceil(percentage))
+}
+
+// ---------------------------------------------------------------------------
+// The absolute regime (Table-6)
+// ---------------------------------------------------------------------------
+
+/**
+ * VIT runs **two** grading regimes, and which one applies is institutional rather
+ * than a faculty choice:
+ *
+ * | Regime       | Applies to                                                                                              |
+ * | ------------ | ------------------------------------------------------------------------------------------------------- |
+ * | **Relative** | theory, and the theory component of lab-embedded theory courses, when class strength **> 10**            |
+ * | **Absolute** | the same courses when class strength is **≤ 10**, **and always** — "irrespective of the class strength" — for laboratory, soft-skills, extra-curricular, NGCR and **project** courses |
+ *
+ * Verbatim: *"If the class strength is less than or equal to 10 in a theory or lab
+ * embedded theory course absolute grading shall be adopted instead of the class-wise
+ * relative grading."*
+ *
+ * The two regimes share the **letter set** (`S`…`F`, plus `N`/`W`/`U`/`P` which carry
+ * no points) but not the band widths: relative uses σ multiples, absolute uses fixed
+ * mark ranges. So a platform that knows only the course's marks cannot know which
+ * regime produced a letter — which is why `resolveGradingRegime` takes the course
+ * category and the headcount rather than inferring from data.
+ */
+
+/** What a course is, for the purpose of choosing a regime. */
+export type CourseCategory =
+  | "THEORY"
+  | "LAB_EMBEDDED_THEORY"
+  | "LABORATORY"
+  | "PROJECT"
+  | "SOFT_SKILLS"
+  | "EXTRA_CURRICULAR"
+  | "NGCR"
+
+export type GradingRegime = "relative" | "absolute"
+
+/** Class strength at or below which a theory course is graded absolutely. */
+export const RELATIVE_GRADING_MIN_STRENGTH = 11
+
+/**
+ * Which regime a course uses.
+ *
+ * Note the test is `<= RELATIVE_GRADING_MIN_STRENGTH - 1`, i.e. **10 or fewer is
+ * absolute** — the regulation says "less than or equal to 10", so exactly 10 is
+ * absolute and 11 is relative. Off-by-one here would put a 10-student class on σ
+ * bands it never had, and the two regimes disagree about the pass line.
+ */
+export function resolveGradingRegime(
+  category: CourseCategory,
+  classStrength: number,
+): GradingRegime {
+  // These are absolute regardless of size, per the regulation's own words.
+  if (
+    category === "LABORATORY" ||
+    category === "PROJECT" ||
+    category === "SOFT_SKILLS" ||
+    category === "EXTRA_CURRICULAR" ||
+    category === "NGCR"
+  ) {
+    return "absolute"
+  }
+
+  return classStrength < RELATIVE_GRADING_MIN_STRENGTH ? "absolute" : "relative"
+}
+
+/**
+ * Table-6's fixed bounds. Lower-inclusive, upper-exclusive, matching the relative
+ * bands' convention so the two can share a lookup.
+ *
+ * The absolute `D`/`E` split is the one the platform has never had: **`D` is 55–60 and
+ * `E` is 50–55**. `letterGrade` in `lib/gradebook.ts` has no `E` at all and passes at
+ * 60, so it is wrong under this table — see the note on the export defect in
+ * `docs/plans/wave-3.md` §7.6.
+ */
+export const ABSOLUTE_BANDS: readonly GradeBandRange[] = [
+  { letter: "S", min: 90, max: null },
+  { letter: "A", min: 80, max: 90 },
+  { letter: "B", min: 70, max: 80 },
+  { letter: "C", min: 60, max: 70 },
+  { letter: "D", min: 55, max: 60 },
+  { letter: "E", min: 50, max: 55 },
+  { letter: "F", min: 0, max: 50 },
+]
+
+/** The absolute pass mark. `E` is the lowest passing grade. */
+export const ABSOLUTE_PASS_MARK = 50
+
+/**
+ * The letter under the absolute regime.
+ *
+ * Returns `null` only for a non-finite mark, so a caller renders nothing rather than
+ * a defaulted grade. Unlike the relative bands this never withholds a letter for
+ * small samples: an absolute band is a function of one student's mark and needs no
+ * cohort, which is exactly why the regulation falls back to it for small classes.
+ */
+export function absoluteLetter(mark: number, options: BandOptions = {}): RelativeLetter | null {
+  if (!Number.isFinite(mark)) return null
+
+  const upperInclusive = options.upperInclusive ?? true
+
+  for (const band of ABSOLUTE_BANDS) {
+    const meetsMin = upperInclusive ? mark >= band.min : mark > band.min
+    if (band.max === null) {
+      if (meetsMin) return band.letter
+      continue
+    }
+    const meetsMax = upperInclusive ? mark < band.max : mark <= band.max
+    if (meetsMin && meetsMax) return band.letter
+  }
+
+  return null
 }
