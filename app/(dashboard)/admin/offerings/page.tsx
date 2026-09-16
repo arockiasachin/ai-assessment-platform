@@ -1,19 +1,36 @@
 import { RoleGuard } from "@/components/role-guard"
-import { AdminPageShell } from "@/components/admin-page-shell"
+import { redirect } from "next/navigation"
+
+import { AppShell, PageHeader } from "@/components/shell"
+import { getSessionUser } from "@/lib/auth"
+import { initialsFromEmail, roleLabelFromRole } from "@/lib/user-identity"
 import { getAdminOfferingsList } from "@/lib/admin-db"
 
 // Authenticated, database-backed dashboard: never statically prerender.
 export const dynamic = "force-dynamic"
 
 export default async function AdminOfferingsPage() {
+  const user = await getSessionUser()
+  if (!user || user.role !== "admin") redirect("/login")
+
   const offerings = await getAdminOfferingsList()
 
   return (
     <RoleGuard role="admin">
-      <AdminPageShell
-        title="Course Offerings"
-        description="Review course/class assignments, teacher ownership, enrollment load, and assessment density."
+      <AppShell
+        scope="app"
+        role="admin"
+        user={{
+          name: user.email,
+          email: user.email,
+          initials: initialsFromEmail(user.email),
+          roleLabel: roleLabelFromRole(user.role),
+        }}
       >
+        <PageHeader
+          title="Course Offerings"
+          description="Review course/class assignments, teacher ownership, enrollment load, and assessment density."
+        />
         <div className="overflow-x-auto rounded-xl border border-border bg-card">
           <table className="w-full text-sm">
             <thead>
@@ -53,7 +70,7 @@ export default async function AdminOfferingsPage() {
             </tbody>
           </table>
         </div>
-      </AdminPageShell>
+      </AppShell>
     </RoleGuard>
   )
 }

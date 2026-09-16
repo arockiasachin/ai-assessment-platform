@@ -1,19 +1,37 @@
 import { RoleGuard } from "@/components/role-guard"
-import { AdminPageShell } from "@/components/admin-page-shell"
+import { redirect } from "next/navigation"
+
+import { AppShell, PageHeader } from "@/components/shell"
+import { getSessionUser } from "@/lib/auth"
+import { initialsFromEmail, roleLabelFromRole } from "@/lib/user-identity"
 import { getAdminUsersList } from "@/lib/admin-db"
+import { formatDateTime } from "@/lib/format"
 
 // Authenticated, database-backed dashboard: never statically prerender.
 export const dynamic = "force-dynamic"
 
 export default async function AdminUsersPage() {
+  const user = await getSessionUser()
+  if (!user || user.role !== "admin") redirect("/login")
+
   const users = await getAdminUsersList()
 
   return (
     <RoleGuard role="admin">
-      <AdminPageShell
-        title="User Directory"
-        description="Inspect user accounts, role assignments, and identity profile links."
+      <AppShell
+        scope="app"
+        role="admin"
+        user={{
+          name: user.email,
+          email: user.email,
+          initials: initialsFromEmail(user.email),
+          roleLabel: roleLabelFromRole(user.role),
+        }}
       >
+        <PageHeader
+          title="User Directory"
+          description="Inspect user accounts, role assignments, and identity profile links."
+        />
         <div className="overflow-x-auto rounded-xl border border-border bg-card">
           <table className="w-full text-sm">
             <thead>
@@ -32,13 +50,13 @@ export default async function AdminUsersPage() {
                   <td className="px-3 py-2">{user.role}</td>
                   <td className="px-3 py-2">{user.name}</td>
                   <td className="px-3 py-2">{user.identity}</td>
-                  <td className="px-3 py-2">{new Date(user.createdAt).toLocaleString()}</td>
+                  <td className="px-3 py-2">{formatDateTime(user.createdAt)}</td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
-      </AdminPageShell>
+      </AppShell>
     </RoleGuard>
   )
 }

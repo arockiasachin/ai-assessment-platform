@@ -1,4 +1,6 @@
 import Link from "next/link"
+
+import { formatDate } from "@/lib/format"
 import {
   ArrowRight,
   CalendarClock,
@@ -9,7 +11,11 @@ import {
   Users,
 } from "lucide-react"
 import { RoleGuard } from "@/components/role-guard"
-import { AdminPageShell } from "@/components/admin-page-shell"
+import { redirect } from "next/navigation"
+
+import { AppShell, PageHeader } from "@/components/shell"
+import { getSessionUser } from "@/lib/auth"
+import { initialsFromEmail, roleLabelFromRole } from "@/lib/user-identity"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { getAdminOverview } from "@/lib/admin-db"
 
@@ -17,14 +23,27 @@ import { getAdminOverview } from "@/lib/admin-db"
 export const dynamic = "force-dynamic"
 
 export default async function AdminPage() {
+  const user = await getSessionUser()
+  if (!user || user.role !== "admin") redirect("/login")
+
   const overview = await getAdminOverview()
 
   return (
     <RoleGuard role="admin">
-      <AdminPageShell
-        title="Overview"
-        description="Monitor users, academics, and operations across the platform."
+      <AppShell
+        scope="app"
+        role="admin"
+        user={{
+          name: user.email,
+          email: user.email,
+          initials: initialsFromEmail(user.email),
+          roleLabel: roleLabelFromRole(user.role),
+        }}
       >
+        <PageHeader
+          title="Overview"
+          description="Monitor users, academics, and operations across the platform."
+        />
         <div className="space-y-6">
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             <Card>
@@ -140,8 +159,8 @@ export default async function AdminPage() {
                   >
                     <p className="font-medium">{assessment.title}</p>
                     <p className="text-xs text-muted-foreground">
-                      {assessment.courseName} · {assessment.type} ·{" "}
-                      {new Date(assessment.dueDate).toLocaleDateString()} · {assessment.teacherName}
+                      {assessment.courseName} · {assessment.type} · {formatDate(assessment.dueDate)}{" "}
+                      · {assessment.teacherName}
                     </p>
                   </div>
                 ))}
@@ -152,7 +171,7 @@ export default async function AdminPage() {
             </CardContent>
           </Card>
         </div>
-      </AdminPageShell>
+      </AppShell>
     </RoleGuard>
   )
 }

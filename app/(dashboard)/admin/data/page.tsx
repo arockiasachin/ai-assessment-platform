@@ -1,6 +1,10 @@
 import { AdminDatasetsView } from "@/components/admin-datasets-view"
 import { RoleGuard } from "@/components/role-guard"
-import { AdminPageShell } from "@/components/admin-page-shell"
+import { redirect } from "next/navigation"
+
+import { AppShell, PageHeader } from "@/components/shell"
+import { getSessionUser } from "@/lib/auth"
+import { initialsFromEmail, roleLabelFromRole } from "@/lib/user-identity"
 import { prisma } from "@/lib/prisma"
 import { toPlainRows } from "@/lib/admin-db"
 
@@ -8,6 +12,9 @@ import { toPlainRows } from "@/lib/admin-db"
 export const dynamic = "force-dynamic"
 
 export default async function AdminDataPage() {
+  const user = await getSessionUser()
+  if (!user || user.role !== "admin") redirect("/login")
+
   const [
     users,
     staffProfiles,
@@ -163,12 +170,22 @@ export default async function AdminDataPage() {
 
   return (
     <RoleGuard role="admin">
-      <AdminPageShell
-        title="Data Explorer"
-        description="Browse table snapshots and row counts for debugging and QA checks."
+      <AppShell
+        scope="app"
+        role="admin"
+        user={{
+          name: user.email,
+          email: user.email,
+          initials: initialsFromEmail(user.email),
+          roleLabel: roleLabelFromRole(user.role),
+        }}
       >
+        <PageHeader
+          title="Data Explorer"
+          description="Browse table snapshots and row counts for debugging and QA checks."
+        />
         <AdminDatasetsView datasets={datasets} />
-      </AdminPageShell>
+      </AppShell>
     </RoleGuard>
   )
 }

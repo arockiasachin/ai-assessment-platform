@@ -53,6 +53,7 @@ export const DEMO_PASSWORD = "demo1234"
 const TEACHER_USER_ID = "demo-user-teacher"
 const TEACHER_STAFF_ID = "demo-staff-teacher"
 const TEACHER2_USER_ID = "demo-user-teacher-2"
+const ADMIN_USER_ID = "demo-user-admin"
 const TEACHER2_STAFF_ID = "demo-staff-teacher-2"
 
 const STUDENT_COUNT = 5
@@ -224,6 +225,9 @@ export const DEMO_ACCOUNTS = {
   password: DEMO_PASSWORD,
   teacher: { id: TEACHER_USER_ID, email: "demo.teacher@school.edu" },
   teacher2: { id: TEACHER2_USER_ID, email: "demo.teacher2@school.edu" },
+  // The admin pages exist and are otherwise unreachable in the demo: without this account
+  // `/admin/*` has no way in, so the surface is untestable by hand.
+  admin: { id: ADMIN_USER_ID, email: "demo.admin@school.edu" },
   students: STUDENT_USER_IDS.map((id, index) => ({
     id,
     email: `demo.student${index + 1}@school.edu`,
@@ -275,7 +279,7 @@ function studentUser(index: number): AuthUser {
  * parents are then deleted explicitly in dependency order.
  */
 async function deleteDemoData(): Promise<void> {
-  const userIds = [TEACHER_USER_ID, TEACHER2_USER_ID, ...STUDENT_USER_IDS]
+  const userIds = [ADMIN_USER_ID, TEACHER_USER_ID, TEACHER2_USER_ID, ...STUDENT_USER_IDS]
 
   // AuditLog has no foreign keys (it deliberately survives deletions), so its
   // demo rows are cleared explicitly: rows written by the demo actors plus the
@@ -333,6 +337,28 @@ async function deleteDemoData(): Promise<void> {
 }
 
 async function createPeople(passwordHash: string) {
+  /**
+   * An admin, so the admin surface is reachable in the demo.
+   *
+   * The three admin pages existed and worked, but no seeded account could open them — `/admin/*`
+   * was dead in the demo and only verifiable by writing a user by hand.
+   */
+  await prisma.user.create({
+    data: {
+      id: ADMIN_USER_ID,
+      email: DEMO_ACCOUNTS.admin.email,
+      passwordHash,
+      role: "ADMIN",
+      staffProfile: {
+        create: {
+          id: "demo-staff-admin",
+          fullName: "Demo Admin",
+          empId: "DEMO-EMP-A-1",
+        },
+      },
+    },
+  })
+
   const teacher = await prisma.user.create({
     data: {
       id: TEACHER_USER_ID,

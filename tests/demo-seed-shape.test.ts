@@ -148,6 +148,20 @@ describe("demo seed — shape and legibility", () => {
     })
   })
 
+  describe("accounts", () => {
+    it("seeds one user of every role, so every surface is reachable", async () => {
+      // The admin pages existed and worked, but no seeded account could open them — `/admin/*` was
+      // dead in the demo, checkable only by writing a user by hand. A role with pages and no
+      // account is a surface nobody can verify.
+      const roles = await db.user.findMany({ select: { role: true } })
+      const present = new Set(roles.map((user) => user.role))
+
+      for (const role of ["ADMIN", "TEACHER", "STUDENT"] as const) {
+        expect(present, `no seeded user with role ${role}`).toContain(role)
+      }
+    })
+  })
+
   describe("calendar", () => {
     it("covers every EventType the calendar page renders", async () => {
       const rows = await db.calendarEvent.findMany({ select: { eventType: true } })
