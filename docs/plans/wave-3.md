@@ -166,3 +166,119 @@ generated sentence.
   partially additive only; the existing path must not be rebuilt.
 - **Ship an at-risk rule before D1.** A roster that contradicts the exported grade is
   worse than no roster.
+
+---
+
+## 7. Research findings (four dossiers, read against `2936be3`)
+
+### 7.1 `Question.subtopic` is LLM free text — **new decision D4**
+
+This settles the prerequisite §5 ranked second, and it is worse than "unstructured".
+
+**Populated: yes. Structured: no.** The vocabulary is chosen by the model per request.
+When the teacher supplies no tags, the prompt says so verbatim: _"The teacher did not
+specify subtopics; choose 2-4 coherent subtopics yourself."_
+(`lib/quiz-generation/prompt.ts:61-64`). The only downstream constraint is
+`trim/min(1)/max(200)` (`lib/quiz-generation/parsing.ts:44`) — no enum, no canonical
+list, no normalisation, no reuse across requests. The column is also nullable, so
+hand-authored questions carry `null`.
+
+The fixtures show the drift: the seed passes
+`subtopics: ["solving equations", "slope", "systems of equations"]` and produces tags
+including `solving equations` **twice** (`prisma/seed-demo.ts:881`), while the mockup's
+Topics tab lists a completely different five-string vocabulary
+(`lib/mock/analytics.ts:50-56`) with no shared key. And the mock provider has already
+leaked prompt text into persisted tags once (`docs/verification/bugfix-run-2.md:183-192`).
+
+**Consequences.** Exact-string `groupBy(subtopic)` yields a long tail of
+near-duplicates — `slope` / `Slope` / `gradient & intercept` / `finding the gradient`.
+A mastery chart labelled with whatever the last model call invented is not a chart, it
+is a word cloud.
+
+Worse, **the demo would render entirely as "insufficient data."** The seed submits 3
+attempts against 4 questions, so per-subtopic answered counts are roughly 6/3/3 — under
+B1's reuse of `minAttemptsForDifficulty = 10` (`lib/analytics/item-analysis.ts:61-65`)
+every row is `null`. The tab ships looking broken. Note the mockup implies a **5**
+response floor (`lib/mock/quizzes.ts:323`), which conflicts with the 10 B1 says to reuse.
+
+**Options, in order of honesty:**
+
+| Option                          | What ships                                                                                                                              | Cost                                                                        |
+| ------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| **D4a. Drop the mastery chart** | No topic chart until the vocabulary is controlled.                                                                                      | Loses a mockup surface; nothing false ships.                                |
+| **D4b. Reshape it**             | A plain list of _the subtopics on this assessment_ (a token, not a mastery score), which is honest about what a free-text tag supports. | Small; reuses existing data.                                                |
+| **D4c. Ship it with guards**    | Exact-string grouping, `responses`-descending, a minimum-samples threshold, plus a seed bump so the demo shows something.               | Sells a free-text vocabulary as an analytic axis; the labels stay unstable. |
+
+**No option should produce a per-topic mastery number from an uncontrolled tag
+vocabulary.** A controlled vocabulary — a tag table or an enum — is a product/schema
+change and belongs in Wave 5, not here.
+
+### 7.2 There is no canonical "class average" — **new decision D5**
+
+Three implementations disagree and nothing declares which is right:
+
+- `lib/analytics/legacy.ts:40-52` — over a `MarksMap`.
+- `lib/analytics/service.ts:159-176` — over finalised `QuizAttempt` rows.
+- the mock fixture (`lib/mock/course.ts:265-271`).
+
+The dashboards (T7) and B1's "relative to the class" both need one definition. Picking
+silently would mean the dashboard, the analytics page and the at-risk roster can
+disagree about the same class — which is the failure mode D1 is about, one level down.
+**Resolve with D1, since both are the same question: what is the cohort and what is its
+centre.**
+
+### 7.3 The retake change is 22 call sites, four of which fail **silently**
+
+B7's schema change is smaller than it looks in schema terms and larger in blast radius.
+Confirmed against the code:
+
+- **`GRADED`, `EXPIRED` and `ABANDONED` are never written by any code path**, and
+  `QuizAttempt.expiresAt` is never written either. Only `IN_PROGRESS` and `SUBMITTED` are
+  live. So `COUNTED_STATUSES` is largely counting states that cannot occur.
+- **`COUNTED_STATUSES` / `FINALIZED_STATUSES` are declared twice** — `service.ts:62-63`
+  and `analytics/service.ts:49` — hand-maintained duplicates with no single source of
+  truth. A `kind` change must be applied in both _and_ at every call site.
+- **17 call sites** in the quiz-attempt pod and **5** in analytics. The ones that break
+  **silently**: `attemptSettings` (`service.ts:123-133`), `listStudentQuizzes`
+  (`:301-303`) and the cap gate (`:544-550`) would miscount, so a student's remaining
+  attempts would simply be wrong; and `latestFailedQuestionIds` (`:469-477`) would pick a
+  **practice** sitting as the retake's source, building a retake from practice answers.
+- **`attemptNumber` is shared across kinds** — `@@unique([assessmentId, studentId,
+attemptNumber])`, numbered `max(all) + 1` (`:563-564`). A student who practises three
+  times before their first graded sitting gets a graded attempt numbered 4, and the
+  teacher-facing "attempt #4" is nonsense. This must be decided in the slice plan, not
+  discovered.
+- **`COUNTED_STATUSES` must become a predicate, not a longer list.** Extending a list
+  cannot express "practice but counted" versus "graded and counted", which is the whole
+  point of the change.
+- **`Assessment.maxAttempts` counts the first graded sitting**, so "the teacher allows
+  one retake" is `maxAttempts = 2`. If the UI offers "retakes allowed: 1", either the
+  resolver adds one or the label is wrong.
+
+### 7.4 T7 — the conversion is cheaper than feared, and one reported blocker is false
+
+- **A reported "wrong-content flash" — `/student` server-rendering the teacher branch —
+  is not real.** It rested on `components/dashboard.tsx`, which **nothing imports**; the
+  live pages render `StudentView`/`TeacherView` directly. Verified by fetching `/student`
+  as a student: the HTML contains "Student dashboard", not the teacher branch.
+- **A smaller real one exists.** `dashboard-header.tsx:94` renders
+  `role === "teacher" ? "Teacher view" : "Student view"`, and `role` defaults to
+  `"teacher"`. The server-rendered `/student` HTML contains **"Teacher view"** and not
+  "Student view" — an `aria-label`ed "Current view" that is wrong until hydration.
+  Cosmetic, but it is wrong text for the wrong role and worth fixing in T7.
+- **The middle path is genuinely cheap** and is the a11y/perf audit's own recommendation:
+  optional `initialPayload`/`initialRole` props, skip the mount fetch when seeded, mount
+  the seeded provider in a new `app/(dashboard)/layout.tsx` (there is none today), and
+  keep `refresh()` fetching so the write paths are unaffected. Nested providers shadow the
+  root one, so `/quiz` is untouched.
+- **A scoping wart worth fixing while there:** the teacher payload's `enrollments` has no
+  `status: "active"` filter (`lib/gradebook-db.ts:161-168`) while every other roster
+  reader filters it (`lib/teacher-roster.ts:138`), so a dropped or waitlisted student
+  appears on the dashboard but not on `/teacher/classes`.
+
+### 7.5 T8 — the Topics tab needs four things that do not exist
+
+The tab shell, the item-analysis reader and the `subtopic` data exist. Missing: the
+mastery aggregation, a contract schema, **a teacher-scoped materials reader** (the Wave
+2 reader is student-only — `listMaterialsForStudent`), and an `offeringId` on the page's
+props (`GenerationAssessmentSummary` has none). Purely additive, and it depends on D4.
