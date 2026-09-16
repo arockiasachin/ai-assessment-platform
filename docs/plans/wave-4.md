@@ -411,3 +411,71 @@ removed) and called the regime choice "an open decision (`§3, D1`)" (D1 is reso
 code itself had already recorded that 60 was "a number that appears in no VIT document". Dated plan
 sections (`wave-3.md` §3, §7.6) are left as written, because a plan is a record of what was decided
 at the time.
+
+## 10. The two dashboard designs, ported
+
+§6 recorded that the teacher and student dashboards were the one composition gap with no recorded verdict:
+both were real, data-backed pages, but they were still the legacy gradebook views and **none** of the
+mockup's sections were present. They are ported here, which closes the last screen-level gap between
+`/mockup` and the real app.
+
+**This was a presentation port, not new backend work.** All nine readers the two dashboards need already
+existed, so the work was composition plus the derivability pass.
+
+### The collision that had to be resolved first
+
+The mockup's teacher dashboard has no marks grid. The real one did — `GradebookTable`, editing inline
+through `POST /api/gradebook/marks`, and it was **the only inline mark-entry UI in the app** (its sole
+consumer was `teacher-view.tsx`; `gradebook-provider.tsx` is the only client of that route). Porting the
+mockup composition unchanged would therefore have deleted a capability. The mockup, being a static
+design, could never show this.
+
+Resolved by **moving the grid to its own page** (`/teacher/marks`, an `appOnly` nav entry in the Grading
+section) rather than losing it. Moving it also turned out to be right for a second reason the mockup
+could not express: a mark-entry grid belongs beside the other grading surfaces, not on a dashboard whose
+job is "what needs a decision today".
+
+`tests/nav-scope.test.ts` asserted a hard-coded app-nav count, so a second `appOnly` item broke it. It
+now derives the app-only count from `NAV_SECTIONS`, which makes the next such item a nav-only change.
+
+### What was dropped, and why
+
+Every drop is the derivability rule, not a preference:
+
+| Element                                                          | Why it cannot be rendered                                                                                                                                                                                                                               |
+| ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| All four teacher KPI sparklines, and the student's two           | 6-week history is not stored. Drawing them would be fabrication.                                                                                                                                                                                        |
+| The KPI `delta` on both dashboards                               | No prior-week value exists.                                                                                                                                                                                                                             |
+| "Against the term target" (cohort trend)                         | `CohortTrend` carries **no target**. The section shows the series and `markedCount` instead.                                                                                                                                                            |
+| `weightPercent` (assessment progress)                            | No column.                                                                                                                                                                                                                                              |
+| The review table's assessment-kind line                          | `reviewQueueItemSchema` has no assessment `type`.                                                                                                                                                                                                       |
+| Peer-evaluation "Round closes"                                   | The real workspace returns no milestone or due date. "Round status" is kept; "Self-evaluation" and "Results" were added because the workspace genuinely returns them.                                                                                   |
+| The mockup's "New assessment" / "Publish results" header actions | "Publish results" is inert in the mockup (no handler), so porting it would build a dead control. "New assessment" writes through the gradebook provider, which would not refresh this server-rendered page — the created row would silently not appear. |
+
+Three further substitutions were forced and are documented in code: the review row's "why it is here"
+uses the real `flags` array; its "Confidence" column shows the **lowest** per-criterion confidence
+(there is no single row-level value, and the minimum is what explains the row); and relative due labels
+are derived from the reader's `daysUntilDue` because `formatDueLabel` is anchored to the mockup's frozen
+clock and deliberately absent from `lib/format`.
+
+### The number this surfaced, which is a scoring defect
+
+The teacher dashboard's "Cohort average" tile reads **12%** for the demo offering. It was checked
+against the database rather than assumed, and the arithmetic is right: the three graded quiz attempts
+scored 4/20, 2/20 and 1/20. What is wrong is the data underneath, and the cause is a product defect,
+not the dashboard:
+
+- `lib/quiz-generation/generation.ts` persists **every generated question with `points: 1`**, with no
+  relation to the assessment's `maxMarks`.
+- Scoring divides the earned total by a `maxScore` taken from `Assessment.maxMarks`
+  (`lib/quiz-grading.ts` passes it explicitly, and a seeded attempt stores `maxScore: 20`).
+
+So a 4-question quiz on a 20-mark assessment has a ceiling of 4 earned against a denominator of 20: **a
+perfect attempt scores 20%**. The demo's own student answered all four correctly and is shown at 20%,
+while the manual `Grade` for the same assessment says 20/20. Two subsystems disagree about one student,
+and the two dashboards read different ones — which is why the student's old dashboard said 90% and the
+teacher's new one says 12%.
+
+This is recorded rather than fixed: which side is canonical (question points, or the assessment's
+maxMarks) changes what a percentage means for every quiz, mark and export, so it is a decision and not a
+cleanup.

@@ -259,13 +259,18 @@ describe("nav scope: app tree resolves to real pages", () => {
         role,
       ).toBe(true)
     }
-    // teacher loses profile and settings, and gains the app-only Offerings page.
+    // teacher loses profile and settings, and gains every app-only page (Offerings,
+    // Marks). The app-only count is derived rather than hardcoded so adding one is a
+    // one-line nav change, not a test edit plus a nav change.
+    const appOnlyCount = NAV_SECTIONS.teacher
+      .flatMap((section) => section.items)
+      .filter((item) => item.appOnly).length
     const teacherApp = navSectionsFor("teacher", "app").reduce((n, s) => n + s.items.length, 0)
     const teacherMockup = navSectionsFor("teacher", "mockup").reduce(
       (n, s) => n + s.items.length,
       0,
     )
-    expect(teacherApp).toBe(teacherMockup - 2 + 1)
+    expect(teacherApp).toBe(teacherMockup - 2 + appOnlyCount)
   })
 
   it("anchors the brand on the signed-in role's home", () => {

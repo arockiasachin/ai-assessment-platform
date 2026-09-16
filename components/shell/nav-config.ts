@@ -17,6 +17,7 @@ import {
   Settings2,
   Share2,
   Sparkles,
+  Table2,
   Terminal,
   UserRound,
   Users,
@@ -196,6 +197,16 @@ export const NAV_SECTIONS: Record<MockupRole, NavSection[]> = {
           href: "/mockup/teacher/submissions",
           icon: ClipboardList,
           description: "All student submissions with status, marks, and feedback.",
+        },
+        {
+          // No mockup counterpart: the design's dashboard had no marks grid, so
+          // the app's only mark-entry surface was moved here rather than dropped
+          // (docs/plans/mockup-to-backend.md §8).
+          label: "Marks",
+          href: "/teacher/marks",
+          icon: Table2,
+          description: "Enter and update marks per student and assessment.",
+          appOnly: true,
         },
         {
           label: "Code tasks",

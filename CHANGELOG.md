@@ -395,6 +395,60 @@ define and edit them, and a minimum-CAT gate that applied to anybody.
 - **The create contract is unchanged** (`Quiz | Assignment`). Teachers can weight the kinds that
   exist; authoring descriptive/code/group assessments from the gradebook remains a product decision.
 
+### The two dashboard designs, ported — the last composition gap
+
+Wave 4's audits recorded one screen-level gap with no verdict: `/teacher` and `/student` were real,
+data-backed pages, but they were still the legacy gradebook views and **none** of the mockup's sections
+were present. Both now render the mockup composition, closing the gap. This was a **presentation port** —
+all nine readers needed already existed.
+
+#### Added
+
+- **`/teacher/marks`** — a new page, plus an `appOnly` nav entry in the Grading section.
+- **`lib/teacher-dashboard-view.ts`** and **`lib/student-dashboard-view.ts`** — the pure logic behind both
+  dashboards, so the derivations are testable without a DOM (this repo pins `environment: "node"`).
+- **`tests/teacher-dashboard-view.test.ts`** (23 cases) and **`tests/student-dashboard-view.test.ts`** (20).
+  Both assert the KPI shape has **no `sparkline`/`delta` key**, so a future edit cannot quietly
+  reintroduce an invented series.
+
+#### Changed
+
+- **`/teacher` and `/student` now render the mockup composition** from server-fetched props rather than
+  the gradebook context: 4 KPI tiles, "Needs your attention", cohort trend, upcoming timeline, and the
+  assessment-progress table on the teacher side; 4 KPI tiles, "Due next", upcoming, and peer-evaluation
+  progress on the student side.
+- **The editable marks grid moved to `/teacher/marks`** rather than being deleted with the old dashboard.
+  It was the app's **only** inline mark-entry UI (`GradebookTable` -> `POST /api/gradebook/marks`), so
+  porting the mockup composition unchanged would have removed a capability the mockup — being a static
+  design — could never show.
+- **`tests/nav-scope.test.ts`** now derives the app-only nav count from `NAV_SECTIONS` instead of hard-coding
+  it, so the next `appOnly` item is a nav-only change.
+
+#### Removed
+
+- `components/teacher-view.tsx`, `components/student-view.tsx`, and `components/upcoming-events-panel.tsx`
+  (which only those two imported). No dangling references.
+
+#### Dropped, because nothing derives them
+
+All four teacher KPI sparklines and the student's two, and the KPI `delta` — 6-week history is not stored.
+"Against the term target" — `CohortTrend` carries no target. `weightPercent` — no column. The review
+table's assessment-kind line — the real payload has no assessment type. Peer "Round closes" — the real
+workspace returns no due date. The mockup's header actions — "Publish results" is inert there, and "New
+assessment" writes through the gradebook provider, which would not refresh a server-rendered page.
+
+#### Recorded, not fixed: a quiz-scoring defect the port surfaced
+
+The teacher dashboard's "Cohort average" tile reads **12%** for the demo offering. Checked against the
+database, the arithmetic is correct — the graded attempts scored 4/20, 2/20 and 1/20. The defect is
+underneath: `lib/quiz-generation/generation.ts` persists **every generated question with `points: 1`**
+regardless of the assessment's `maxMarks`, while scoring divides by a `maxScore` taken from `maxMarks`. So
+a 4-question quiz on a 20-mark assessment caps a **perfect** attempt at 20%. The demo's student answered
+all four correctly and is shown at 20%, while the manual `Grade` for the same assessment says 20/20 — two
+subsystems disagreeing about one student, which is why the old student dashboard said 90% and the teacher's
+new one says 12%. **Left unfixed deliberately**: which side is canonical changes what a percentage means
+for every quiz, mark and export, so it is a decision rather than a cleanup.
+
 ### Small fixes: dark-mode following the user, token contrast, and stale docs
 
 #### Fixed
