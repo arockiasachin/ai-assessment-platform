@@ -23,7 +23,6 @@ import { createSpineFixture } from "./fixtures/spine"
 
 let f: Awaited<ReturnType<typeof createSpineFixture>>
 let teacher: AuthUser
-let otherTeacher: AuthUser
 let noProfile: AuthUser
 
 let mineOnMyOffering: string
@@ -44,7 +43,6 @@ beforeAll(async () => {
     },
     include: { staffProfile: true },
   })
-  otherTeacher = { id: other.id, email: other.email, role: "teacher" }
 
   const bare = await prisma.user.create({
     data: {

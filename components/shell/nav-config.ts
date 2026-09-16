@@ -25,8 +25,6 @@ import {
   type LucideIcon,
 } from "lucide-react"
 
-import type { MockupRole } from "@/lib/mock/types"
-
 /**
  * Navigation model for the mockup shell.
  *
@@ -40,7 +38,15 @@ import type { MockupRole } from "@/lib/mock/types"
  * without a `"use client"` boundary.
  */
 
-export type { MockupRole }
+/**
+ * The three roles the shell renders for.
+ *
+ * **Defined here rather than imported from `lib/mock/types`.** It is a navigation concept — it
+ * decides which nav sections exist — not a fixture concept, and `lib/mock` is scoped to the
+ * design-reference tree. The shell depending on mock types was the last reason a *real* component
+ * imported from the mock layer.
+ */
+export type MockupRole = "teacher" | "student" | "admin"
 
 export type NavItem = {
   /** Visible label. Also the tooltip text when the rail is collapsed. */

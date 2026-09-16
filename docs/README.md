@@ -73,11 +73,37 @@ mockups to the backend that already exists behind them:
   - [`plans/wave-3.md`](./plans/wave-3.md) — the Wave 3 plan: **derivations, not new tables**. The
     aggregations the mockups assert but nothing computes — score-trend series, topic mastery, the
     at-risk roster, the dashboard tiles, the retake recommendation — plus the long-standing
-    `GradebookProvider` conversion. Its first slice (the pure statistical core) is landed. It opens
-    with an **open decision** rather than a settled one: the institution grades on σ-bands, but
-    `letterGrade` uses fixed bands and feeds the exported final grade, so an at-risk rule built on σ
-    would contradict every badge and the LMS export unless the banding is unified or the roster is
-    labelled as relative.
+    `GradebookProvider` conversion. **Complete (T1–T8).** The open decision it was written around is
+    settled: the institution grades on σ-bands, and the platform now follows VIT convention —
+    relative grading where the cohort is large enough, absolute bands otherwise, with a visible
+    notice rather than a silent switch. Computing σ exposed an inverted `passBoundary` formula
+    (`max` where the rule requires `min`), which is fixed. The exported final grade carries **no
+    letter**, because the platform cannot justify one without a course category; the `letter` column
+    was removed rather than guessed. See §9 of the plan for the grading policy (CAT 40 / FAT 60, the
+    minimum-CAT gate for FAT eligibility, and the mean's inclusion rules).
+  - [`plans/wave-4.md`](./plans/wave-4.md) — the Wave 4 plan: the admin surface and the endgame.
+    **Complete (A1–A4, plus the close-out in §6)**, with the endgame's one decision recorded below.
+
+### The `/mockup` tree is kept, as a tagged design reference
+
+Wave 4's definition of done allowed deleting the `/mockup` tree **or** keeping it as a tagged design
+reference. It is **kept**: the 38 routes each document their own build guide, which is design-process
+evidence worth retaining, and the tree is operationally inert (outside `proxy.ts`, outside the real
+navigation).
+
+Keeping it required a real change rather than a decision alone. `lib/mock` had been load-bearing for
+the **app**: `lib/labels.ts` imported nine view unions from it, `lib/teacher-submissions.ts` two more,
+`components/shell/nav-config.ts` imported `MockupRole`, and `components/shell/top-bar.tsx` imported
+`MOCK_NOTIFICATIONS` and `MOCK_CURRENT_USER` as **values** — so a shell component the real app
+renders depended on fixture data. Those nine unions were value-identical duplicates of Prisma enums,
+so they now use the generated types; the shell's mock data arrives as props from
+`app/mockup/layout.tsx`, where the mockup's fixed clock also stays. The dependency therefore points
+one way, and `tests/mock-layer-scope.test.ts` enforces it, so the layer cannot quietly become
+product code again.
+
+The migration left five components from the pre-design-system shell unreferenced
+(`role-page-shell`, `dashboard`, `dashboard-header`, `role-routes-menu`, `future-page-placeholder`);
+they were deleted, and the same test asserts they stay gone.
 
 ## Shipped feature pods
 

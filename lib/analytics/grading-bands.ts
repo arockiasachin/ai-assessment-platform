@@ -112,15 +112,16 @@ export type BandOptions = {
  * (see `ceilGrandTotals`). A null `sd` or an empty cohort has no bands — a single
  * student has no distribution to be ranked within — so this returns `null` rather
  * than a fabricated boundary.
+ *
+ * **Takes no `BandOptions`, deliberately.** `upperInclusive` decides which side of a boundary a
+ * mark lands on, which is a property of the *comparison*, not of the boundary list — so it belongs
+ * to `relativeLetter` and `absoluteLetter`, which do the comparing. This function only computes
+ * where the edges are; accepting the option here would be a parameter that cannot change its
+ * output. It previously did accept one and read it into an unused local.
  */
-export function gradeBandRanges(
-  mean: number | null,
-  sd: number | null,
-  options: BandOptions = {},
-): GradeBandRange[] | null {
+export function gradeBandRanges(mean: number | null, sd: number | null): GradeBandRange[] | null {
   if (mean === null || sd === null) return null
 
-  const upperInclusive = options.upperInclusive ?? true
   // A zero σ would collapse every band onto the mean. That is arithmetically
   // correct (every student scored the same) but makes the bands useless, so it is
   // reported rather than silently producing seven identical boundaries.

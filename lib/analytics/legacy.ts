@@ -39,6 +39,30 @@ export function assessmentAverage(
   return vals.reduce((s, v) => s + v, 0) / vals.length
 }
 
+/**
+ * The assessments that have a real average, each with its value and its position in `assessments`.
+ *
+ * An assessment with no published mark is **omitted rather than reported as zero**. That distinction
+ * is the whole point of `assessmentAverage` returning `null`: "nothing marked yet" and "the cohort
+ * averaged zero" are different facts, and a caller that collapses them draws a bar a reader cannot
+ * tell apart from a genuine 0%.
+ *
+ * `position` is the index in the input array, not in the result, so a caller can build a stable
+ * label (several assessments can share a truncated title) without the omission shifting it.
+ */
+export function assessmentsWithAverage(
+  marks: MarksMap,
+  students: Student[],
+  assessments: Assessment[],
+): { assessment: Assessment; average: number; position: number }[] {
+  const out: { assessment: Assessment; average: number; position: number }[] = []
+  assessments.forEach((assessment, position) => {
+    const average = assessmentAverage(marks, students, assessment)
+    if (average !== null) out.push({ assessment, average, position })
+  })
+  return out
+}
+
 export function classAverage(
   marks: MarksMap,
   students: Student[],

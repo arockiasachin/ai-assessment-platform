@@ -10,7 +10,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Separator } from "@/components/ui/separator"
-import { StatusDot, StatusPill } from "@/components/ui/status-pill"
+import { StatusDot, StatusPill, type StatusKey } from "@/components/ui/status-pill"
 import {
   BRAND,
   PREVIEW_ROLES,
@@ -21,9 +21,6 @@ import {
 } from "@/components/shell/nav-config"
 import { MobileNav } from "@/components/shell/mobile-nav"
 import { ThemeToggle } from "@/components/shell/theme-toggle"
-import { formatRelativeTime } from "@/lib/mock/format"
-import { MOCK_NOTIFICATIONS, MOCK_CURRENT_USER } from "@/lib/mock/session"
-import type { MockUser } from "@/lib/mock/types"
 
 /** The signed-in identity the top bar renders. */
 export type TopBarUser = {
@@ -34,26 +31,55 @@ export type TopBarUser = {
 }
 
 /**
+ * A notification as the top bar renders it.
+ *
+ * **Mockup-only data, declared here rather than imported.** There is no `Notification` model, so
+ * this is a view shape the design-reference tree supplies — and the app never does. The timestamp
+ * arrives already formatted because the mockup's relative clock (`MOCK_NOW`) belongs to the
+ * mockup; the shell must not own a mock clock, or app scope would inherit one.
+ */
+export type TopBarNotification = {
+  id: string
+  title: string
+  description: string
+  /** Pre-formatted by the caller, e.g. "2 days ago". */
+  whenLabel: string
+  tone: StatusKey
+  read: boolean
+}
+
+/**
  * Sticky application top bar.
  *
- * Renders entirely from props and static fixtures — there is no `fetch` and no
- * effect, so the chrome paints on the first frame (no "Loading…" flash). The
- * search field is intentionally inert: it is visually complete so reviewers can
- * judge the composition, but it does not submit anywhere.
+ * Renders entirely from props — there is no `fetch` and no effect, so the chrome paints on the
+ * first frame (no "Loading…" flash). The search field is intentionally inert: visually complete so
+ * reviewers can judge the composition, but it does not submit anywhere.
  *
- * In `app` scope the mockup-only affordances are dropped: there is no preview
- * role switcher, no mockup index link, and no notifications menu (there is no
- * `Notification` model, so rendering one would be fabricating data). The signed
- * in user is passed in from the server; sign-out is real.
+ * **Mockup-only data arrives as props rather than imports.** This component used to import
+ * `MOCK_NOTIFICATIONS` and `MOCK_CURRENT_USER` directly, which meant a *real* shell component
+ * depended on the mock layer at module scope. It now takes them from the caller: the mockup layout
+ * supplies its fixtures, and app scope supplies only the signed-in user from the server. In `app`
+ * scope the mockup-only affordances are dropped — no preview role switcher, no mockup index link,
+ * and no notifications menu, because there is no `Notification` model and rendering one would be
+ * fabricating data. Sign-out is real.
  */
 export function TopBar({
   role,
   scope = "mockup",
   user,
+  mockUsers,
+  notifications = [],
 }: {
   role: MockupRole
   scope?: NavScope
   user?: TopBarUser
+  /**
+   * Per-role demo identities for when no real user is passed. Mockup-only; omitted in app scope,
+   * where `user` always comes from the session.
+   */
+  mockUsers?: Partial<Record<MockupRole, TopBarUser & { roleTone: StatusKey }>>
+  /** Mockup-only. Empty in app scope, which renders no notification affordance at all. */
+  notifications?: TopBarNotification[]
 }) {
   // Search is mockup-only until it is wired up, so this id only ever renders
   // there. Keeping the name scope-specific means an app-scope search can be
@@ -119,20 +145,19 @@ export function TopBar({
         )}
 
         <div className="ml-auto flex items-center gap-1 md:ml-2">
-          {scope === "mockup" && (
-            <NotificationsMenu
-              unread={MOCK_NOTIFICATIONS.filter((notification) => !notification.read).length}
-            />
+          {scope === "mockup" && notifications.length > 0 && (
+            <NotificationsMenu notifications={notifications} />
           )}
           <ThemeToggle />
-          <UserMenu role={role} scope={scope} user={user} />
+          <UserMenu role={role} scope={scope} user={user} mockUsers={mockUsers} />
         </div>
       </div>
     </header>
   )
 }
 
-function NotificationsMenu({ unread }: { unread: number }) {
+function NotificationsMenu({ notifications }: { notifications: TopBarNotification[] }) {
+  const unread = notifications.filter((notification) => !notification.read).length
   return (
     <Popover.Root>
       <Popover.Trigger
@@ -157,7 +182,7 @@ function NotificationsMenu({ unread }: { unread: number }) {
               <span className="text-xs text-muted-foreground">{unread} unread</span>
             </div>
             <ul className="max-h-80 overflow-y-auto py-1">
-              {MOCK_NOTIFICATIONS.map((notification) => (
+              {notifications.map((notification) => (
                 <li
                   key={notification.id}
                   className="flex items-start gap-3 px-4 py-2.5 hover:bg-muted/60"
@@ -166,9 +191,7 @@ function NotificationsMenu({ unread }: { unread: number }) {
                   <div className="min-w-0">
                     <p className="font-medium">{notification.title}</p>
                     <p className="text-xs text-muted-foreground">{notification.description}</p>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      {formatRelativeTime(notification.createdAt)}
-                    </p>
+                    <p className="mt-1 text-xs text-muted-foreground">{notification.whenLabel}</p>
                   </div>
                 </li>
               ))}
@@ -184,16 +207,27 @@ function UserMenu({
   role,
   scope,
   user: userProp,
+  mockUsers,
 }: {
   role: MockupRole
   scope: NavScope
   user?: TopBarUser
+  mockUsers?: Partial<Record<MockupRole, TopBarUser & { roleTone: StatusKey }>>
 }) {
-  const mockUser = MOCK_CURRENT_USER[role]
-  const user = userProp ?? mockUser
-  // A real signed-in user is active by definition; the mock identities carry
-  // per-role demo tones so the pill has something varied to show.
-  const roleTone: MockUser["roleTone"] = userProp ? "active" : mockUser.roleTone
+  const demoUser = mockUsers?.[role]
+  // If neither is supplied, render a neutral identity rather than crashing: app scope always
+  // passes a real user, and the mockup layout always passes the demo record, so this is the
+  // "neither" case that should not happen — but a chrome component must not throw on it.
+  const user: TopBarUser = userProp ??
+    demoUser ?? {
+      name: "",
+      email: "",
+      initials: "?",
+      roleLabel: ROLE_META[role].label,
+    }
+  // A real signed-in user is active by definition; the demo identities carry per-role tones so the
+  // pill has something varied to show.
+  const roleTone: StatusKey = userProp ? "active" : (demoUser?.roleTone ?? "active")
 
   return (
     <Popover.Root>

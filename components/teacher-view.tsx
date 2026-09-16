@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/select"
 import {
   assessmentAverage,
+  assessmentsWithAverage,
   classAverage,
   filterAssessments,
   gradeDistribution,
@@ -67,10 +68,14 @@ export function TeacherView() {
 
   const classAvgData = useMemo(
     () =>
-      filtered.map((a, index) => ({
-        label: `${a.title.length > 12 ? a.title.slice(0, 11) + "…" : a.title} ${index + 1}`,
-        value: round(assessmentAverage(marks, students, a) ?? 0),
-      })),
+      // Assessments with no published mark are omitted, not charted as 0% — see
+      // `assessmentsWithAverage`, which keeps "nothing marked yet" and "averaged zero" distinct.
+      assessmentsWithAverage(marks, students, filtered).map(
+        ({ assessment, average, position }) => ({
+          label: `${assessment.title.length > 12 ? assessment.title.slice(0, 11) + "…" : assessment.title} ${position + 1}`,
+          value: round(average),
+        }),
+      ),
     [filtered, marks, students],
   )
 

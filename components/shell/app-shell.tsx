@@ -14,7 +14,8 @@ import {
   type NavScope,
 } from "@/components/shell/nav-config"
 import { SideNav } from "@/components/shell/side-nav"
-import { TopBar, type TopBarUser } from "@/components/shell/top-bar"
+import { TopBar, type TopBarNotification, type TopBarUser } from "@/components/shell/top-bar"
+import type { StatusKey } from "@/components/ui/status-pill"
 
 type AppShellProps = {
   children: React.ReactNode
@@ -39,8 +40,18 @@ type AppShellProps = {
    * through), but the fallback is retained rather than throwing during render.
    */
   scope?: NavScope
-  /** Real signed-in user, shown in `app` scope. Falls back to the mock identity. */
+  /**
+   * Real signed-in user, shown in `app` scope. App scope always passes this. When omitted, the
+   * bar falls back to `mockUsers[role]`, and failing that to a neutral placeholder.
+   */
   user?: TopBarUser
+  /**
+   * Per-role demo identities for the mockup tree. Supplied by `app/mockup/layout.tsx` from its
+   * fixtures, so the shell itself imports nothing from `lib/mock`.
+   */
+  mockUsers?: Partial<Record<MockupRole, TopBarUser & { roleTone: StatusKey }>>
+  /** Mockup-only notifications, supplied by the mockup layout. Empty in app scope. */
+  notifications?: TopBarNotification[]
 }
 
 /**
@@ -59,6 +70,8 @@ export function AppShell({
   defaultRole = "teacher",
   scope = "mockup",
   user,
+  mockUsers,
+  notifications,
 }: AppShellProps) {
   const pathname = usePathname()
   const role = roleProp ?? roleFromPathname(pathname, scope) ?? defaultRole
@@ -134,7 +147,13 @@ export function AppShell({
         </aside>
 
         <div className="flex min-w-0 flex-1 flex-col">
-          <TopBar role={role} scope={scope} user={user} />
+          <TopBar
+            role={role}
+            scope={scope}
+            user={user}
+            mockUsers={mockUsers}
+            notifications={notifications}
+          />
           <main id={mainId} className="flex-1 px-4 py-6 sm:px-6 lg:px-8">
             <div className="mx-auto w-full max-w-7xl">{children}</div>
           </main>

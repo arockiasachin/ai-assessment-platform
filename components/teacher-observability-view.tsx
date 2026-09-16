@@ -19,7 +19,6 @@ import {
   filterActivity,
   isActivityFiltered,
   isAutomated,
-  searchableText,
   type ActorKindFilter,
 } from "@/lib/observability-view"
 

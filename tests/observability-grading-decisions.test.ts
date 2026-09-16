@@ -27,7 +27,6 @@ import { createSpineFixture } from "./fixtures/spine"
 
 let f: Awaited<ReturnType<typeof createSpineFixture>>
 let teacher: AuthUser
-let otherTeacher: AuthUser
 
 let myAssessment: string
 let theirAssessment: string
@@ -47,7 +46,6 @@ beforeAll(async () => {
     },
     include: { staffProfile: true },
   })
-  otherTeacher = { id: other.id, email: other.email, role: "teacher" }
 
   const theirClass = await prisma.classRoom.create({
     data: { code: "OBS-CLASS-B", name: "Their Room", academicYear: 2026 },

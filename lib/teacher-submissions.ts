@@ -1,7 +1,7 @@
 import "server-only"
 
 import { toAssessmentScale } from "@/lib/gradebook"
-import type { AssessmentKind, SubmissionState } from "@/lib/mock"
+import type { AssessmentType, SubmissionStatus } from "@/lib/generated/prisma/enums"
 import { prisma } from "@/lib/prisma"
 import type { AuthUser } from "@/lib/session"
 import { resolveTeacherStaffId } from "@/lib/teacher-staff"
@@ -31,8 +31,8 @@ export type TeacherSubmissionRow = {
   courseName: string
   className: string
   /** The real `AssessmentType`, not the route's Quiz/Assignment collapse. */
-  kind: AssessmentKind
-  state: SubmissionState
+  kind: AssessmentType
+  state: SubmissionStatus
   dueDate: string
   submittedAt: string | null
   gradedAt: string | null
@@ -52,13 +52,13 @@ export type TeacherSubmissionRow = {
 /**
  * The subset of a Prisma `submission.findMany` row this projection reads.
  *
- * Declared structurally, and typed with the same string unions as Prisma's enums
- * (`lib/mock/types.ts` mirrors them one-to-one by design), so the mapper is a
- * **pure function** that can be tested without a database.
+ * Declared structurally, and typed with the generated Prisma enums
+ * (`@/lib/generated/prisma/enums`), so the mapper is a **pure function** that can
+ * be tested without a database.
  */
 export type SubmissionQueryRow = {
   id: string
-  status: SubmissionState
+  status: SubmissionStatus
   submittedAt: Date | null
   gradedAt: Date | null
   feedback: string | null
@@ -71,7 +71,7 @@ export type SubmissionQueryRow = {
   assessment: {
     id: string
     title: string
-    type: AssessmentKind
+    type: AssessmentType
     dueDate: Date
     maxMarks: number
     offering: {

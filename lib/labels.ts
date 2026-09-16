@@ -1,15 +1,15 @@
 import type { StatusKey } from "@/components/ui/status-pill"
 import type {
-  AssessmentKind,
-  ContributionKind,
-  GradeSourceKind,
-  GroupState,
-  MilestoneState,
-  PeerEvaluationState,
-  ReviewState,
-  SubmissionState,
-  TestRunState,
-} from "@/lib/mock"
+  AssessmentType,
+  ContributionEventType,
+  GradeReviewStatus,
+  GradeSource,
+  GroupStatus,
+  MilestoneStatus,
+  PeerEvaluationStatus,
+  SubmissionStatus,
+  TestRunStatus,
+} from "@/lib/generated/prisma/enums"
 
 /**
  * Domain → status vocabulary, shared by the mockup pages **and** the real pages.
@@ -20,16 +20,16 @@ import type {
  * lookup data plus one tiny helper.
  *
  * This file used to live at `app/mockup/teacher/_lib/labels.ts`. A real page
- * cannot import from the mockup tree, because that tree is scheduled for
- * deletion (`docs/plans/mockup-to-backend.md` §8). The mockup file is now a
- * re-export shim so the mockup pages keep working unchanged.
+ * cannot import from the mockup tree, so this module lives in `lib/`; the mockup
+ * file is now a re-export shim so the mockup pages keep working unchanged.
  *
- * The keys are the string unions in `lib/mock/types.ts`, which mirror the Prisma
- * enums one-to-one by design — so a Prisma enum value can index these maps
- * directly, with no translation table.
+ * The keys are the **generated Prisma enums** (`@/lib/generated/prisma/enums`), so
+ * a column value indexes these maps directly, with no translation table. They were
+ * previously string unions duplicated in `lib/mock/types.ts` — value-identical, but
+ * they made the real app depend on the design-reference tree.
  */
 
-export const ASSESSMENT_KIND_LABEL: Record<AssessmentKind, string> = {
+export const ASSESSMENT_KIND_LABEL: Record<AssessmentType, string> = {
   QUIZ: "Quiz",
   DESCRIPTIVE: "Descriptive",
   CODE: "Code",
@@ -55,7 +55,7 @@ export const MATERIAL_KIND_LABEL: Record<
   OTHER: "Other",
 }
 
-export const REVIEW_STATE_TO_STATUS: Record<ReviewState, StatusKey> = {
+export const REVIEW_STATE_TO_STATUS: Record<GradeReviewStatus, StatusKey> = {
   PENDING: "pending",
   AUTO_ACCEPTED: "graded",
   NEEDS_REVIEW: "needs-review",
@@ -63,7 +63,7 @@ export const REVIEW_STATE_TO_STATUS: Record<ReviewState, StatusKey> = {
   REJECTED: "rejected",
 }
 
-export const REVIEW_STATE_LABEL: Record<ReviewState, string> = {
+export const REVIEW_STATE_LABEL: Record<GradeReviewStatus, string> = {
   PENDING: "Pending",
   AUTO_ACCEPTED: "Auto-accepted",
   NEEDS_REVIEW: "Needs review",
@@ -71,7 +71,7 @@ export const REVIEW_STATE_LABEL: Record<ReviewState, string> = {
   REJECTED: "Rejected",
 }
 
-export const SUBMISSION_STATE_TO_STATUS: Record<SubmissionState, StatusKey> = {
+export const SUBMISSION_STATE_TO_STATUS: Record<SubmissionStatus, StatusKey> = {
   DRAFT: "draft",
   SUBMITTED: "submitted",
   LATE: "late",
@@ -89,7 +89,7 @@ export const SUBMISSION_STATE_TO_STATUS: Record<SubmissionState, StatusKey> = {
  * ("Marks: 22.5/30", "Not marked", "3 marked, withheld"), which is a different
  * thing and is why both words exist on the same pages.
  */
-export const SUBMISSION_STATE_LABEL: Record<SubmissionState, string> = {
+export const SUBMISSION_STATE_LABEL: Record<SubmissionStatus, string> = {
   DRAFT: "Draft",
   SUBMITTED: "Submitted",
   LATE: "Late",
@@ -97,34 +97,34 @@ export const SUBMISSION_STATE_LABEL: Record<SubmissionState, string> = {
   RESUBMITTED: "Resubmitted",
 }
 
-export const GROUP_STATE_TO_STATUS: Record<GroupState, StatusKey> = {
+export const GROUP_STATE_TO_STATUS: Record<GroupStatus, StatusKey> = {
   FORMING: "forming",
   ACTIVE: "active",
   COMPLETED: "completed",
   ARCHIVED: "archived",
 }
 
-export const PEER_STATE_TO_STATUS: Record<PeerEvaluationState, StatusKey> = {
+export const PEER_STATE_TO_STATUS: Record<PeerEvaluationStatus, StatusKey> = {
   DRAFT: "draft",
   SUBMITTED: "submitted",
 }
 
-export const MILESTONE_STATE_TO_STATUS: Record<MilestoneState, StatusKey> = {
+export const MILESTONE_STATE_TO_STATUS: Record<MilestoneStatus, StatusKey> = {
   PLANNED: "queued",
   IN_PROGRESS: "in-progress",
   COMPLETED: "completed",
   MISSED: "missed",
 }
 
-export const MILESTONE_STATE_LABEL: Record<MilestoneState, string> = {
+export const MILESTONE_STATE_LABEL: Record<MilestoneStatus, string> = {
   PLANNED: "Planned",
   IN_PROGRESS: "In progress",
   COMPLETED: "Completed",
   MISSED: "Missed",
 }
 
-/** `TestRunState` values are already lowercase `StatusKey`s. */
-export const TEST_RUN_STATE_TO_STATUS: Record<TestRunState, StatusKey> = {
+/** `TestRunStatus` values are already lowercase `StatusKey`s. */
+export const TEST_RUN_STATE_TO_STATUS: Record<TestRunStatus, StatusKey> = {
   QUEUED: "queued",
   RUNNING: "running",
   PASSED: "passed",
@@ -133,14 +133,14 @@ export const TEST_RUN_STATE_TO_STATUS: Record<TestRunState, StatusKey> = {
   TIMEOUT: "timeout",
 }
 
-export const GRADE_SOURCE_LABEL: Record<GradeSourceKind, string> = {
+export const GRADE_SOURCE_LABEL: Record<GradeSource, string> = {
   AI_SUGGESTED: "AI suggested",
   TEACHER_OVERRIDE: "Teacher override",
   AUTO: "Auto-graded",
   IMPORTED: "Imported",
 }
 
-export const CONTRIBUTION_KIND_LABEL: Record<ContributionKind, string> = {
+export const CONTRIBUTION_KIND_LABEL: Record<ContributionEventType, string> = {
   COMMIT: "Commit",
   PULL_REQUEST: "Pull request",
   ISSUE: "Issue",

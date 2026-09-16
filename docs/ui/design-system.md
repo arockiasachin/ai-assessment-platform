@@ -22,33 +22,53 @@ phase-specific.
 
 The rebuild fixes structural problems, not just colours:
 
-| Old problem                                                                   | New answer                                                            |
-| ----------------------------------------------------------------------------- | --------------------------------------------------------------------- |
-| Navigation was a cramped card in a right-hand column                          | Persistent **left rail** (`SideNav`) with grouped sections            |
-| A dashed "Extendable menu / Add new pages here" box shipped in the product UI | **No developer scaffolding anywhere** in the shell                    |
-| The header fetched `/api/auth/me` in a `useEffect`, flashing "Loading…"       | Chrome renders from props/fixtures: **no fetch, no effect, no flash** |
-| Title nested in a card, then content in more cards                            | `PageHeader` sits on the background; content lives in `SectionCard`s  |
-| Header `max-w-6xl`, main `max-w-7xl`                                          | One content width: `max-w-7xl`, provided by `AppShell`                |
-| "Gradebook / Assessment & marks tracker"                                      | **Rubrix — AI-assisted assessment & feedback**                        |
-| Three placeholder stub pages                                                  | Thirty-eight mockup routes, each documenting its own build guide      |
+| Old problem                                                                   | New answer                                                             |
+| ----------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| Navigation was a cramped card in a right-hand column                          | Persistent **left rail** (`SideNav`) with grouped sections             |
+| A dashed "Extendable menu / Add new pages here" box shipped in the product UI | **No developer scaffolding anywhere** in the shell                     |
+| The header fetched `/api/auth/me` in a `useEffect`, flashing "Loading…"       | Chrome renders from props/fixtures: **no fetch, no effect, no flash**  |
+| Title nested in a card, then content in more cards                            | `PageHeader` sits on the background; content lives in `SectionCard`s   |
+| Header `max-w-6xl`, main `max-w-7xl`                                          | One content width: `max-w-7xl`, provided by `AppShell`                 |
+| "Gradebook / Assessment & marks tracker"                                      | **Rubrix — AI-assisted assessment & feedback**                         |
+| Three placeholder stub pages                                                  | **None left** — all three are real pages with real readers (Waves 2–3) |
 
 ---
 
 ## 2. Shell anatomy
 
+`AppShell` is one Client Component rendered in two places, with `scope` selecting the differences.
+**It is not mounted by either layout.** The mockup tree mounts it once, in its layout; the app tree
+mounts it per page. The ids differ by scope (`mockup-main` / `app-main`), which is what lets a test
+tell which tree a page rendered in.
+
 ```
-app/mockup/layout.tsx            server: pre-paint theme script + <AppShell>{children}</AppShell>
-└─ components/shell/app-shell.tsx          "use client"
-   ├─ skip link  →  #mockup-main
+app/mockup/layout.tsx        server: pre-paint theme script + fixtures passed as props
+└─ <AppShell scope="mockup">              ← mounted once, for the whole tree
+
+app/(dashboard)/layout.tsx   server: gradebook payload fetched once → <GradebookProvider>
+app/(dashboard)/<role>/…/page.tsx         server: fetches the page's own data
+└─ <AppShell scope="app" user={…}>        ← mounted per page (29 pages today)
+   ├─ skip link  →  #mockup-main | #app-main
    ├─ <aside>    → components/shell/side-nav.tsx        rail, `md:` and up
    └─ column
       ├─ components/shell/top-bar.tsx       <header>, sticky
       │  ├─ components/shell/mobile-nav.tsx drawer trigger + slide-over (< md)
       │  ├─ components/shell/theme-toggle.tsx
-      │  ├─ notifications popover
-      │  └─ account popover (role + preview-role switcher)
-      └─ <main id="mockup-main">  → page content
+      │  ├─ notifications popover           mockup scope only, and only if `notifications` given
+      │  └─ account popover (role, preview-role switcher in mockup scope)
+      └─ <main id="mockup-main" | "app-main">  → page content
 ```
+
+The mockup tree mounts once **because its chrome is constant** — the role comes from the path
+segment. The app tree mounts per page because the chrome needs the signed-in user, and each page is
+already fetching its own data on the server.
+
+**App scope takes its data from the server, not from fixtures.** `app/(dashboard)/layout.tsx`
+fetches the gradebook payload once and seeds `GradebookProvider`, so the first render is populated
+and the role label is correct before hydration — that was the P1 finding in
+`docs/quality/a11y-perf-audit.md`, now resolved. The mockup tree passes its fixtures as props from
+`app/mockup/layout.tsx` instead, which is why `components/shell/**` imports nothing from `lib/mock`
+(`tests/mock-layer-scope.test.ts` enforces it).
 
 Files:
 
@@ -56,7 +76,7 @@ Files:
 | ----------------------------------- | ------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------ |
 | `components/shell/app-shell.tsx`    | `AppShell`                                                                                             | Grid: rail + topbar + scrollable main. Derives the role from `/mockup/<role>` unless `role` is passed. |
 | `components/shell/side-nav.tsx`     | `SideNav`                                                                                              | Grouped nav with `aria-current="page"`, icon rail below `lg`, `variant: "rail" \| "drawer"`.           |
-| `components/shell/top-bar.tsx`      | `TopBar`                                                                                               | Brand, inert search, notifications, theme toggle, account menu.                                        |
+| `components/shell/top-bar.tsx`      | `TopBar`                                                                                               | Brand, inert search, notifications, theme toggle, account menu. Mockup data arrives as props.          |
 | `components/shell/mobile-nav.tsx`   | `MobileNav`                                                                                            | Hamburger + left slide-over. Built on the shared `Dialog` for focus trap + Escape.                     |
 | `components/shell/theme-toggle.tsx` | `ThemeToggle`, `themeInitScript`, `THEME_STORAGE_KEY`                                                  | Light/dark toggle and the pre-paint bootstrap script.                                                  |
 | `components/shell/page-header.tsx`  | `PageHeader`, `Breadcrumbs`                                                                            | Breadcrumbs, `h1`, description, actions, optional tab row.                                             |

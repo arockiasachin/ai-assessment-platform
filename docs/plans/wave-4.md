@@ -96,3 +96,67 @@ Recorded rather than forced.
   only purpose is symmetry.
 - **Touch the two dev-tool route handlers** (`retention/purge`, offering rebalance). They work and
   are tested; a port must not replace them.
+
+## 6. The close-out: the mock layer, the docs, and the last underived number
+
+`A1`–`A4` finished the admin ports and `§3` recorded the dropped surfaces. What remained was the
+**endgame** in `docs/plans/mockup-to-backend.md` §8 — the conditions under which the port is actually
+finished. Landed in `e1a69ab`.
+
+### The tree is kept, so the dependency had to be severed
+
+§8 allowed deleting `/mockup` **or** keeping it as a tagged design reference. It is **kept**: its 38
+routes each document their own build guide, which is design-process evidence worth retaining, and the
+tree is operationally inert (outside `proxy.ts`, outside the real navigation).
+
+That choice created the wave's last real problem. `lib/mock` was **load-bearing for the app**, so the
+reference tree and the product were not separable:
+
+| Dependency                                                    | What it actually was                                                                 | Resolution                           |
+| ------------------------------------------------------------- | ------------------------------------------------------------------------------------ | ------------------------------------ |
+| 9 unions into `lib/labels.ts`                                 | value-identical duplicates of Prisma enums (`AssessmentType`, `SubmissionStatus`, …) | use the generated enums              |
+| 2 unions into `lib/teacher-submissions.ts`                    | the same                                                                             | use the generated enums              |
+| `MockupRole` into `components/shell/nav-config.ts`            | a navigation concept — it decides which nav sections exist                           | define it there                      |
+| `MOCK_NOTIFICATIONS` / `MOCK_CURRENT_USER` into `top-bar.tsx` | fixture **values** in a shell component the real app renders                         | pass as props from the mockup layout |
+
+The value-identity of all eleven unions was verified before the swap, because a mismatch would make a
+label-map lookup return `undefined` and render a raw enum. The timestamp formatting moved to
+`app/mockup/layout.tsx` too: `formatRelativeTime` is anchored to the mockup's fixed `MOCK_NOW`, so the
+mock clock is the mockup's to apply and app scope must not inherit one.
+
+`tests/mock-layer-scope.test.ts` enforces the result **at the source level**, since a helper test
+cannot catch an import. It matches every way a module can reach another (static, `export … from`,
+side-effect, dynamic `import()`, `require()`) and normalises alias and relative specifiers, so
+`../../lib/mock` and `~/lib/mock` are caught while `@/lib/mockup-*` and `some-lib/mock` are not. It was
+mutation-tested against all twelve forms: ten caught, two correctly ignored. It deliberately does
+**not** strip comments — a line-based `//` strip truncates at the first `//` inside a string literal
+(a URL), which would hide an import sharing that line.
+
+### Five more components were already dead
+
+Completing the shell migration left the pre-design-system shell unreferenced: `role-page-shell`,
+`dashboard`, `dashboard-header`, `role-routes-menu`, `future-page-placeholder`. `dashboard-header` was
+the source of the stale "Teacher view" label that `/teacher` no longer renders. All five deleted, and
+the guard asserts they stay gone.
+
+### The last underived number
+
+An audit of all 29 app-scope routes found exactly one violation of §8's "no page renders a number
+that nothing derives": `components/teacher-view.tsx` coerced a null assessment average to `0`
+(`assessmentAverage(...) ?? 0`), so an assessment with **no published marks** drew a `0%` bar
+indistinguishable from a cohort that genuinely averaged zero — and the chart's screen-reader
+description announced it as "0%". `assessmentAverage` returns `null` deliberately (the null-vs-zero
+rule documented in `lib/teacher-roster.ts`), and both sibling charts preserve that null, so this was
+an outlier. Unmarked assessments are now omitted from the series.
+
+### Paths not taken
+
+- **Deleting `/mockup` outright.** Allowed by §8, and rejected by the owner — the per-route build
+  guides are the design-process record.
+- **Having `gradeBandRanges` accept `BandOptions`.** The parameter was read into an unused local, so
+  it could not change the output: boundary inclusivity is a property of the _comparison_, not of the
+  boundary list. Removed rather than implemented; `relativeLetter` / `absoluteLetter` keep it.
+- **A stricter `timeZone` sweep.** Three app-scope formatters still call `toLocaleDateString` /
+  `toLocaleString` with an explicit locale but no `timeZone`, which can render a different day west of
+  UTC. Flagged by the audit as an adjacent hazard in the same family as the implicit-locale defects
+  A1 fixed, **not** fixed here — it is a separate behaviour change and belongs with its own tests.

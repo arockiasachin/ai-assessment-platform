@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 
-import { jsonError, parseJsonBody } from "@/lib/api"
+import { parseJsonBody } from "@/lib/api"
 import { requireRole } from "@/lib/authz"
 import {
   decideRetakeRequest,

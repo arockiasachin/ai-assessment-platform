@@ -335,6 +335,70 @@ Real-time bug-fixing pass 3 of 3 (see [`docs/verification/bugfix-run-3.md`](docs
   and re-checks the existing in-progress attempt and the cap, so a concurrent start resumes the
   winner instead of erroring.
 
+### wave-4: admin surface, mock-layer scope, and the design-reference tree
+
+Wave 4 closed the mockup-to-backend migration. It landed the admin surface on the shared shell, then
+settled what happens to the mockup tree itself — the item the plan left as a decision.
+
+#### Added
+
+- **`tests/mock-layer-scope.test.ts`** — a source-level guard that `@/lib/mock` is imported only from
+  the design-reference tree, that `components/shell/**` imports no mock _values_, and that the eight
+  retired pre-design-system shell components stay deleted. It matches every way a module can reach
+  another (static, `export … from`, side-effect, dynamic `import()`, `require()`) and normalises alias
+  and relative specifiers, so `../../lib/mock` and `~/lib/mock` are caught while `@/lib/mockup-*` and
+  `some-lib/mock` are not — verified by mutation against all twelve forms. It deliberately does not
+  strip comments, because a line-based `//` strip truncates at the first `//` inside a string literal
+  (a URL) and would hide an import sharing that line.
+- **`TopBarNotification`** (`components/shell/top-bar.tsx`) — the view shape for the mockup's
+  notification popover, declared locally instead of imported, because there is no `Notification` model.
+
+#### Fixed
+
+- **`/teacher` no longer fabricates a `0%` average.** `components/teacher-view.tsx` coerced a null
+  assessment average to `0` (`assessmentAverage(...) ?? 0`), so an assessment with no published marks
+  drew a bar indistinguishable from a cohort that genuinely averaged zero — and the chart's
+  screen-reader description announced it as "0%". `assessmentAverage` returns `null` deliberately, and
+  both sibling charts preserve it, so this was an outlier. Unmarked assessments are now omitted from
+  the series. Found by an audit of all 29 app-scope routes against `mockup-to-backend.md` §8's "no page
+  renders a number that nothing derives"; it was the only violation.
+- **The chart series is now a tested pure function.** `assessmentsWithAverage` (`lib/analytics/legacy.ts`)
+  is extracted from the component so the omission is testable, and
+  `tests/analytics-assessments-with-average.test.ts` pins the contract — including that a _genuine_
+  zero average is still charted, which is what makes the `?? 0` regression detectable. Mutation-tested:
+  reintroducing `?? 0` in the helper fails four of the seven cases.
+- **Four dead locals removed** — two unused imports and two unused test fixtures. All `no-unused-vars`
+  warnings are gone.
+
+#### Changed
+
+- **`TopBar` and `AppShell` take mockup data as props.** Both previously imported `MOCK_NOTIFICATIONS`
+  and `MOCK_CURRENT_USER` (and `formatRelativeTime`) directly, so a shell component the real app
+  renders depended on fixture data at module scope. The fixtures and their fixed clock now stay in
+  `app/mockup/layout.tsx`, which formats each timestamp before passing it down. The notification
+  affordance renders only in mockup scope _and_ only when notifications are supplied, so app scope has
+  no path to fabricated data.
+- **`lib/labels.ts` and `lib/teacher-submissions.ts` use the generated Prisma enums** in place of nine
+  and two mock view unions. Each union was verified value-identical to its enum before the swap, so
+  the label maps are unchanged; they were duplicates, not a separate vocabulary.
+- **`MockupRole` is defined in `components/shell/nav-config.ts`** rather than imported from
+  `lib/mock/types`. It is a navigation concept — it decides which nav sections exist.
+
+#### Removed
+
+- **Five components from the pre-design-system shell**: `role-page-shell`, `dashboard`,
+  `dashboard-header`, `role-routes-menu`, `future-page-placeholder`. All were unreferenced once every
+  page moved to `AppShell`; `dashboard-header` was the source of the stale role label ("Teacher view")
+  that `/teacher` no longer renders.
+
+#### Documentation
+
+- **`docs/ui/design-system.md`** now describes the shipped state: the shell anatomy documents both
+  mounts (`app/mockup/layout.tsx` and `app/(dashboard)/layout.tsx`) and the scope-dependent ids, and
+  the "three placeholder stub pages" row is corrected — none remain.
+- **`docs/README.md`** records Wave 3 (T1–T8) and Wave 4 (A1–A4) as complete, and documents why
+  `/mockup` is retained and what keeping it required.
+
 ### Documentation
 
 Final documentation refresh against the frozen post-Phase-4 tree (`dev` @ `12e45be`), which had
