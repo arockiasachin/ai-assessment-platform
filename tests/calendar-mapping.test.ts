@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 
-import { isUpcoming, toCalendarEventItem, type CalendarEventQueryRow } from "@/lib/calendar"
+import { toCalendarEventItem, type CalendarEventQueryRow } from "@/lib/calendar"
+import { isUpcoming } from "@/lib/calendar-view"
 
 /**
  * The calendar projection.

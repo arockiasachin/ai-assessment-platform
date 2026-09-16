@@ -211,8 +211,3 @@ export async function listTeacherCalendar(user: AuthUser): Promise<CalendarEvent
 
   return rows.map(toCalendarEventItem)
 }
-
-/** Whether an event has not happened yet, for the "Upcoming" panel only. */
-export function isUpcoming(event: CalendarEventItem, now: Date = new Date()): boolean {
-  return new Date(event.startAt).getTime() >= now.getTime()
-}
