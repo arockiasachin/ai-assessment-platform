@@ -9,6 +9,8 @@ import { prisma } from "@/lib/prisma"
 import type { AuthUser } from "@/lib/session"
 
 import { loadEnrolledCodeTask, resolveStudentProfileId, type EnrolledCodeTask } from "./authz"
+import { evaluateFatGateForStudent } from "@/lib/grading/offering-config-service"
+
 import { CodeEvalError } from "./errors"
 import { executeSandbox, type SandboxExecutor } from "./executor"
 import type { HarnessTestSpec } from "./harness"
@@ -185,6 +187,22 @@ export async function submitCodeForStudent(
 ): Promise<TestRunResponse> {
   const request = codeSubmissionRequestSchema.parse(input)
   const enrolled = await loadEnrolledCodeTask(user, request.assessmentId)
+
+  /*
+   * The FAT gate, for a code task that is a course's final assessment.
+   *
+   * Placed **before** the slot reservation, so a refused submission costs nothing: no row, and no
+   * sandbox container. The same three narrowings as the quiz path apply, because they live in
+   * `evaluateFatGateForStudent` — it refuses only a genuine below-minimum CAT score on the offering's
+   * *resolved* FAT, and never on insufficient marking.
+   */
+  const fatGate = await evaluateFatGateForStudent({
+    offeringId: enrolled.offeringId,
+    assessmentId: enrolled.assessmentId,
+    studentId: enrolled.studentId,
+  })
+  if (!fatGate.allowed) throw new CodeEvalError(403, fatGate.message)
+
   const executor = deps.executor ?? executeSandbox
 
   const testCaseRows = await prisma.testCase.findMany({

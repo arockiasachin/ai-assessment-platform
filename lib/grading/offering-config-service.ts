@@ -332,9 +332,17 @@ export type FatGateDecision =
  * ## Advisory elsewhere, enforced here
  *
  * The offering page's roster stays advisory — a teacher needs to see verdicts without them blocking
- * anything. This function is the enforcement point, called from the attempt-start path. Submission-based
- * finals (descriptive, code, group) are not gated yet; only a quiz FAT is, which is recorded in
- * `docs/plans/wave-4.md` §11 rather than half-built here.
+ * anything. This function is the enforcement point, and it is called from **every path that can
+ * produce a mark for a final assessment**:
+ *
+ * - `startQuizAttempt` — a quiz FAT;
+ * - `submitCodeForStudent` — a code-task FAT, checked before the slot reservation so a refusal costs
+ *   no sandbox run;
+ * - the written-submission route — an assignment or descriptive FAT.
+ *
+ * **A group project is deliberately not gated**, and that is not an omission: it has no per-student
+ * submission path. Its mark is published by the teacher for every member at once, so there is no
+ * student action to refuse and a gate would be vacuous.
  */
 export async function evaluateFatGateForStudent(input: {
   offeringId: string

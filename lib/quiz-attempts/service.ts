@@ -556,8 +556,9 @@ export async function startQuizAttempt(user: AuthUser, input: unknown): Promise<
    *
    * It refuses only a genuine below-minimum CAT score. Too little marked work is not a refusal —
    * `evaluateFatGateForStudent` allows it — because failing a student on unfinished marking is the same
-   * error as zero-filling a mean. Until now the rule was reported on the teacher's offering page and
-   * enforced nowhere.
+   * error as zero-filling a mean. Before this, the rule was reported on the teacher's offering page
+   * and enforced nowhere; it is now checked on every path that can produce a final mark — see
+   * `evaluateFatGateForStudent`.
    */
   const fatGate = await evaluateFatGateForStudent({
     offeringId: assessment.offering.id,

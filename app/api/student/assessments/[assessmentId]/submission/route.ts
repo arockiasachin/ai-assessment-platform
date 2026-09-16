@@ -4,6 +4,7 @@ import { jsonError, parseJsonBody } from "@/lib/api"
 import { requireRole } from "@/lib/authz"
 import { submissionRequestSchema } from "@/lib/contracts"
 import { prisma } from "@/lib/prisma"
+import { evaluateFatGateForStudent } from "@/lib/grading/offering-config-service"
 
 export async function POST(
   request: Request,
@@ -65,13 +66,43 @@ export async function POST(
     return jsonError("Assessment not found.", 404)
   }
 
-  if (assessment.type !== "ASSIGNMENT") {
-    return jsonError("Only assignments support submissions.", 409)
+  /*
+   * Text submissions, for the two kinds that are text.
+   *
+   * This was `!== "ASSIGNMENT"`, which made a **descriptive** assessment impossible to submit at all —
+   * even though this route implements exactly what one needs: a `contentText` body with
+   * draft/submit/resubmit semantics, which is what `lib/rubric-grading` grades. The guard was
+   * untested, so nothing recorded the narrower reading as intentional.
+   *
+   * Widening it also matters for the FAT gate: a course whose final assessment is a descriptive piece
+   * could not be gated, because there was no submission to refuse.
+   *
+   * `QUIZ` and `CODE` are still refused, deliberately: a quiz is sat through the attempt pipeline and
+   * a code task through the sandbox pipeline, and neither has any business creating a `Submission`
+   * from a text body here.
+   */
+  if (assessment.type !== "ASSIGNMENT" && assessment.type !== "DESCRIPTIVE") {
+    return jsonError("Only written assessments support text submissions.", 409)
   }
 
   if (assessment.offering.enrollments.length === 0) {
     return jsonError("You are not enrolled in this assessment offering.", 403)
   }
+
+  /*
+   * The FAT gate, for a written assessment that is a course's final piece.
+   *
+   * After the enrollment check and before the submission-state guard, so a refused student is told
+   * why rather than being met with the immutability rule. Only a genuine below-minimum CAT score
+   * refuses — see `evaluateFatGateForStudent` — and a student with too little marked work is allowed
+   * through rather than failed on unfinished marking.
+   */
+  const fatGate = await evaluateFatGateForStudent({
+    offeringId: assessment.offeringId,
+    assessmentId: assessment.id,
+    studentId: student.id,
+  })
+  if (!fatGate.allowed) return jsonError(fatGate.message, 403)
 
   // Submission state guard. A graded submission is immutable to the student:
   // without this, `submit`/`saveDraft` silently overwrote a GRADED status (and

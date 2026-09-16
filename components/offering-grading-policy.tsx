@@ -39,9 +39,10 @@ import {
  * error the platform refuses to make with an exported letter grade: an institutional record that
  * disagrees with the result sheet is worse than one that is silent.
  *
- * The gate is likewise **reported, not enforced**: no verdicts are shown until a policy is
- * stored, and nothing here refuses a FAT attempt. Enforcement at attempt time is a separate
- * change, recorded as such rather than half-built.
+ * No verdicts are shown until a policy is stored, and **saving one now enforces the gate**: a
+ * student below the minimum is refused on every path that can produce a final mark (a quiz attempt, a
+ * code submission, a written submission). This panel is where a teacher sees and sets the rule; the
+ * refusal happens server-side in the delivery paths, never here.
  *
  * Data loads on expand rather than on mount, so a teacher with six offerings does not pay for six
  * grading queries to look at the page.
@@ -306,7 +307,7 @@ export function OfferingGradingPolicy({ offeringId }: { offeringId: string }) {
                   </CardHeader>
                   <CardContent className="space-y-2">
                     <p className="text-xs text-muted-foreground">
-                      Reported, not enforced — no attempt is refused on this basis yet.
+                      Enforced — a student below the minimum is refused on this assessment.
                     </p>
                     <ul className="divide-y divide-border/60 text-sm">
                       {payload.roster.map((row) => (

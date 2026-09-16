@@ -395,6 +395,43 @@ define and edit them, and a minimum-CAT gate that applied to anybody.
 - **The create contract is unchanged** (`Quiz | Assignment`). Teachers can weight the kinds that
   exist; authoring descriptive/code/group assessments from the gradebook remains a product decision.
 
+### The FAT gate enforced on every path that can produce a final mark
+
+The gate was built and reported on the teacher's offering page, then enforced at the quiz attempt
+start — leaving the gap that was recorded rather than hidden: a course whose final assessment is a
+written piece or a code task had no enforcement. It is now enforced everywhere a final mark can
+originate, from one decision function (`evaluateFatGateForStudent`) so the three narrowings cannot
+drift between callers: **only when a policy is stored**, **only the resolved final assessment**, and
+**never on `insufficient-cat-work`** — refusing a student on unfinished _marking_ is the same class of
+error as zero-filling a mean.
+
+#### Added
+
+- **A code-task FAT is gated** in `submitCodeForStudent`, placed **before the slot reservation** so a
+  refusal costs no `TestRun` row and no sandbox container.
+- **A written FAT is gated** in the student submission route, after the enrollment check and before the
+  immutability guard, so a refused student is told why rather than met with the wrong rule.
+
+#### Fixed
+
+- **The written-submission route refused every kind but `ASSIGNMENT`.** A **descriptive** assessment
+  could not be submitted at all, even though that route implements exactly what one needs: a
+  `contentText` body with draft/submit/resubmit semantics, which is what `lib/rubric-grading` grades.
+  The guard was untested, so nothing recorded the narrower reading as intentional. It now accepts
+  `ASSIGNMENT` and `DESCRIPTIVE`, and still refuses `QUIZ` and `CODE` deliberately — a quiz is sat
+  through the attempt pipeline and a code task through the sandbox pipeline, and neither should create
+  a `Submission` from a text body here. Widening it was also a precondition for gating: a descriptive
+  FAT could not be enforced while there was no submission to refuse.
+
+#### Notes
+
+- **A group project is deliberately not gated.** It has no per-student submission path: its mark is
+  published by the teacher for every member at once, so there is no student action to refuse and a gate
+  would be vacuous.
+- Five places still described the gate as "reported, not enforced", including a line of **user-visible
+  text** in the policy editor. All corrected — the editor now says the rule is enforced, because saving
+  a policy is what turns it on.
+
 ### P2 resolved: the submissions editor no longer fetches on mount
 
 `docs/quality/a11y-perf-audit.md`'s last outstanding item. `TeacherSubmissionsManager` called

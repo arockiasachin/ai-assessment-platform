@@ -277,11 +277,12 @@ were implemented and tested; nothing called them.
    whichever assessment happens to fall due last. The editor prefills the default and the teacher
    confirms it. A malformed stored policy degrades to equal weighting too, not to the default.
 
-3. **The gate is reported, not enforced.** The roster shows each student's CAT standing and
-   verdict, and nothing refuses a FAT attempt. Enforcement would need the FAT's own delivery path
-   to consult the policy, and refusing an attempt is a harder failure than refusing an export: get
-   it wrong and a student cannot sit an exam they are entitled to. Recorded as the follow-up rather
-   than half-built.
+3. **The gate was reported, not enforced — since enforced.** The roster shows each student's CAT
+   standing and verdict; enforcement came later, on every path that can produce a final mark
+   (`startQuizAttempt`, `submitCodeForStudent`, and the written-submission route). It was deferred
+   initially because refusing a student an exam is a harder failure than refusing an export — get it
+   wrong and a student cannot sit something they are entitled to — so it needed the FAT's own delivery
+   paths in hand rather than a check bolted onto the export. See §11 for what enforcement decided.
 
 4. **The completion ratio counts only work that has fallen due.** This was a defect in the policy
    library itself, found by wiring it: the denominator included assessments still ahead on the
@@ -495,3 +496,39 @@ Two details that were settled by writing the tests rather than by reasoning:
   the mis-weighting was not.
 - **The remainder is assigned to the last question**, so the shares sum to exactly `maxMarks`. A cent out
   would make a perfect attempt score 99.99%.
+
+## 11. Enforcing the FAT gate
+
+§8 recorded the gate as **reported, not enforced** and deferred enforcement deliberately: refusing a
+student an exam is a harder failure than refusing an export, so it needed the FAT's own delivery paths
+in hand rather than a check bolted onto the export. It is now enforced.
+
+`evaluateFatGateForStudent` is the single decision point. It is called from **every path that can
+produce a mark for a final assessment**:
+
+| Path                                                    | Covers                           | Placement                                                                                                   |
+| ------------------------------------------------------- | -------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| `startQuizAttempt` (`lib/quiz-attempts/service.ts`)     | a quiz FAT                       | after the in-progress resume, so a student mid-attempt is not locked out by a policy stored underneath them |
+| `submitCodeForStudent` (`lib/code-eval/submissions.ts`) | a code-task FAT                  | before the slot reservation, so a refusal costs no `TestRun` and no sandbox container                       |
+| the written-submission route                            | an assignment or descriptive FAT | after the enrollment check, before the immutability guard, so a refused student is told why                 |
+
+Three narrowings, all inheriting from the one function rather than being re-implemented per caller:
+**only when a policy is stored**; **only the resolved final assessment**; and **never on
+`insufficient-cat-work`** — refusing a student on unfinished _marking_ is the same class of error as
+zero-filling a mean. A corrupt policy allows rather than refuses.
+
+### Two things this exposed
+
+**The written-submission route refused every kind but `ASSIGNMENT`.** `assessment.type !== "ASSIGNMENT"`
+meant a **descriptive** assessment could not be submitted at all — even though that route implements
+exactly what one needs (a `contentText` body with draft/submit/resubmit semantics, which is what
+`lib/rubric-grading` grades). Nothing asserted the guard, so nothing recorded the narrower reading as
+intentional. It now accepts `ASSIGNMENT` and `DESCRIPTIVE`, and still refuses `QUIZ` and `CODE`
+deliberately: a quiz is sat through the attempt pipeline and a code task through the sandbox pipeline,
+and neither has business creating a `Submission` from a text body. Widening it was also a precondition
+for gating: a descriptive FAT could not be enforced while there was no submission to refuse.
+
+**A group project is deliberately not gated, and that is not an omission.** It has **no per-student
+submission path** — its mark is published by the teacher for every member at once, which is what
+`createGroupProject` in the seed does. There is no student action to refuse, so a gate would be
+vacuous. Building one would mean writing a check around a flow that does not exist.
