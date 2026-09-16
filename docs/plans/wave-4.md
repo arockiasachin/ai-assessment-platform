@@ -59,17 +59,32 @@ asked for. What is left is real and worth doing — the shell, the readers, and 
 
 ## 4. Slices
 
-| Slice  | Content                                                                                                                            | Depends on |
-| ------ | ---------------------------------------------------------------------------------------------------------------------------------- | ---------- |
-| **A1** | The two implicit-locale fixes, as a standalone defect fix                                                                          | —          |
-| **A2** | Retire `AdminPageShell`; the five pages onto `AppShell` + `PageHeader`                                                             | —          |
-| **A3** | `admin/users` and `admin/offerings` through the shared `DataTable` primitive, so they match every other table                      | A2         |
-| **A4** | `admin` index and `admin/data` — the readers are already there; the surfaces are inline tables that should use the same primitives | A2         |
-| **A5** | Record the four dropped mockup surfaces with their reasons                                                                         | —          |
+| Slice  | Content                                                                                                       | Depends on |
+| ------ | ------------------------------------------------------------------------------------------------------------- | ---------- |
+| **A1** | The two implicit-locale fixes, as a standalone defect fix                                                     | —          |
+| **A2** | Retire `AdminPageShell`; the five pages onto `AppShell` + `PageHeader`                                        | —          |
+| **A3** | `admin/users` and `admin/offerings` through the shared `DataTable` primitive, so they match every other table | A2         |
+| **A4** | **No work needed — recorded, not forced.** See below                                                          | —          |
+| **A5** | Record the four dropped mockup surfaces with their reasons                                                    | —          |
 
 A1 comes first because it is a defect rather than a port, and it is small. A2 is the bulk of the
 value: it removes a shell, which is the kind of duplication that produced the drift Wave 1 spent its
 time fixing.
+
+### A4: why two pages keep their own markup
+
+`admin/page` renders **zero** tables — it is a card-and-list dashboard, so `DataTable` has nothing
+to replace.
+
+`AdminDatasetsView` does render a `<table>`, and it **should keep it.** Its columns are derived
+from the data (`Record<string, unknown>` rows, headers taken from the keys), because a
+schema-agnostic browser cannot know its columns at compile time. `DataTable` takes `Column<T>[]`
+with fixed ids by design — that is what gives every other table a stable `getRowId` and responsive
+column hiding — so it cannot express a dynamic column set. Converting would mean loosening
+`DataTable` for one caller, which is the wrong direction: the constraint is load-bearing for nine
+other pages.
+
+Recorded rather than forced.
 
 ## 5. What this wave must not do
 
