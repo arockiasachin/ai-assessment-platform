@@ -39,6 +39,8 @@ import { resolveTextSimilarityThreshold } from "@/lib/quiz-scoring-text"
 import type { AuthUser } from "@/lib/session"
 
 import { loadOwnedAssessment, resolveStudentProfileId } from "./authz"
+import { evaluateFatGateForStudent } from "@/lib/grading/offering-config-service"
+
 import { QuizAttemptError, QuizNotDeliverableError } from "./errors"
 import { evaluateAttemptEligibility, isLateSubmission, resolveMaxAttempts } from "./eligibility"
 import { quizDeliveryStatus } from "./metadata"
@@ -522,6 +524,7 @@ export async function startQuizAttempt(user: AuthUser, input: unknown): Promise<
       },
       offering: {
         select: {
+          id: true,
           enrollments: { where: { studentId, status: "active" }, select: { id: true } },
         },
       },
@@ -543,6 +546,25 @@ export async function startQuizAttempt(user: AuthUser, input: unknown): Promise<
     select: { id: true },
   })
   if (inProgress) return getStudentAttempt(user, inProgress.id)
+
+  /*
+   * The FAT gate, enforced.
+   *
+   * Placed **after** the in-progress resume deliberately: a student part-way through an attempt must
+   * not be locked out of finishing it because a policy was stored or their CAT pool was re-marked
+   * underneath them. The gate decides whether a *new* sitting starts.
+   *
+   * It refuses only a genuine below-minimum CAT score. Too little marked work is not a refusal —
+   * `evaluateFatGateForStudent` allows it — because failing a student on unfinished marking is the same
+   * error as zero-filling a mean. Until now the rule was reported on the teacher's offering page and
+   * enforced nowhere.
+   */
+  const fatGate = await evaluateFatGateForStudent({
+    offeringId: assessment.offering.id,
+    assessmentId: assessment.id,
+    studentId,
+  })
+  if (!fatGate.allowed) throw new QuizAttemptError(403, fatGate.message)
 
   // Everything that decides the next attempt number runs under a lock on the
   // assessment row. Without it, two concurrent starts each read the same count,

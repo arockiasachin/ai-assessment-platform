@@ -17,6 +17,8 @@ import {
 } from "@/components/ui/select"
 import { TeacherSubmissionsManager } from "@/components/teacher-submissions-manager"
 import type { TeacherSubmissionRow } from "@/lib/teacher-submissions"
+import type { CreateAssessmentRequest } from "@/lib/contracts"
+import { ASSESSMENT_KIND_LABEL } from "@/lib/labels"
 
 type QuizImportResponse = {
   success: boolean
@@ -38,6 +40,15 @@ function todayIsoDate() {
   return new Date().toISOString().slice(0, 10)
 }
 
+/** Every kind the schema holds, in a stable order for the create menu. */
+const ASSESSMENT_KINDS: readonly CreateAssessmentRequest["type"][] = [
+  "QUIZ",
+  "ASSIGNMENT",
+  "DESCRIPTIVE",
+  "CODE",
+  "GROUP_PROJECT",
+]
+
 export function TeacherAssignmentsManager({
   submissionRows,
 }: {
@@ -54,6 +65,15 @@ export function TeacherAssignmentsManager({
   const [assignmentTitle, setAssignmentTitle] = useState("")
   const [assignmentDate, setAssignmentDate] = useState(todayIsoDate())
   const [assignmentMaxMarks, setAssignmentMaxMarks] = useState("50")
+  /**
+   * The kind of assessment to create.
+   *
+   * Every kind the schema holds is offered. This used to be hardcoded to `"Assignment"`, so three
+   * of the five kinds — descriptive, code and group project — could not be authored at all, even
+   * though the app reads and grades them everywhere.
+   */
+  const [assignmentKind, setAssignmentKind] =
+    useState<CreateAssessmentRequest["type"]>("ASSIGNMENT")
   const [isSavingAssignment, setIsSavingAssignment] = useState(false)
 
   const [quizFileName, setQuizFileName] = useState("")
@@ -99,7 +119,7 @@ export function TeacherAssignmentsManager({
         body: JSON.stringify({
           title: assignmentTitle.trim(),
           offeringId: selectedOfferingId,
-          type: "Assignment",
+          type: assignmentKind,
           date: assignmentDate,
           maxMarks: Number(assignmentMaxMarks),
         }),
@@ -256,6 +276,27 @@ export function TeacherAssignmentsManager({
                     <SelectItem key={offering.id} value={offering.id}>
                       {offering.courseName} — {offering.className} ({offering.term}{" "}
                       {offering.academicYear})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="grid gap-2">
+              <Label htmlFor="assignment-kind">Type</Label>
+              <Select
+                value={assignmentKind}
+                onValueChange={(value) =>
+                  setAssignmentKind((value as CreateAssessmentRequest["type"]) ?? "ASSIGNMENT")
+                }
+              >
+                <SelectTrigger id="assignment-kind">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {ASSESSMENT_KINDS.map((kind) => (
+                    <SelectItem key={kind} value={kind}>
+                      {ASSESSMENT_KIND_LABEL[kind]}
                     </SelectItem>
                   ))}
                 </SelectContent>

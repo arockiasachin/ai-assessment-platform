@@ -39,7 +39,7 @@ function request(body: Record<string, unknown>) {
 const validBody = {
   title: "Week 4 Quiz",
   offeringId: "offering-1",
-  type: "Quiz",
+  type: "QUIZ",
   date: "2026-12-01",
   maxMarks: 20,
 }

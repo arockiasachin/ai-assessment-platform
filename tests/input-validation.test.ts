@@ -12,13 +12,31 @@ describe("assessment creation input validation", () => {
   const valid = {
     title: "Week 4 Quiz",
     offeringId: "offering-1",
-    type: "Quiz" as const,
+    type: "QUIZ" as const,
     date: "2026-12-01",
     maxMarks: 20,
   }
 
   it("accepts a well-formed body", () => {
     expect(createAssessmentRequestSchema.safeParse(valid).success).toBe(true)
+  })
+
+  it("accepts every assessment kind the schema holds", () => {
+    // Widened from `Quiz | Assignment`, which was also the last place carrying its own Title Case
+    // vocabulary. All five kinds exist in `AssessmentType` and are used throughout the app, so the
+    // create path was the only thing that could not produce three of them.
+    for (const type of ["QUIZ", "ASSIGNMENT", "DESCRIPTIVE", "CODE", "GROUP_PROJECT"] as const) {
+      expect(createAssessmentRequestSchema.safeParse({ ...valid, type }).success, type).toBe(true)
+    }
+  })
+
+  it("rejects a kind the schema does not hold, and the retired Title Case spelling", () => {
+    // "Quiz" was the old wire format. It must not be accepted quietly now that the values are the
+    // enum's — a client sending it should get a clean rejection, not an assessment stored as
+    // ASSIGNMENT by a fallback.
+    for (const type of ["Quiz", "Assignment", "COURSEWORK", ""] as const) {
+      expect(createAssessmentRequestSchema.safeParse({ ...valid, type }).success, type).toBe(false)
+    }
   })
 
   it("requires the offering id instead of an ambiguous course id", () => {

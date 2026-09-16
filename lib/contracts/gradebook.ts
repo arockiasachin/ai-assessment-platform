@@ -21,7 +21,17 @@ export const createAssessmentRequestSchema = z.object({
    * and are deliberately not accepted from the client.
    */
   offeringId: nonEmptyString,
-  type: z.enum(["Quiz", "Assignment"]),
+  /**
+   * The kind of assessment being created.
+   *
+   * **Widened from `Quiz | Assignment` to every kind the schema holds.** The narrow pair meant a
+   * teacher could not author a descriptive, code or group-project assessment from the gradebook at
+   * all — the other three exist in `AssessmentType` and are used throughout the app, so the create
+   * path was the only thing that could not produce them. `Quiz | Assignment` was also the last place
+   * carrying its own Title Case vocabulary; the values are the enum's now, so there is no translation
+   * table and nothing for a second vocabulary to drift against.
+   */
+  type: z.enum(["QUIZ", "ASSIGNMENT", "DESCRIPTIVE", "CODE", "GROUP_PROJECT"]),
   date: parseableDateString,
   // 32-bit Postgres `Int` column: an unbounded value is a Prisma validation
   // error, not a clean client error.

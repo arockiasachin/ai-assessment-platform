@@ -50,7 +50,7 @@ function createRequest(body: Record<string, unknown>) {
 
 const BODY = {
   title: "Weighted assessment",
-  type: "Assignment",
+  type: "ASSIGNMENT",
   date: "2026-12-01",
   maxMarks: 20,
 } as const
@@ -105,6 +105,24 @@ describe("assessment creation targets an explicit offering", () => {
 
   afterAll(async () => {
     await disconnectTestDatabase()
+  })
+
+  it("stores each assessment kind faithfully", async () => {
+    // The widening's substance: before this, `createAssessmentForSessionUser` collapsed the request's
+    // type to QUIZ or ASSIGNMENT with a ternary, so three of the five kinds could not be authored at
+    // all and a caller asking for one would silently get an ASSIGNMENT. Each kind is asserted against
+    // the column, not against the request.
+    const { f } = await seedTeacherWithTwoOfferingsForOneCourse()
+    const kinds = ["QUIZ", "ASSIGNMENT", "DESCRIPTIVE", "CODE", "GROUP_PROJECT"] as const
+
+    for (const type of kinds) {
+      const created = await createAssessmentForSessionUser(
+        { ...BODY, type, offeringId: f.offering.id },
+        teacherSession(f.teacher),
+      )
+      const row = await prisma.assessment.findUniqueOrThrow({ where: { id: created.id } })
+      expect(row.type, `creating a ${type}`).toBe(type)
+    }
   })
 
   it("writes into the offering the teacher asked for, not the newest year", async () => {

@@ -292,3 +292,137 @@ export async function setOfferingGradingForTeacher(
   const roster = await loadCatEligibility(offering.id, config)
   return { kind: "ok", payload: toPayload(offering, config, "stored", roster) }
 }
+
+// ---------------------------------------------------------------------------
+// The FAT gate, enforced
+// ---------------------------------------------------------------------------
+
+/**
+ * The verdict on whether a student may sit an offering's final assessment.
+ *
+ * A union rather than a boolean because the two ways of not being allowed are different facts, and
+ * only one of them is about the student — the same distinction `evaluateFatEligibility` draws for
+ * the roster.
+ */
+export type FatGateDecision =
+  | { allowed: true }
+  /** The CAT minimum is genuinely not met. This is the only case that refuses. */
+  | { allowed: false; reason: "below-cat-minimum"; message: string }
+
+/**
+ * Whether the CAT gate refuses this student their final assessment.
+ *
+ * ## Why this exists
+ *
+ * The gate has been *reported* since the policy was wired — the teacher's offering page shows each
+ * student's verdict — but nothing enforced it, so the rule the owner asked for ("students should have
+ * a minimum CAT score to appear FAT") applied to nobody. This is the enforcement.
+ *
+ * ## Three narrowings, each deliberate
+ *
+ * 1. **Only when a policy is stored.** An unconfigured offering has no gate, exactly as it has no
+ *    CAT/FAT split, and this must not invent one — same rule as the export.
+ * 2. **Only for the resolved FAT.** Resolving the final assessment is the policy's own job
+ *    (`resolveFinalGradeConfig`), so a teacher's explicit choice is honoured and everything else is
+ *    allowed through. A course whose FAT is a group project therefore does not refuse a quiz attempt.
+ * 3. **Never on `insufficient-cat-work`.** If too little of the CAT pool is marked, the verdict is
+ *    "not enough evidence yet", and refusing a student on unfinished *marking* would be the same class
+ *    of error as zero-filling a mean. Only a genuine `below-cat-minimum` refuses.
+ *
+ * ## Advisory elsewhere, enforced here
+ *
+ * The offering page's roster stays advisory — a teacher needs to see verdicts without them blocking
+ * anything. This function is the enforcement point, called from the attempt-start path. Submission-based
+ * finals (descriptive, code, group) are not gated yet; only a quiz FAT is, which is recorded in
+ * `docs/plans/wave-4.md` §11 rather than half-built here.
+ */
+export async function evaluateFatGateForStudent(input: {
+  offeringId: string
+  assessmentId: string
+  studentId: string
+  now?: Date
+}): Promise<FatGateDecision> {
+  const offering = await prisma.courseOffering.findUnique({
+    where: { id: input.offeringId },
+    select: {
+      gradingConfig: true,
+      assessments: {
+        orderBy: { dueDate: "asc" },
+        select: { id: true, title: true, type: true, dueDate: true },
+      },
+    },
+  })
+  if (!offering) return { allowed: true }
+
+  const resolved = resolveGradingPolicy(offering.gradingConfig)
+  // (1) No stored policy means no gate to enforce.
+  if (resolved.source !== "stored") return { allowed: true }
+
+  // (2) Only the resolved FAT is gated.
+  const fatAssessmentId = derivedGradingMembership(
+    resolved.config,
+    offering.assessments,
+  )?.fatAssessmentId
+  if (fatAssessmentId !== input.assessmentId) return { allowed: true }
+
+  const grades = await prisma.grade.findMany({
+    where: { studentId: input.studentId, assessment: { offeringId: input.offeringId } },
+    select: {
+      assessmentId: true,
+      points: true,
+      maxPoints: true,
+      publishedAt: true,
+    },
+  })
+
+  // `resolveMarks` applies the published-only rule, so an unapproved suggestion is excluded here for
+  // the same reason it is excluded from every mean.
+  const candidates: GradeCandidateInput[] = offering.assessments.map((assessment) => {
+    const grade = grades.find((row) => row.assessmentId === assessment.id)
+    return {
+      assessmentId: assessment.id,
+      modern: grade
+        ? {
+            points: Number(grade.points),
+            maxPoints: Number(grade.maxPoints),
+            publishedAt: grade.publishedAt,
+          }
+        : null,
+    }
+  })
+
+  const student: EligibilityStudent = {
+    id: input.studentId,
+    name: "",
+    registerNumber: "",
+    marks: resolveMarks(candidates).marks.map((mark) => ({
+      assessmentId: mark.assessmentId,
+      percentage: mark.percentage,
+      publishedAt: mark.publishedAt,
+    })),
+  }
+
+  const [row] = buildCatEligibility(
+    resolved.config,
+    offering.assessments,
+    [student],
+    input.now ? { now: input.now } : {},
+  )
+  // No row means the policy resolves to no CAT/FAT split (fewer than two assessments), so there is
+  // nothing to judge and nothing to refuse.
+  if (!row) return { allowed: true }
+
+  // (3) `insufficient-cat-work` and `eligible` both pass. Only a real shortfall refuses.
+  if (row.status !== "below-cat-minimum") return { allowed: true }
+
+  const minimum = resolved.config.minimumCatPercent
+  const scored = row.progress.percent === null ? "no" : `${row.progress.percent}%`
+  return {
+    allowed: false,
+    reason: "below-cat-minimum",
+    message:
+      `You have not met the minimum continuous-assessment score for this course, so the final ` +
+      `assessment is not available to you yet. Your continuous assessment is ${scored} of the ` +
+      `${minimum}% required. Speak to your teacher if you believe this is wrong.`,
+  }
+}

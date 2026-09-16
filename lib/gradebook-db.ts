@@ -1,6 +1,7 @@
 import "server-only"
 
 import type { AssessmentType } from "@/lib/generated/prisma/enums"
+import type { CreateAssessmentRequest } from "@/lib/contracts"
 import { prisma } from "@/lib/prisma"
 import { recordManualMark } from "@/lib/grading/review-service"
 import { quizDeliveryStatus } from "@/lib/quiz-attempts/metadata"
@@ -549,7 +550,8 @@ export async function createAssessmentForSessionUser(
   input: {
     title: string
     offeringId: string
-    type: "Quiz" | "Assignment"
+    /** The contract's vocabulary, which since the widening is the `AssessmentType` enum's. */
+    type: CreateAssessmentRequest["type"]
     date: string
     maxMarks: number
   },
@@ -579,7 +581,8 @@ export async function createAssessmentForSessionUser(
     const assessment = await tx.assessment.create({
       data: {
         title: input.title.trim(),
-        type: input.type === "Quiz" ? "QUIZ" : "ASSIGNMENT",
+        // Identity: the request carries the enum's own vocabulary (see the contract).
+        type: input.type,
         dueDate: new Date(input.date),
         maxMarks: input.maxMarks,
         offeringId: offering.id,
