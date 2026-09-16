@@ -13,17 +13,23 @@ rather than in the composition.
 
 **Wave 2 = the three "no reader at all" pages, plus an optional trailing re-skin.**
 
-| Slice  | Content                                                     | Ships independently | Status                                 |
-| ------ | ----------------------------------------------------------- | ------------------- | -------------------------------------- |
-| **S1** | `lib/materials.ts` + pure mapper + tests. **No page.**      | yes                 | **landed** `86d5c8a`                   |
-| **S2** | **Seed: materials** — the 8 rows in §2.2, indexed for real  | yes                 | **landed** `b789540`                   |
-| **S3** | `student/resources` page                                    | yes                 | **landed** `0996858`                   |
-| **S4** | `lib/calendar.ts` + pure mapper + tests. **No page.**       | yes                 | pending (blocked on S5's `releasedAt`) |
-| **S5** | **`Assessment` release**: migration, publish action, audit  | yes                 | pending                                |
-| **S6** | **Seed: calendar** — the 10 rows in §2.3, with `releasedAt` | yes                 | pending                                |
-| **S7** | `student/events` page                                       | yes                 | pending                                |
-| **S8** | `teacher/planner` page                                      | yes                 | pending                                |
-| **S9** | `teacher/observability` re-skin (optional, droppable)       | yes                 | pending                                |
+| Slice  | Content                                                     | Ships independently | Status                         |
+| ------ | ----------------------------------------------------------- | ------------------- | ------------------------------ |
+| **S1** | `lib/materials.ts` + pure mapper + tests. **No page.**      | yes                 | **landed** `86d5c8a`           |
+| **S2** | **Seed: materials** — the 8 rows in §2.2, indexed for real  | yes                 | **landed** `b789540`           |
+| **S3** | `student/resources` page                                    | yes                 | **landed** `0996858`           |
+| **S4** | `lib/calendar.ts` + pure mapper + tests. **No page.**       | yes                 | **landed** (with S5, see note) |
+| **S5** | **`Assessment` release**: migration, publish action, audit  | yes                 | **landed** `dadaf48`           |
+| **S6** | **Seed: calendar** — the 10 rows in §2.3, with `releasedAt` | yes                 | pending                        |
+| **S7** | `student/events` page                                       | yes                 | pending                        |
+| **S8** | `teacher/planner` page                                      | yes                 | pending                        |
+| **S9** | `teacher/observability` re-skin (optional, droppable)       | yes                 | pending                        |
+
+**S5 landed before S4**, which is the correction described below: the calendar reader
+cannot be written correctly until release exists, because the student reader has to
+exclude an un-released assessment's event while the teacher reader must show it.
+Writing S4 first would have meant writing the filter against a column that did not
+exist yet.
 
 Two corrections to the slice order, recorded here rather than silently renumbered. **S4 is blocked
 on S5**, not the other way round: the plan's §3.3 already says the calendar reader depends on the
