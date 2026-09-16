@@ -5,7 +5,7 @@ import {
   ceilGrandTotals,
   gradeBandRanges,
   RELATIVE_LETTERS,
-  RELATIVE_PASS_FLOOR,
+  RELATIVE_PASS_CAP,
   relativeLetter,
   sBandNeedsRankRule,
 } from "@/lib/analytics/grading-bands"
@@ -75,24 +75,26 @@ describe("gradeBandRanges", () => {
     // returns null, and a null letter renders as nothing rather than as a fail.
     const e = ranges!.find((range) => range.letter === "E")!
     const f = ranges!.find((range) => range.letter === "F")!
-    expect(e.min).toBe(RELATIVE_PASS_FLOOR)
+    expect(e.min).toBe(RELATIVE_PASS_CAP)
     expect(f.min).toBe(0)
-    expect(f.max).toBe(RELATIVE_PASS_FLOOR)
+    expect(f.max).toBe(RELATIVE_PASS_CAP)
   })
 
-  it("uses the floor when mean − 2σ would fall below it", () => {
-    // mean 60, σ 10 → mean − 2σ = 40, below the floor, so the floor is used. The S
-    // boundary is 75, comfortably under 100, so this cohort is otherwise valid — a
-    // stronger cohort would trip the rank rule instead and return null.
+  it("lowers the E/F boundary below the cap when mean − 2σ sits below it", () => {
+    // mean 60, σ 10 → mean − 2σ = 40, below the cap, so the boundary is 40. Applying
+    // `max` instead would report 50 and fail everyone between 40 and 50, whom VIT
+    // passes. The S boundary is 75, under 100, so this cohort is otherwise valid.
     const low = gradeBandRanges(60, 10)!
-    expect(low.find((range) => range.letter === "E")!.min).toBe(RELATIVE_PASS_FLOOR)
+    expect(low.find((range) => range.letter === "E")!.min).toBe(40)
     expect(low.find((range) => range.letter === "S")!.min).toBe(75)
   })
 
-  it("does not use the floor when the band sits above it", () => {
-    // mean 90, σ 5 → 80, well above 50, so the band does the work.
+  it("caps the boundary at 50 when the band sits above it", () => {
+    // mean 90, σ 5 → mean − 2σ = 80, above the cap, so the boundary is 50. Nobody at
+    // or above 50 fails: VIT awards E and declares pass when the F band starts above
+    // 50.
     const tight = gradeBandRanges(90, 5)!
-    expect(tight.find((range) => range.letter === "E")!.min).toBe(80)
+    expect(tight.find((range) => range.letter === "E")!.min).toBe(RELATIVE_PASS_CAP)
   })
 
   it("returns null without a mean or σ rather than inventing boundaries", () => {

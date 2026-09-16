@@ -73,31 +73,54 @@ export function standardDeviation(
 }
 
 /**
- * The institution's pass boundary: `mean − 2σ`, floored at 50.
+ * The institution's pass boundary: `min(mean − 2σ, 50)`.
  *
- * This is VIT's own `F`/`E` line, not an invented threshold, and the floor is part
- * of the same regulation: for a high-averaging class, `mean − 2σ` can fall below 50,
- * and a student above 50 must still pass. Without the floor, a strong cohort would
- * be told its weakest members were failing when the institution would pass them.
+ * **The `min` is the whole rule, and getting it backwards fails students the
+ * institution passes.** VIT states it in three places, and all three agree:
+ *
+ * > *"if the mark range for F grade of that class is **< 50** (based on mean − 2σ),
+ * > then **that value is used** to check the Grand total marks requirement **instead
+ * > of 50**."*
+ *
+ * > *"if the minimum marks corresponding to 'E' grade happens to be **less than 50**,
+ * > then **that mark will be set as the minimum mark required to pass**."*
+ *
+ * > *"when the class average is high, marks **above 50** may result in 'F' grade.
+ * > Under such circumstances, the student will be **awarded 'E' grade and declared
+ * > pass**."*
+ *
+ * So the boundary is capped at 50, never floored to it:
+ *
+ * - a hard paper (`mean − 2σ = 40`) lowers the bar to 40;
+ * - a generous one (`mean − 2σ = 70`) still passes anyone at or above 50.
+ *
+ * An earlier version of this function used `max`, which is stricter than the
+ * regulation in **both** cases — it would have failed students at 45 on a hard paper
+ * and students at 60 on a generous one, whom the institution passes. The name of the
+ * constant was part of the error: it is a *cap* on the boundary, not a floor.
  *
  * Returns `null` when there is nothing to compute a boundary from. A caller that
  * needs a threshold with no cohort should say so rather than default to something —
- * see `PASS_FLOOR` for that case.
+ * see `PASS_BOUNDARY_CAP` for the absolute-regime case.
  */
 export function passBoundary(percentages: readonly number[]): number | null {
   const average = mean(percentages)
   const deviation = standardDeviation(percentages)
   if (average === null || deviation === null) return null
 
-  return quantise(Math.max(average - 2 * deviation, PASS_FLOOR))
+  return quantise(Math.min(average - 2 * deviation, PASS_BOUNDARY_CAP))
 }
 
 /**
- * The floor in `max(mean − 2σ, 50)`. Exported so a reader can see the constant
- * rather than inferring it from a magic number inside the formula, and so a caller
- * that has no cohort can reach for the floor deliberately.
+ * The ceiling on the relative pass boundary: `min(mean − 2σ, 50)`.
+ *
+ * Exported so a reader sees the constant rather than inferring it from the formula,
+ * and so a caller with no cohort can reach for it deliberately. **It is the absolute
+ * regime's pass mark as well** — a theory class of ≤ 10, and every lab, project,
+ * soft-skills and NGCR course, is graded absolutely with a pass at 50
+ * (`lib/analytics/grading-bands.ts`).
  */
-export const PASS_FLOOR = 50
+export const PASS_BOUNDARY_CAP = 50
 
 /** Two decimal places, matching `averagePercentage` in `cohort.ts`. */
 function quantise(value: number): number {
@@ -109,7 +132,7 @@ export type GradeSpread = {
   mean: number | null
   median: number | null
   standardDeviation: number | null
-  /** `max(mean − 2σ, 50)`, or `null` without a cohort. */
+  /** `min(mean − 2σ, 50)`, or `null` without a cohort. */
   passBoundary: number | null
   highest: number | null
   lowest: number | null

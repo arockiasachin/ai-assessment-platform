@@ -6,7 +6,7 @@ import {
   passBoundary,
   standardDeviation,
   summariseSpread,
-  PASS_FLOOR,
+  PASS_BOUNDARY_CAP,
 } from "@/lib/analytics/statistics"
 import {
   buildWeeklySeries,
@@ -109,35 +109,58 @@ describe("standardDeviation", () => {
 })
 
 describe("passBoundary", () => {
-  it("is mean minus two sigma for an ordinary cohort", () => {
-    // mean 60, population σ 20, so 60 − 40 = 20 → floored to 50.
-    const boundary = passBoundary([40, 60, 80])
-    expect(boundary).toBe(PASS_FLOOR)
+  it("lowers the pass line below 50 on a hard paper", () => {
+    // mean 60, population σ = sqrt(800/3) ≈ 16.33 → mean − 2σ ≈ 27.34, below the cap,
+    // so the boundary is 27.34. VIT: "if the mark range for F grade … is <50 … that
+    // value is used … instead of 50". Students from 27.34 to 50 pass.
+    expect(passBoundary([40, 60, 80])).toBe(27.34)
   })
 
-  it("applies the floor so a high-averaging class does not fail its weakest", () => {
-    // mean 90, population σ = sqrt(50/3) ≈ 4.08, so the boundary is ~81.84 — above
-    // the floor, so the floor does not bite and the band does the work.
-    expect(passBoundary([85, 90, 95])).toBe(81.84)
+  it("caps the pass line at 50 on a generous paper", () => {
+    // mean 90, σ ≈ 4.08 → mean − 2σ ≈ 81.84, which exceeds 50, so the cap applies
+    // and the boundary is 50. VIT: marks above 50 "may result in F grade … the
+    // student will be awarded E and declared pass".
+    expect(passBoundary([85, 90, 95])).toBe(PASS_BOUNDARY_CAP)
   })
 
-  it("uses the floor when mean minus two sigma would fall below it", () => {
-    // mean 55, σ 15 → 25, which the institution would not treat as the pass line.
-    expect(passBoundary([40, 55, 70])).toBe(PASS_FLOOR)
+  it("never returns above the cap", () => {
+    // The direction of the inequality is the whole rule: a boundary above 50 would
+    // fail students the institution passes.
+    for (const cohort of [
+      [40, 60, 80],
+      [85, 90, 95],
+      [70, 70, 70],
+      [95, 99, 100],
+    ]) {
+      expect(passBoundary(cohort)).toBeLessThanOrEqual(PASS_BOUNDARY_CAP)
+    }
   })
 
-  it("never returns below the floor", () => {
-    const boundary = passBoundary([10, 20, 30])
-    expect(boundary).toBeGreaterThanOrEqual(PASS_FLOOR)
+  it("returns the raw boundary when it sits below the cap", () => {
+    // mean 50, population σ ≈ 16.33 → 17.34, below 50, so it is used as-is rather
+    // than raised to the cap.
+    expect(passBoundary([30, 50, 70])).toBe(17.34)
+  })
+
+  it("does not raise a low boundary to the cap", () => {
+    // The specific bug an earlier version had: `max` would report 50 here and fail
+    // everyone between 15 and 50, whom VIT passes.
+    expect(passBoundary([10, 20, 30])).toBeLessThan(PASS_BOUNDARY_CAP)
   })
 
   it("returns null without a cohort rather than defaulting to a number", () => {
     expect(passBoundary([])).toBeNull()
   })
 
-  it("returns the floor for a tight cohort, since σ is zero", () => {
-    // Every student on 70: mean − 0 = 70, which is above the floor.
-    expect(passBoundary([70, 70, 70])).toBe(70)
+  it("returns the mean for a tight cohort, since σ is zero", () => {
+    // Every student on 70: mean − 0 = 70, above the cap → 50. Nobody fails, which
+    // is right for a cohort that all scored 70.
+    expect(passBoundary([70, 70, 70])).toBe(PASS_BOUNDARY_CAP)
+  })
+
+  it("returns the mean when a tight cohort sits below the cap", () => {
+    // Every student on 40: mean − 0 = 40, below 50 → 40. The cap does not lift it.
+    expect(passBoundary([40, 40, 40])).toBe(40)
   })
 })
 

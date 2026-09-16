@@ -64,8 +64,18 @@ export const BAND_LOWER_OFFSETS: Record<RelativeLetter, number> = {
   F: Number.NEGATIVE_INFINITY,
 }
 
-/** The floor applied to the `F` band, from the regulation. */
-export const RELATIVE_PASS_FLOOR = 50
+/**
+ * The cap on the relative pass boundary: `min(mean − 2σ, 50)`.
+ *
+ * Named for what it is. An earlier version called it a *floor* and applied `max`,
+ * which is the exact inverse of the regulation and strictly harsher than it — see
+ * `passBoundary` in `./statistics`. The boundary is **capped** at 50, never floored
+ * to it: a hard paper lowers the bar, and a generous one still passes anyone above 50.
+ *
+ * The same 50 is the absolute regime's pass mark, for a theory class of ≤ 10 and for
+ * every lab, project, soft-skills and NGCR course.
+ */
+export const RELATIVE_PASS_CAP = 50
 
 export type GradeBandRange = {
   letter: RelativeLetter
@@ -112,14 +122,17 @@ export function gradeBandRanges(
 
   const ranges: GradeBandRange[] = RELATIVE_LETTERS.map((letter) => {
     const offset = BAND_LOWER_OFFSETS[letter]
-    // `F`'s lower bound is the bottom of the scale, not the pass floor. The floor is
-    // the **`E`/`F` boundary**, so it belongs to `E`'s floor — applying it to `F`'s
-    // as well would collapse `F` to an empty range and make every failing mark
-    // unclassifiable.
+    // `F`'s own lower bound is the bottom of the scale; the pass line is the **`E`/`F`
+    // boundary**, so it belongs to `E`. Applying it to `F` as well would collapse `F`
+    // to an empty range and make every failing mark unclassifiable.
+    //
+    // `Math.min`, not `Math.max`: the boundary is **capped** at 50, not floored to it.
+    // A hard paper lowers the pass line below 50, and a generous one still passes
+    // anyone above 50 even though the F band starts higher.
     const min = offset === Number.NEGATIVE_INFINITY ? 0 : mean + offset * sd
     return {
       letter,
-      min: letter === "E" ? Math.max(min, RELATIVE_PASS_FLOOR) : min,
+      min: letter === "E" ? Math.min(min, RELATIVE_PASS_CAP) : min,
       max: null,
     }
   })
