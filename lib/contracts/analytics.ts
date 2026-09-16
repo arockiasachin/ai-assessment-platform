@@ -237,6 +237,54 @@ export const gradingRegimeSummarySchema = z.object({
 })
 export type GradingRegimeSummary = z.infer<typeof gradingRegimeSummarySchema>
 
+/**
+ * The at-risk roster, as the analytics page reports it.
+ *
+ * `no-published-work` is a distinct group rather than a flag, because a student with no
+ * released mark has not been *judged* — there is nothing to compare them against. Reporting
+ * them inside `belowBoundary` would flag them on evidence that does not exist.
+ */
+export const atRiskStudentSchema = z.object({
+  studentId: z.string(),
+  fullName: z.string(),
+  registerNumber: z.string(),
+  grandTotal: z.number().nullable(),
+  group: z.enum(["below-boundary", "no-published-work"]),
+})
+export type AtRiskStudentValue = z.infer<typeof atRiskStudentSchema>
+
+export const atRiskRosterSchema = z.object({
+  boundary: z.number().nullable(),
+  regime: z.enum(["relative", "absolute"]),
+  publishedCount: z.number().int(),
+  enrolledCount: z.number().int(),
+  aboveBoundaryCount: z.number().int(),
+  atRisk: z.array(atRiskStudentSchema),
+})
+export type AtRiskRosterValue = z.infer<typeof atRiskRosterSchema>
+
+/** One point per teaching week. `average` is null for a week with no assessed work. */
+export const weeklyPointSchema = z.object({
+  week: z.number().int(),
+  average: z.number().nullable(),
+  count: z.number().int(),
+})
+export type WeeklyPointValue = z.infer<typeof weeklyPointSchema>
+
+export const cohortTrendSchema = z.object({
+  /** Absent when the offering has no term window, so there is no axis to bucket against. */
+  series: z
+    .object({
+      weeks: z.number().int(),
+      points: z.array(weeklyPointSchema),
+      startsOn: z.string(),
+      endsOn: z.string(),
+    })
+    .nullable(),
+  markedCount: z.number().int(),
+})
+export type CohortTrendValue = z.infer<typeof cohortTrendSchema>
+
 export const teacherAnalyticsOverviewResponseSchema = z.object({
   success: z.literal(true),
   offerings: z.array(analyticsOfferingSummarySchema),
@@ -245,6 +293,8 @@ export const teacherAnalyticsOverviewResponseSchema = z.object({
   alerts: z.array(interventionAlertSchema),
   thresholds: interventionThresholdsSchema,
   gradingRegime: gradingRegimeSummarySchema,
+  atRisk: atRiskRosterSchema,
+  trend: cohortTrendSchema,
   generatedAt: z.string(),
 })
 export type TeacherAnalyticsOverviewResponse = z.infer<

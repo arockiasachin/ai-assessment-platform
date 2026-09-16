@@ -159,37 +159,7 @@ export function TeacherAnalyticsDashboard({
 
   return (
     <div className="space-y-6">
-      {/* The grading regime, and the explanation when it is a fallback.
-            Rendered above everything else because it qualifies every number below it: the
-            cohort distribution and the pass rate are absolute-band figures, and a
-            relative-graded class shown them with no explanation would look like a correct
-            grade that happens to be wrong. */}
-      {overview?.gradingRegime.notice && (
-        <Callout
-          tone={overview.gradingRegime.notice.tone}
-          title={overview.gradingRegime.notice.title}
-          icon={AlertTriangle}
-        >
-          <p>{overview.gradingRegime.notice.detail}</p>
-          {overview.gradingRegime.notice.progress && (
-            <p className="mt-1 font-mono text-xs tabular-nums">
-              {overview.gradingRegime.notice.progress.available} of{" "}
-              {overview.gradingRegime.notice.progress.required} published totals
-            </p>
-          )}
-        </Callout>
-      )}
-
-      {overview?.gradingRegime.regime === "relative" && (
-        <Callout tone="info" title="Graded on relative bands" icon={BarChart3}>
-          <p>
-            Class mean {formatPercent(overview.gradingRegime.mean)} · standard deviation{" "}
-            {formatPercent(overview.gradingRegime.standardDeviation)}, over{" "}
-            {overview.gradingRegime.publishedCount} published totals. Bands are the class&apos;s own
-            mean ± kσ.
-          </p>
-        </Callout>
-      )}
+      {overview && <RegimeCallouts overview={overview} />}
 
       <Card>
         <CardHeader className="pb-3">
@@ -376,4 +346,45 @@ export function TeacherAnalyticsDashboard({
       )}
     </div>
   )
+}
+
+/**
+ * The grading regime, and the explanation when it is a fallback.
+ *
+ * Rendered above every other card because it **qualifies every number below it**: the cohort
+ * distribution and the pass rate are absolute-band figures, and a relative-graded class shown
+ * them with no explanation would look like a correct grade that happens to be wrong. For a
+ * relative class the mean and sigma are stated instead, so the bands on screen are visibly the
+ * class's own rather than a fixed table.
+ */
+function RegimeCallouts({ overview }: { overview: TeacherAnalyticsOverviewResponse }) {
+  const regime = overview.gradingRegime
+
+  if (regime.notice) {
+    return (
+      <Callout tone={regime.notice.tone} title={regime.notice.title} icon={AlertTriangle}>
+        <p>{regime.notice.detail}</p>
+        {regime.notice.progress && (
+          <p className="mt-1 font-mono text-xs tabular-nums">
+            {regime.notice.progress.available} of {regime.notice.progress.required} published totals
+          </p>
+        )}
+      </Callout>
+    )
+  }
+
+  if (regime.regime === "relative") {
+    return (
+      <Callout tone="info" title="Graded on relative bands" icon={BarChart3}>
+        <p>
+          Class mean {formatPercent(regime.mean)} · standard deviation{" "}
+          {formatPercent(regime.standardDeviation)}, over {regime.publishedCount} published totals.
+          Bands are this class&apos;s own mean ± kσ, so the pass line is{" "}
+          {formatPercent(overview.atRisk.boundary)}.
+        </p>
+      </Callout>
+    )
+  }
+
+  return null
 }

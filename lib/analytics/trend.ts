@@ -46,15 +46,19 @@ export async function getCohortTrendForTeacher(
   offeringId: string,
 ): Promise<CohortTrend> {
   const offering = await loadOwnedOffering(user, offeringId)
+  return buildTrendForOffering(offering.id)
+}
 
+/** The trend for an offering already known to be authorized. See `buildRosterForOffering`. */
+export async function buildTrendForOffering(offeringId: string): Promise<CohortTrend> {
   const [term, grades] = await Promise.all([
     prisma.courseOffering.findUniqueOrThrow({
-      where: { id: offering.id },
+      where: { id: offeringId },
       select: { startsOn: true, endsOn: true },
     }),
     prisma.grade.findMany({
       where: {
-        assessment: { offeringId: offering.id },
+        assessment: { offeringId },
         publishedAt: { not: null },
       },
       select: {
@@ -73,7 +77,7 @@ export async function getCohortTrendForTeacher(
   })
 
   return {
-    offeringId: offering.id,
+    offeringId,
     series: buildWeeklySeries(marks, { startsOn: term.startsOn, endsOn: term.endsOn }),
     markedCount: marks.length,
   }

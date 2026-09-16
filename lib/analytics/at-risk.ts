@@ -77,17 +77,28 @@ export async function getAtRiskRosterForTeacher(
   offeringId: string,
 ): Promise<AtRiskRoster> {
   const offering = await loadOwnedOffering(user, offeringId)
-  const inputs = await gatherRegimeInputs(offering.id)
+  return buildRosterForOffering(offering.id)
+}
+
+/**
+ * The roster for an offering already known to be authorized.
+ *
+ * Split out so the analytics overview — which does its own ownership check — can include the
+ * roster in the payload it already fetches, instead of the page making a second round trip for
+ * every offering switch.
+ */
+export async function buildRosterForOffering(offeringId: string): Promise<AtRiskRoster> {
+  const inputs = await gatherRegimeInputs(offeringId)
   const decision = resolveRegimeForCourse(inputs)
 
   const students = await prisma.studentProfile.findMany({
-    where: { enrollments: { some: { offeringId: offering.id, status: "active" } } },
+    where: { enrollments: { some: { offeringId, status: "active" } } },
     select: {
       id: true,
       fullName: true,
       registerNumber: true,
       finalGrades: {
-        where: { assessment: { offeringId: offering.id }, publishedAt: { not: null } },
+        where: { assessment: { offeringId }, publishedAt: { not: null } },
         select: { points: true, maxPoints: true },
       },
     },
@@ -111,7 +122,7 @@ export async function getAtRiskRosterForTeacher(
   const { boundary, atRisk, aboveBoundaryCount } = buildAtRiskRoster(totals, decision)
 
   return {
-    offeringId: offering.id,
+    offeringId,
     boundary,
     regime: decision.regime,
     notice: decision.regime === "absolute" ? decision.notice : null,

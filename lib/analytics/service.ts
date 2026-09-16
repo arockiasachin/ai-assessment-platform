@@ -21,6 +21,8 @@ import {
 } from "./alerts"
 import { buildCohortDistribution, type CohortDistribution, type CohortScore } from "./cohort"
 import { gatherRegimeInputs } from "./grading-regime"
+import { buildRosterForOffering } from "./at-risk"
+import { buildTrendForOffering } from "./trend"
 import { resolveRegimeForCourse } from "./grading-bands"
 import {
   loadOwnedAssessment,
@@ -242,7 +244,15 @@ export async function getTeacherAnalyticsOverview(
   // The regime is resolved from the offering's own numbers, so this page can say which
   // banding is in force — and explain it when the answer is a fallback rather than
   // silently substituting one for the other.
-  const regimeInputs = await gatherRegimeInputs(offering.id)
+  //
+  // The roster and the trend ride the same payload rather than a second request, because the
+  // page already fetches per offering and a switch would otherwise cost two more round trips.
+  // Each does its own queries; ownership was checked above.
+  const [regimeInputs, atRisk, trend] = await Promise.all([
+    gatherRegimeInputs(offering.id),
+    buildRosterForOffering(offering.id),
+    buildTrendForOffering(offering.id),
+  ])
   const regimeDecision = resolveRegimeForCourse(regimeInputs)
 
   return {
@@ -268,6 +278,15 @@ export async function getTeacherAnalyticsOverview(
           ? { ...regimeDecision.notice, progress: regimeDecision.notice.progress ?? null }
           : null,
     },
+    atRisk: {
+      boundary: atRisk.boundary,
+      regime: atRisk.regime,
+      publishedCount: atRisk.publishedCount,
+      enrolledCount: atRisk.enrolledCount,
+      aboveBoundaryCount: atRisk.aboveBoundaryCount,
+      atRisk: atRisk.atRisk,
+    },
+    trend: { series: trend.series, markedCount: trend.markedCount },
     generatedAt: new Date().toISOString(),
   }
 }
