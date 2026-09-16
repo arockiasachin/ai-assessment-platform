@@ -111,8 +111,11 @@ export async function getAdminUsersList() {
     email: user.email,
     role: user.role,
     createdAt: user.createdAt.toISOString(),
-    name: user.staffProfile?.fullName ?? user.studentProfile?.fullName ?? "-",
-    identity: user.staffProfile?.empId ?? user.studentProfile?.registerNumber ?? "-",
+    // `null`, not `"-"`. A user with no profile is a real absence, and the app's rule is that an
+    // absent value renders an em dash — a sentinel string here means the UI cannot tell absence
+    // from a name that happens to be a hyphen, and the em-dash rule cannot be applied at all.
+    name: user.staffProfile?.fullName ?? user.studentProfile?.fullName ?? null,
+    identity: user.staffProfile?.empId ?? user.studentProfile?.registerNumber ?? null,
   }))
 }
 

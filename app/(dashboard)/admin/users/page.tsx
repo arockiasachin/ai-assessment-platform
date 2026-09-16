@@ -1,14 +1,88 @@
-import { RoleGuard } from "@/components/role-guard"
+import type { Metadata } from "next"
 import { redirect } from "next/navigation"
 
+import { RoleGuard } from "@/components/role-guard"
 import { AppShell, PageHeader } from "@/components/shell"
-import { getSessionUser } from "@/lib/auth"
-import { initialsFromEmail, roleLabelFromRole } from "@/lib/user-identity"
+import { DataTable, type Column } from "@/components/ui/data-table"
+import { EmptyState } from "@/components/ui/empty-state"
+import { StatusPill, type StatusKey } from "@/components/ui/status-pill"
 import { getAdminUsersList } from "@/lib/admin-db"
+import { getSessionUser } from "@/lib/auth"
 import { formatDateTime } from "@/lib/format"
+import { initialsFromEmail, roleLabelFromRole } from "@/lib/user-identity"
 
 // Authenticated, database-backed dashboard: never statically prerender.
 export const dynamic = "force-dynamic"
+
+export const metadata: Metadata = { title: "User Directory" }
+
+type UserRow = Awaited<ReturnType<typeof getAdminUsersList>>[number]
+
+/**
+ * Role → tone, so the directory is scannable by role without reading every cell.
+ *
+ * The label comes from `roleLabelFromRole` rather than the raw enum: this table previously printed
+ * `ADMIN` / `TEACHER` / `STUDENT` straight from the database, which is the raw-enum leak the Wave 1
+ * passes removed everywhere else.
+ */
+const ROLE_TONE: Record<string, StatusKey> = {
+  admin: "overridden",
+  teacher: "published",
+  student: "active",
+}
+
+const columns: Column<UserRow>[] = [
+  {
+    id: "email",
+    header: "Email",
+    cell: (row) => <span className="font-medium">{row.email}</span>,
+  },
+  {
+    id: "role",
+    header: "Role",
+    cell: (row) => {
+      // `roleLabelFromRole` only upper-cases the first character, so the Prisma enum `"ADMIN"`
+      // would render as `"ADMIN"` — the raw enum, which is what this cell is replacing. Lower-cased
+      // first, it reads `"Admin"`.
+      const label = roleLabelFromRole(row.role.toLowerCase())
+      return <StatusPill status={ROLE_TONE[label.toLowerCase()] ?? "active"} label={label} dot />
+    },
+  },
+  {
+    id: "name",
+    header: "Name",
+    hideBelow: "sm",
+    cell: (row) =>
+      // An em dash, not a sentinel: a user with no profile name is a real absence. The reader
+      // returns `null` for it rather than `"-"`, so the absence is distinguishable and the em-dash
+      // rule applies.
+      row.name === null ? (
+        <span className="text-muted-foreground">—</span>
+      ) : (
+        <span>{row.name}</span>
+      ),
+  },
+  {
+    id: "identity",
+    header: "Identity",
+    hideBelow: "md",
+    cell: (row) =>
+      row.identity === null ? (
+        <span className="text-muted-foreground">—</span>
+      ) : (
+        <span className="font-mono text-xs">{row.identity}</span>
+      ),
+  },
+  {
+    id: "created",
+    header: "Created",
+    align: "right",
+    hideBelow: "md",
+    cell: (row) => (
+      <span className="font-mono text-xs tabular-nums">{formatDateTime(row.createdAt)}</span>
+    ),
+  },
+]
 
 export default async function AdminUsersPage() {
   const user = await getSessionUser()
@@ -32,30 +106,18 @@ export default async function AdminUsersPage() {
           title="User Directory"
           description="Inspect user accounts, role assignments, and identity profile links."
         />
-        <div className="overflow-x-auto rounded-xl border border-border bg-card">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-border bg-muted/30">
-                <th className="px-3 py-2 text-left font-medium">Email</th>
-                <th className="px-3 py-2 text-left font-medium">Role</th>
-                <th className="px-3 py-2 text-left font-medium">Name</th>
-                <th className="px-3 py-2 text-left font-medium">Identity</th>
-                <th className="px-3 py-2 text-left font-medium">Created</th>
-              </tr>
-            </thead>
-            <tbody>
-              {users.map((user) => (
-                <tr key={user.id} className="border-b border-border/60 last:border-0">
-                  <td className="px-3 py-2">{user.email}</td>
-                  <td className="px-3 py-2">{user.role}</td>
-                  <td className="px-3 py-2">{user.name}</td>
-                  <td className="px-3 py-2">{user.identity}</td>
-                  <td className="px-3 py-2">{formatDateTime(user.createdAt)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <DataTable
+          caption="User accounts"
+          columns={columns}
+          rows={users}
+          getRowId={(row) => row.id}
+          empty={
+            <EmptyState
+              title="No users"
+              description="No user account exists yet, so there is nothing to inspect."
+            />
+          }
+        />
       </AppShell>
     </RoleGuard>
   )
