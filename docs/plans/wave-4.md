@@ -226,3 +226,80 @@ SSR and client renders agree.
 `tests/format-utc.test.ts` pins the rule, asserting both offset directions so it has teeth wherever it
 runs rather than only passing because CI is UTC. Removing the `timeZone` options fails 4 of its 5
 cases under `TZ=America/Los_Angeles`.
+
+## 8. The CAT/FAT policy was a library, not a feature
+
+An audit of the finished waves found the most consequential defect in the whole effort, and it was
+a **documentation** defect as much as a code one.
+
+`lib/grading/policy.ts` was imported by exactly one file: `tests/grading-policy.test.ts`. It was
+not exported from `lib/grading/index.ts` and no page or route called it. Meanwhile `wave-3.md` §9
+said the weights "belong on the offering (`CourseOffering.gradingConfig`)" — **a column that did
+not exist** in `prisma/schema.prisma` or in any migration — and `docs/README.md` presented the
+policy as shipped.
+
+So three of the owner's requirements were not in the product at all: weights that persist, a way
+for a teacher to define and edit them, and a minimum-CAT gate that applies to anybody. The rules
+were implemented and tested; nothing called them.
+
+### What was built
+
+| Piece                                                            | Where                                                     |
+| ---------------------------------------------------------------- | --------------------------------------------------------- |
+| `CourseOffering.gradingConfig` (nullable JSON)                   | migration `20260917010000_offering_grading_config`        |
+| The stored shape, validated and sum-checked                      | `lib/contracts/courses.ts`                                |
+| Policy → weighted grade configuration, and the two failure modes | `lib/grading/offering-config.ts`                          |
+| Per-student CAT progress and the FAT verdict                     | `lib/grading/offering-eligibility.ts`                     |
+| Read/write with ownership, validation and an audit row           | `lib/grading/offering-config-service.ts`                  |
+| `GET`/`PUT /api/teacher/offerings/[offeringId]/grading`          | `app/api/teacher/offerings/[offeringId]/grading/route.ts` |
+| The teacher's editor, per offering                               | `components/offering-grading-policy.tsx`                  |
+| The export reads the stored policy                               | `lib/lms-export/service.ts`                               |
+
+### Four decisions worth recording
+
+1. **The policy is stored, not the membership.** Only the split, the chosen final assessment, and
+   the gate are persisted; which assessments are CAT is derived from the offering's assessments at
+   read time. Storing an `assessmentIds` list would hard-bind the configuration to the assessment
+   set as it was when the teacher saved it, so adding an assessment afterwards would silently drop
+   it from the weighted total — a data-loss shape with no error attached.
+
+2. **The default is offered, not applied.** An offering with nothing stored keeps **equal
+   weighting**, unchanged from before the column existed. Applying the default CAT 40 / FAT 60
+   split automatically was the tempting reading of "let there be a default way to assign weights",
+   and it is wrong here for the same reason the platform refuses to guess an exported letter: the
+   FAT is identified by due date, so the default would silently put 60% of a course's weight on
+   whichever assessment happens to fall due last. The editor prefills the default and the teacher
+   confirms it. A malformed stored policy degrades to equal weighting too, not to the default.
+
+3. **The gate is reported, not enforced.** The roster shows each student's CAT standing and
+   verdict, and nothing refuses a FAT attempt. Enforcement would need the FAT's own delivery path
+   to consult the policy, and refusing an attempt is a harder failure than refusing an export: get
+   it wrong and a student cannot sit an exam they are entitled to. Recorded as the follow-up rather
+   than half-built.
+
+4. **The completion ratio counts only work that has fallen due.** This was a defect in the policy
+   library itself, found by wiring it: the denominator included assessments still ahead on the
+   calendar, so a course three weeks into its term reported `insufficient-cat-work` for the whole
+   cohort — not because marking was behind, but because the term was not over. The gate could never
+   reach a verdict until the final week. The ratio now answers "of the continuous assessment that
+   has actually happened, how much is marked?"
+
+### Two things the wiring exposed
+
+- **A fixture gap.** Every demo assessment was future-dated, so the gate had nothing to judge and
+  was therefore undemonstrable. The seed gained one past-due CAT assessment with published marks
+  chosen to show **every** verdict: two clear the minimum, two fall below it (one with a genuine
+  zero rather than missing work), and one has no mark at all. Created outside the assessment loop
+  so it gets no upcoming calendar event — a deadline that has passed is not upcoming.
+- **A widening defect.** `AssessmentRow.type` was `string` while the column is a five-value enum,
+  which is why the policy's input type rejected the row. Typed as the enum.
+
+### Not done, and deliberately
+
+- **Enforcement at attempt time** (decision 3 above).
+- **Widening the create contract** beyond `Quiz | Assignment`. Teachers can weight the kinds that
+  exist; authoring descriptive/code/group assessments from the gradebook is a product decision.
+- **A per-assessment `assessmentWeights` editor.** The stored policy supports equal weighting
+  inside the CAT pool, which is what the owner asked for ("others depend on the frequency or
+  weights"); pinning explicit per-assessment weights is expressible in the grade configuration and
+  in the export request body, but has no editor.

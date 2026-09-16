@@ -79,8 +79,16 @@ mockups to the backend that already exists behind them:
     notice rather than a silent switch. Computing σ exposed an inverted `passBoundary` formula
     (`max` where the rule requires `min`), which is fixed. The exported final grade carries **no
     letter**, because the platform cannot justify one without a course category; the `letter` column
-    was removed rather than guessed. See §9 of the plan for the grading policy (CAT 40 / FAT 60, the
-    minimum-CAT gate for FAT eligibility, and the mean's inclusion rules).
+    was removed rather than guessed.
+
+    The grading policy itself (§9 of the plan: CAT 40 / FAT 60, the minimum-CAT gate for FAT
+    eligibility, and the mean's inclusion rules) **was a tested library nothing called** until
+    [`plans/wave-4.md`](./plans/wave-4.md) §8 wired it into the product: the weights persist on
+    `CourseOffering.gradingConfig`, a teacher sets them per offering, and the export applies them.
+    Two limitations are stated rather than implied — an unconfigured offering keeps **equal
+    weighting** (the default is offered in the editor, never applied automatically), and the gate is
+    **reported, not enforced**: no attempt is refused on it yet.
+
   - [`plans/wave-4.md`](./plans/wave-4.md) — the Wave 4 plan: the admin surface and the endgame.
     **Complete (A1–A4, plus the close-out in §6)**, with the endgame's one decision recorded below.
 

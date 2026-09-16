@@ -506,8 +506,11 @@ published-only rule and _excludes_ missing assessments rather than zero-filling 
 Two things were missing:
 
 1. **Persistence.** The config was request-body only, so a teacher could pass weights to
-   one export call and lose them. Weights are course configuration: it now belongs on the
-   offering (`CourseOffering.gradingConfig`).
+   one export call and lose them. Weights are course configuration, so they belong on the
+   offering (`CourseOffering.gradingConfig`). **The column and the read/write path landed after
+   this wave** — see `docs/plans/wave-4.md` §8. This section describes the policy library; that
+   one records the wiring, because for a time this paragraph described a column that did not
+   exist and a rule nothing called.
 2. **A derivable default.** `defaultFinalGradeConfig` weights everything equally in one
    category — honest, but it does not express the CAT/FAT shape a VIT course has.
 

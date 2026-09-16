@@ -32,6 +32,16 @@ export type OwnedOffering = {
   courseCode: string
   courseName: string
   className: string
+  /**
+   * The raw `CourseOffering.gradingConfig` column. Carried here rather than fetched again
+   * by the service so the export resolves the split from the same read that authorized the
+   * caller, and so nothing downstream needs another query.
+   *
+   * Typed as `unknown` on purpose: this is unvalidated JSON, and the one place that decides
+   * whether it is usable is `resolveGradingPolicy`. Presenting it as
+   * `OfferingGradingConfig` here would invite a reader to trust it.
+   */
+  gradingConfig: unknown
 }
 
 /** Load offering metadata without an ownership check (callers must authorize). */
@@ -45,6 +55,7 @@ export async function loadOfferingMeta(offeringId: string): Promise<OwnedOfferin
       teacherId: true,
       term: true,
       academicYear: true,
+      gradingConfig: true,
       course: { select: { code: true, name: true } },
       classRoom: { select: { name: true, section: true } },
     },
@@ -57,6 +68,7 @@ export async function loadOfferingMeta(offeringId: string): Promise<OwnedOfferin
     teacherId: offering.teacherId,
     term: offering.term,
     academicYear: offering.academicYear,
+    gradingConfig: offering.gradingConfig,
     courseCode: offering.course.code,
     courseName: offering.course.name,
     className: offering.classRoom.section

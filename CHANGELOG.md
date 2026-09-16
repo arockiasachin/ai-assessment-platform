@@ -335,6 +335,66 @@ Real-time bug-fixing pass 3 of 3 (see [`docs/verification/bugfix-run-3.md`](docs
   and re-checks the existing in-progress attempt and the cap, so a concurrent start resumes the
   winner instead of erroring.
 
+### wave-4: the CAT/FAT grading policy wired into the product
+
+The grading policy was implemented, tested, and **called by nothing**. `lib/grading/policy.ts` was
+imported only by its own test, `wave-3.md` §9 described a `CourseOffering.gradingConfig` column that
+did not exist in the schema or any migration, and `docs/README.md` presented the policy as shipped.
+So three requirements were absent from the product: weights that persist, a way for a teacher to
+define and edit them, and a minimum-CAT gate that applied to anybody.
+
+#### Added
+
+- **`CourseOffering.gradingConfig`** (nullable JSON, migration `20260917010000_offering_grading_config`)
+  holding the CAT/FAT split, the chosen final assessment, and the minimum-CAT gate. **Category
+  membership is deliberately not stored** — it is derived from the offering's assessments at read
+  time, because storing an `assessmentIds` list would silently drop any assessment added afterwards
+  from the weighted total.
+- **`lib/grading/offering-config.ts`** — the seam where a stored column becomes a weighted
+  configuration. Absent and malformed policies are distinguished, and neither throws: the column is
+  read on the export path.
+- **`lib/grading/offering-eligibility.ts`** — per-student CAT progress and FAT verdict.
+- **`GET`/`PUT /api/teacher/offerings/[offeringId]/grading`** — read and write the policy, scoped to
+  the caller's own offerings (a non-owner sees `404`) and audited, because it changes how every
+  student's final grade is computed. A named final assessment must belong to the offering.
+- **The policy editor** (`components/offering-grading-policy.tsx`), per offering on
+  `/teacher/offerings`: the split, the final-assessment choice, the gate, the resolved membership,
+  and each student's verdict.
+
+#### Changed
+
+- **The export applies the stored policy.** `loadExportContext` resolved its config from the request
+  body or an equal-weight default; it now reads the offering's policy in between. An offering with
+  nothing stored keeps **equal weighting** — the default CAT 40 / FAT 60 split is offered in the
+  editor and never applied automatically, because the FAT is derived by due date and silently
+  putting 60% of a course's weight on whichever assessment falls due last is the same error as
+  guessing an exported letter grade.
+- **`AssessmentRow.type` is the Prisma enum**, not `string`. The widening was why the policy's input
+  type could not accept the row.
+- **The demo seed gained a past-due CAT assessment** with published marks spanning the gate. Every
+  demo assessment was future-dated, so the gate had nothing to judge and was undemonstrable. The
+  marks are chosen to show every verdict, including a genuine zero (a real mark) as distinct from
+  missing work.
+
+#### Fixed
+
+- **The FAT gate's completion ratio counted work that had not happened.** Its denominator was every
+  CAT assessment on the course, including those still ahead, so a course three weeks into its term
+  reported `insufficient-cat-work` for the whole cohort — not because marking was behind, but
+  because the term was not over, and the gate could never reach a verdict until the final week. It
+  now counts only CAT work that has fallen due.
+- **The FAT heuristic can be overridden.** `deriveDefaultGradingConfig` identified the final
+  assessment by due date with no way to correct it; it now honours an explicit choice, and tolerates
+  a stale one by falling back rather than failing.
+
+#### Notes
+
+- **The gate is reported, not enforced.** The roster shows verdicts; nothing refuses a FAT attempt.
+  Enforcement needs the FAT's own delivery path to consult the policy, and refusing an attempt is a
+  harder failure than refusing an export.
+- **The create contract is unchanged** (`Quiz | Assignment`). Teachers can weight the kinds that
+  exist; authoring descriptive/code/group assessments from the gradebook remains a product decision.
+
 ### wave-4: admin surface, mock-layer scope, and the design-reference tree
 
 Wave 4 closed the mockup-to-backend migration. It landed the admin surface on the shared shell, then

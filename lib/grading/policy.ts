@@ -76,6 +76,16 @@ export type GradingAssessmentInput = {
 export type DerivedConfigOptions = {
   /** Override the split. Percentages; must sum to 100. */
   weights?: { CAT: number; FAT: number }
+  /**
+   * Which assessment is the FAT, when the teacher has said so.
+   *
+   * The heuristic below is only a default; this is the override. **An unknown id falls back
+   * to the heuristic rather than throwing** — a stored config can outlive the assessment it
+   * names (an assessment is deleted, or a config is copied between offerings), and a stale
+   * id must not take the export down. `resolveFinalGradeConfig` reports which it used so the
+   * UI can say "derived" rather than implying the teacher chose it.
+   */
+  finalAssessmentId?: string | null
 }
 
 /**
@@ -84,9 +94,10 @@ export type DerivedConfigOptions = {
  * **The FAT is identified by due date** — the last assessment to fall due — because the
  * schema has no way to say which assessment is the final one. That is a heuristic, and
  * it is named as one: an offering whose last-due assessment is not its final exam gets a
- * wrong default, and the teacher corrects it. The alternative — inventing an
- * `Assessment.isFinal` column — was not taken because a course can also grade its final
- * as several components, which the category model already expresses and a flag cannot.
+ * wrong default, and the teacher corrects it (pass `options.finalAssessmentId`, which is
+ * what the persisted policy does). The alternative — inventing an `Assessment.isFinal`
+ * column — was not taken because a course can also grade its final as several components,
+ * which the category model already expresses and a flag cannot.
  *
  * Returns `null` when there are fewer than two assessments: with one, or none, there is
  * no CAT/FAT distinction to draw and a single equal-weight category is the honest
@@ -103,8 +114,12 @@ export function deriveDefaultGradingConfig(
     (a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime(),
   )
 
-  const finalAssessment = byDueDate[byDueDate.length - 1]
-  const continuous = byDueDate.slice(0, -1)
+  // An explicit pick wins; an id that names nothing falls back to the heuristic.
+  const chosen = options.finalAssessmentId
+    ? byDueDate.find((assessment) => assessment.id === options.finalAssessmentId)
+    : undefined
+  const finalAssessment = chosen ?? byDueDate[byDueDate.length - 1]
+  const continuous = byDueDate.filter((assessment) => assessment.id !== finalAssessment.id)
 
   return {
     categories: [

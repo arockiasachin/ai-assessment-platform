@@ -98,6 +98,20 @@ const QUIZ_ASSESSMENT_ID = "demo-assessment-quiz"
 const ESSAY_ASSESSMENT_ID = "demo-assessment-essay"
 const CODE_ASSESSMENT_ID = "demo-assessment-code"
 const GROUP_ASSESSMENT_ID = "demo-assessment-group-project"
+/**
+ * A CAT assessment that has already **fallen due**, with published marks.
+ *
+ * The other four are all future-dated, which leaves the CAT/FAT gate with nothing to judge:
+ * `isMarkIncludedInMean` requires an assessment to be past due, so every student would read
+ * "too little marked" — correct, but it means the gate cannot be demonstrated at all. The
+ * demo course is composability evidence, and a feature the demo cannot show is a feature
+ * nobody can check.
+ *
+ * Created outside `assessmentRows` deliberately, so it gets **no upcoming calendar event**:
+ * a deadline that has passed is not upcoming, and seeding one would put a past date in the
+ * "Upcoming" panel.
+ */
+const WEEK2_ASSESSMENT_ID = "demo-assessment-week2"
 const CODE_TASK_ID = "demo-code-task"
 const GROUP_ID = "demo-group-alpha"
 const LTI_REGISTRATION_ID = "demo-lti-registration"
@@ -216,6 +230,7 @@ export const DEMO_IDS = {
   essayAssessmentId: ESSAY_ASSESSMENT_ID,
   codeAssessmentId: CODE_ASSESSMENT_ID,
   groupAssessmentId: GROUP_ASSESSMENT_ID,
+  week2AssessmentId: WEEK2_ASSESSMENT_ID,
   codeTaskId: CODE_TASK_ID,
   groupId: GROUP_ID,
   ltiRegistrationId: LTI_REGISTRATION_ID,
@@ -320,7 +335,13 @@ async function deleteDemoData(): Promise<void> {
   await prisma.assessment.deleteMany({
     where: {
       id: {
-        in: [QUIZ_ASSESSMENT_ID, ESSAY_ASSESSMENT_ID, CODE_ASSESSMENT_ID, GROUP_ASSESSMENT_ID],
+        in: [
+          QUIZ_ASSESSMENT_ID,
+          ESSAY_ASSESSMENT_ID,
+          CODE_ASSESSMENT_ID,
+          GROUP_ASSESSMENT_ID,
+          WEEK2_ASSESSMENT_ID,
+        ],
       },
     },
   })
@@ -1318,6 +1339,60 @@ async function createGroupProject() {
   }
 }
 
+/**
+ * A past-due CAT assessment whose marks span the FAT gate.
+ *
+ * The marks are chosen so the eligibility roster shows every verdict rather than one repeated
+ * five times — that is the difference between a demo that exercises the rule and one that only
+ * proves a status string exists:
+ *
+ * - two students clear the 30% minimum,
+ * - one sits below it,
+ * - one has a **genuine zero** (a real mark, not missing work),
+ * - and one has no mark at all, so the `insufficient-cat-work` path appears.
+ *
+ * Written through `recordManualMark` rather than a direct `Grade` insert, following this seed's
+ * rule that publish-like facts go through the real service — which is also what publishes them,
+ * since an unpublished mark is excluded from the gate and from every mean.
+ */
+async function createPastCatAssessment() {
+  await prisma.assessment.create({
+    data: {
+      id: WEEK2_ASSESSMENT_ID,
+      offeringId: ACTIVE_OFFERING_ID,
+      courseId: COURSE_ID,
+      classId: ACTIVE_CLASS_ID,
+      title: "Week 2 practice set",
+      type: "QUIZ",
+      dueDate: fromNow(-9),
+      maxMarks: 10,
+      maxAttempts: 1,
+      // Released well before it fell due, which is what the write path would produce.
+      releasedAt: fromNow(-16),
+      createdById: TEACHER_STAFF_ID,
+    },
+  })
+
+  const marks = [
+    { studentId: STUDENT_PROFILE_IDS[0], points: 9 },
+    { studentId: STUDENT_PROFILE_IDS[1], points: 4 },
+    { studentId: STUDENT_PROFILE_IDS[2], points: 2 },
+    { studentId: STUDENT_PROFILE_IDS[3], points: 0 },
+    // `STUDENT_PROFILE_IDS[4]` is left unmarked on purpose: the roster's
+    // `insufficient-cat-work` verdict needs a student it can appear on.
+  ]
+
+  for (const mark of marks) {
+    await recordManualMark({
+      assessmentId: WEEK2_ASSESSMENT_ID,
+      studentId: mark.studentId,
+      points: mark.points,
+      maxPoints: 10,
+      actor: { id: TEACHER_USER_ID, role: "teacher" },
+    })
+  }
+}
+
 async function createCourseRatings() {
   // The ratings read path (`getTeacherRatingsReport`) is exercised by the spine
   // test; the write path lives in `lib/course-ratings.ts`, which is `server-only`
@@ -1487,6 +1562,7 @@ export async function seedDemo(): Promise<DemoSeedSummary> {
   await createRubricPipeline(provider)
   await createCodeTask()
   await createGroupProject()
+  await createPastCatAssessment()
   await createCourseRatings()
   await createLtiRegistration()
 

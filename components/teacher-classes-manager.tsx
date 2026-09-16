@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react"
 import { CalendarClock, Filter, GraduationCap, Save, Send, Users2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
+import { OfferingGradingPolicy } from "@/components/offering-grading-policy"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Progress } from "@/components/ui/progress"
@@ -378,6 +379,12 @@ export function TeacherClassesManager() {
                   />
                 </label>
               </div>
+
+              {/*
+                The CAT/FAT weights and the FAT gate. It loads its own payload on expand, so
+                adding it here costs no query for a teacher who does not open it.
+              */}
+              <OfferingGradingPolicy offeringId={row.id} />
 
               <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border/70 bg-muted/20 px-3 py-2 text-sm">
                 <p>

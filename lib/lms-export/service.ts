@@ -44,7 +44,9 @@ import {
   type OneRosterGradebook,
   type OneRosterInput,
 } from "./oneroster"
+import type { AssessmentType } from "@/lib/generated/prisma/client"
 import { categoryForAssessment, defaultFinalGradeConfig, validateFinalGradeConfig } from "./weights"
+import { resolveFinalGradeConfig, resolveGradingPolicy } from "@/lib/grading/offering-config"
 
 /**
  * DB-backed LMS-export service.
@@ -66,7 +68,12 @@ import { categoryForAssessment, defaultFinalGradeConfig, validateFinalGradeConfi
 type AssessmentRow = {
   id: string
   title: string
-  type: string
+  /**
+   * The Prisma enum, not `string`. It was widened to `string` here, which is how the
+   * grading policy's `GradingAssessmentInput` stopped accepting this row: the column is a
+   * five-value enum and the row claimed to be arbitrary text.
+   */
+  type: AssessmentType
   dueDate: Date
   maxMarks: number
   updatedAt: Date
@@ -103,7 +110,7 @@ function gradeKey(assessmentId: string, studentId: string): string {
 function toAssessmentRow(assessment: {
   id: string
   title: string
-  type: string
+  type: AssessmentType
   dueDate: Date
   maxMarks: number
   updatedAt: Date
@@ -175,7 +182,38 @@ async function loadExportContext(
     })
   }
 
-  const config = options.config ?? defaultFinalGradeConfig(assessments)
+  /*
+   * Resolution order, most specific first:
+   *
+   * 1. `options.config` — a config supplied with the request. An explicit, one-off
+   *    calculation. Still honoured, and still validated below.
+   * 2. the offering's stored policy (`CourseOffering.gradingConfig`), resolved against
+   *    this offering's assessments. This is the course's own configuration, which is
+   *    what makes the weights persist instead of living for one request.
+   * 3. `defaultFinalGradeConfig` — equal weighting in one category.
+   *
+   * (3) is reached only when the offering has fewer than two assessments, so there is no
+   * CAT/FAT shape to express; `resolveFinalGradeConfig` returns `null` for that case rather
+   * than inventing a split.
+   */
+  const stored = resolveGradingPolicy(offering.gradingConfig)
+  /*
+   * A stored policy is applied **only when one is actually stored**. Otherwise this falls back
+   * to equal weighting, which is what every offering did before the column existed.
+   *
+   * Applying the default CAT 40 / FAT 60 split to an unconfigured offering was the tempting
+   * reading of "let there be a default way to assign weights", and it is wrong here for the same
+   * reason the platform refuses to guess an exported letter grade: the FAT is identified by due
+   * date, so the default would silently put 60% of a course's weight on whichever assessment
+   * happens to fall due last — and the LMS export is an institutional record. A default that
+   * disagrees with the result sheet is worse than no default.
+   *
+   * So the default is *offered* rather than applied: the policy editor prefills it and the
+   * teacher confirms it, which is what makes it theirs. Until then nothing changes.
+   */
+  const storedConfig =
+    stored.source === "stored" ? resolveFinalGradeConfig(stored.config, assessments) : null
+  const config = options.config ?? storedConfig ?? defaultFinalGradeConfig(assessments)
   validateFinalGradeConfig(config, { knownAssessmentIds: assessments.map((a) => a.id) })
 
   return {

@@ -1,0 +1,33 @@
+-- Offering grading policy: the CAT/FAT weights, which assessment is the final one,
+-- and the minimum-CAT gate for sitting the FAT.
+--
+-- Additive and nullable, so no backfill and no data migration: an existing row means
+-- "not configured", for which the readers fall back to `DEFAULT_CATEGORY_WEIGHTS`
+-- (CAT 40 / FAT 60) and `DEFAULT_FAT_MINIMUM_CAT_PERCENT` (30). That is also the right
+-- reading for every row that predates this column — a course that was never configured
+-- has the document's default split, not an undefined one.
+--
+-- Deliberately NOT stored: **category membership**. The column holds the policy only,
+-- and the category's assessment list is derived from this offering's assessments at read
+-- time (`lib/grading/offering-config.ts`). Storing `assessmentIds` would hard-bind the
+-- configuration to the assessment set as it was at save time, so a teacher adding an
+-- assessment afterwards would silently drop it from the weighted total — a data-loss
+-- shape with no error attached.
+--
+-- Why JSON rather than columns: the policy is read as a whole and never queried by
+-- field, and the gate has optional knobs (`minimumCatCompletionRatio`). Same reasoning
+-- as `CourseOffering.analyticsSettings`. If a query ever needs to filter or aggregate on
+-- `catWeight`, that is the trigger to promote it to a real column.
+--
+-- No index. The column is read with its offering, which is already the access path.
+--
+-- Generated with:
+--   prisma migrate diff \
+--     --from-schema <prisma/schema.prisma at ce42849> \
+--     --to-schema prisma/schema.prisma \
+--     --script
+--
+-- Applied with `prisma migrate deploy` (never `migrate dev`, never `db push`).
+
+-- AlterTable
+ALTER TABLE "CourseOffering" ADD COLUMN     "gradingConfig" JSONB;

@@ -432,6 +432,7 @@ describe("seeded demo course — end-to-end spine", () => {
       DEMO_IDS.essayAssessmentId,
       DEMO_IDS.codeAssessmentId,
       DEMO_IDS.groupAssessmentId,
+      DEMO_IDS.week2AssessmentId,
     ]
     const published = await db.grade.findMany({
       where: { assessmentId: { in: assessmentIds }, publishedAt: { not: null } },
@@ -445,12 +446,22 @@ describe("seeded demo course — end-to-end spine", () => {
     // And every published grade has exactly one matching human publish audit row
     // (`accept`/`override` writes `grade.published`; a manual mark writes
     // `grade.manual_mark_published`). Nothing else may create one.
-    const publishAudits = await db.auditLog.count({
+    //
+    // Scoped to the grade ids just found, because a `Grade` audit row's `entityId` *is* the grade
+    // id. Counting publish audits globally compared a set against a total, so adding an assessment
+    // to the seed broke the assertion while the invariant it exists to protect still held.
+    const publishAudits = await db.auditLog.findMany({
       where: {
         entityType: "Grade",
+        entityId: { in: published.map((grade) => grade.id) },
         action: { in: ["grade.published", "grade.manual_mark_published"] },
       },
     })
-    expect(publishAudits).toBe(published.length)
+    expect(publishAudits).toHaveLength(published.length)
+
+    // The converse, which the count alone could not detect: no publish audit may point at a grade
+    // that is not published.
+    const auditedIds = new Set(publishAudits.map((audit) => audit.entityId))
+    expect(auditedIds.size).toBe(published.length)
   })
 })
