@@ -60,14 +60,24 @@ mockups to the backend that already exists behind them:
   corrections to the parent plan (`teacher/classes` is a different screen, not a re-skin, and
   `teacher/submissions` has no real page at all — since resolved: it is now a read-only queue, see
   §D2).
-  - [`plans/wave-2.md`](./plans/wave-2.md) — the Wave 2 plan. Wave 1 was a presentation port; this one is
-    not. It scopes the three pages whose readers **do not exist** (`student/resources`, `student/events`,
-    `teacher/planner`), with the two library slices ordered before their pages, and records the finding
-    that decides demo value: the seed data exists but is **monotonous** — 2 materials with no file, 4
-    calendar events all of one kind — and there is **no way to create a `Material` at all**. Progress:
-    the `student/resources` reader and page have landed (S1–S3); `student/events` and `teacher/planner`
-    still need their readers, and the calendar reader is blocked on the `Assessment` release concept
-    (S5), because an unreleased assessment's event must be hidden from a student.
+  - [`plans/wave-2.md`](./plans/wave-2.md) — the Wave 2 plan. Wave 1 was a presentation port; this one
+    was not. It scoped the three pages whose readers **did not exist** (`student/resources`,
+    `student/events`, `teacher/planner`), with the library slices ordered before their pages, and
+    recorded the finding that decided demo value: the seed data existed but was **monotonous** — 2
+    materials with no file, 4 calendar events all of one kind — and there was **no way to create a
+    `Material` at all**. **Complete (S1–S9):** both readers and all three pages landed, plus the
+    `Assessment` release concept the calendar needed to hide an unreleased assessment from a student;
+    the seed grew to 8 materials and 10 calendar events, and two real defects were fixed on the way (an
+    unaudited release write path, and a `CalendarEvent` teardown that orphaned every previous run's
+    rows). See [`plans/wave-3.md`](./plans/wave-3.md) for what replaced it.
+  - [`plans/wave-3.md`](./plans/wave-3.md) — the Wave 3 plan: **derivations, not new tables**. The
+    aggregations the mockups assert but nothing computes — score-trend series, topic mastery, the
+    at-risk roster, the dashboard tiles, the retake recommendation — plus the long-standing
+    `GradebookProvider` conversion. Its first slice (the pure statistical core) is landed. It opens
+    with an **open decision** rather than a settled one: the institution grades on σ-bands, but
+    `letterGrade` uses fixed bands and feeds the exported final grade, so an at-risk rule built on σ
+    would contradict every badge and the LMS export unless the banding is unified or the roster is
+    labelled as relative.
 
 ## Shipped feature pods
 
