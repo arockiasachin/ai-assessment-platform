@@ -544,6 +544,34 @@ export function findNavItem(
 }
 
 /**
+ * Look up a nav item by its **real** path.
+ *
+ * `findNavItem` matches the mockup `href`, so a real page that reads its heading description
+ * from the nav needs this instead: the analytics page's item is `/mockup/teacher/analytics`
+ * while the page is `/teacher/analytics`.
+ *
+ * Resolves through `navHref(…, "app")` rather than a second path map, so a renamed route is a
+ * one-line change in `APP_PATH_OVERRIDES` and this follows automatically. Items with no real
+ * page (`navHref` returns `null`) can never match, which is correct — nothing should render a
+ * heading for a page that does not exist.
+ */
+export function findNavItemByAppPath(
+  path: string,
+): { role: MockupRole; section: NavSection; item: NavItem } | null {
+  // Searches `NAV_SECTIONS` directly rather than `allNavItems()`, because that helper
+  // deliberately excludes **app-only** items — and those are exactly the ones that exist only
+  // in the real tree, so a page like `/teacher/offerings` would otherwise be unable to resolve
+  // its own heading.
+  return (
+    MOCKUP_ROLES.flatMap((role) =>
+      NAV_SECTIONS[role].flatMap((section) =>
+        section.items.map((item) => ({ role, section, item })),
+      ),
+    ).find((entry) => navHref(entry.item.href, "app") === path) ?? null
+  )
+}
+
+/**
  * Is `href` the active page for `pathname`?
  *
  * `/mockup/teacher` must be active on `/mockup/teacher` but NOT on

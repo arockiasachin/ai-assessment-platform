@@ -1,7 +1,9 @@
+import type { Metadata } from "next"
 import { redirect } from "next/navigation"
 
 import { RoleGuard } from "@/components/role-guard"
-import { RolePageShell } from "@/components/role-page-shell"
+import { AppShell, PageHeader } from "@/components/shell"
+import { findNavItemByAppPath } from "@/components/shell/nav-config"
 import { TeacherAnalyticsDashboard } from "@/components/teacher-analytics-dashboard"
 import { getSessionUser } from "@/lib/auth"
 import {
@@ -13,9 +15,25 @@ import type {
   AssessmentItemAnalysisResponse,
   TeacherAnalyticsOverviewResponse,
 } from "@/lib/contracts/analytics"
+import { initialsFromEmail, roleLabelFromRole } from "@/lib/user-identity"
 
 export const dynamic = "force-dynamic"
 
+export const metadata: Metadata = { title: "Analytics" }
+
+const HREF = "/teacher/analytics"
+
+/**
+ * Analytics and interventions.
+ *
+ * Fetched on the server for the first offering, then the client re-fetches when the teacher
+ * switches offering — the payload is per-offering and interactive, so this is not the
+ * fetch-on-mount pattern `docs/quality/a11y-perf-audit.md` flags: the first render is already
+ * populated.
+ *
+ * The description is read from the nav rather than duplicated, so the label and the heading
+ * cannot drift. That is the pattern the mockup used for the same reason.
+ */
 export default async function TeacherAnalyticsPage() {
   const user = await getSessionUser()
   if (!user || user.role !== "teacher") redirect("/login")
@@ -44,18 +62,24 @@ export default async function TeacherAnalyticsPage() {
 
   return (
     <RoleGuard role="teacher">
-      <RolePageShell
+      <AppShell
+        scope="app"
         role="teacher"
-        title="Analytics & interventions"
-        description="Item difficulty and discrimination from real attempts, cohort distribution and pass rate, and threshold-based intervention alerts for your own offerings."
+        user={{
+          name: user.email,
+          email: user.email,
+          initials: initialsFromEmail(user.email),
+          roleLabel: roleLabelFromRole(user.role),
+        }}
       >
+        <PageHeader title="Analytics" description={findNavItemByAppPath(HREF)?.item.description} />
         <TeacherAnalyticsDashboard
           offerings={offerings}
           initialOfferingId={initialOfferingId}
           initialOverview={initialOverview}
           initialItems={initialItems}
         />
-      </RolePageShell>
+      </AppShell>
     </RoleGuard>
   )
 }

@@ -12,6 +12,7 @@ import {
   allNavItems,
   brandHref,
   findNavItem,
+  findNavItemByAppPath,
   isActiveHref,
   navHref,
   navSectionsFor,
@@ -290,5 +291,43 @@ describe("nav scope: app tree resolves to real pages", () => {
   it("role homes are the real role roots", () => {
     expect(roleHome("teacher", "app")).toBe("/teacher")
     expect(roleHome("teacher", "mockup")).toBe("/mockup/teacher")
+  })
+})
+
+describe("findNavItemByAppPath", () => {
+  it("resolves a real path that has no override", () => {
+    // `/teacher/analytics` is derived by stripping `/mockup`, so the nav item's own href is
+    // `/mockup/teacher/analytics` and a plain `findNavItem` would miss it.
+    const found = findNavItemByAppPath("/teacher/analytics")
+    expect(found?.item.href).toBe("/mockup/teacher/analytics")
+    expect(found?.item.description).toBeTruthy()
+  })
+
+  it("resolves a real path that IS overridden", () => {
+    // Renamed in the real tree: "Activity log" lives at /teacher/observability.
+    const found = findNavItemByAppPath("/teacher/observability")
+    expect(found?.item.href).toBe("/mockup/teacher/activity")
+  })
+
+  it("resolves every app-scope nav destination to an item", () => {
+    // If a destination were reachable in the nav but unresolvable here, a page reading its
+    // heading description would silently render no description.
+    for (const section of navSectionsFor("teacher", "app")) {
+      for (const item of section.items) {
+        const path = navHref(item.href, "app")
+        if (path === null) continue
+        expect(findNavItemByAppPath(path), path).not.toBeNull()
+      }
+    }
+  })
+
+  it("returns null for a path with no nav item", () => {
+    expect(findNavItemByAppPath("/teacher/not-a-page")).toBeNull()
+  })
+
+  it("returns null for a mockup-only surface, which has no real page", () => {
+    // `navHref` returns null for these, so they can never match — nothing should render a
+    // heading for a page that does not exist.
+    expect(findNavItemByAppPath("/mockup/teacher/settings")).toBeNull()
   })
 })
