@@ -10,6 +10,7 @@ import {
   RELATIVE_PASS_CAP,
   relativeLetter,
   resolveGradingRegime,
+  resolveRegimeForCourse,
   sBandNeedsRankRule,
 } from "@/lib/analytics/grading-bands"
 
@@ -335,6 +336,143 @@ describe("resolveGradingRegime", () => {
     ] as const) {
       expect(resolveGradingRegime(category, 40), category).toBe("absolute")
       expect(resolveGradingRegime(category, 500), category).toBe("absolute")
+    }
+  })
+})
+
+describe("resolveRegimeForCourse", () => {
+  const theory = (enrolledCount: number, publishedTotals: number[]) => ({
+    category: "THEORY" as const,
+    enrolledCount,
+    publishedTotals,
+  })
+  // Distinct totals: identical ones give sigma 0, which now falls back to absolute.
+  const eleven = [50, 55, 60, 60, 65, 70, 75, 80, 85, 90, 95]
+
+  it("uses relative grading once the class and its marks are big enough", () => {
+    const decision = resolveRegimeForCourse(
+      theory(20, [60, 65, 70, 75, 80, 85, 90, 60, 65, 70, 75]),
+    )
+    expect(decision.regime).toBe("relative")
+    if (decision.regime === "relative") {
+      expect(decision.markedCount).toBe(11)
+      expect(decision.mean).toBeGreaterThan(0)
+      expect(decision.standardDeviation).toBeGreaterThan(0)
+    }
+  })
+
+  it("stays absolute for a class of 10 or fewer, whatever the marks", () => {
+    const decision = resolveRegimeForCourse(
+      theory(
+        10,
+        Array.from({ length: 10 }, () => 70),
+      ),
+    )
+    expect(decision).toMatchObject({ regime: "absolute", reason: "small-class" })
+    if (decision.regime === "absolute") {
+      expect(decision.notice.tone).toBe("info")
+      expect(decision.notice.title).toContain("class of 10")
+    }
+  })
+
+  it("stays absolute for a lab, project or NGCR course at any size", () => {
+    for (const category of [
+      "LABORATORY",
+      "PROJECT",
+      "SOFT_SKILLS",
+      "EXTRA_CURRICULAR",
+      "NGCR",
+    ] as const) {
+      const decision = resolveRegimeForCourse({
+        category,
+        enrolledCount: 60,
+        publishedTotals: Array.from({ length: 60 }, () => 70),
+      })
+      expect(decision, category).toMatchObject({ regime: "absolute", reason: "non-theory-course" })
+    }
+  })
+
+  it("falls back to absolute with a warning while the base metrics are missing", () => {
+    // The case this exists for: a 20-student class that qualifies for relative grading,
+    // but only 4 marks are published — so there is nothing to compute a mean and sigma
+    // from. Bands derived from four marks would be worse than the honest fallback.
+    const decision = resolveRegimeForCourse(theory(20, [60, 65, 70, 75]))
+    expect(decision).toMatchObject({ regime: "absolute", reason: "awaiting-base-metrics" })
+    if (decision.regime === "absolute") {
+      expect(decision.notice.tone).toBe("warning")
+      expect(decision.notice.progress).toEqual({ available: 4, required: 11 })
+      // Names the numbers, so the teacher knows what is being waited on.
+      expect(decision.notice.detail).toContain("4")
+      expect(decision.notice.detail).toContain("11")
+    }
+  })
+
+  it("switches to relative on the mark that completes the base metrics", () => {
+    // The boundary, pinned: 10 published totals is not enough, 11 is.
+    expect(
+      resolveRegimeForCourse(
+        theory(
+          20,
+          Array.from({ length: 10 }, () => 70),
+        ),
+      ),
+    ).toMatchObject({
+      regime: "absolute",
+      reason: "awaiting-base-metrics",
+    })
+    expect(
+      resolveRegimeForCourse(theory(20, [50, 55, 60, 60, 65, 70, 75, 80, 85, 90, 95])).regime,
+    ).toBe("relative")
+  })
+
+  it("reports small-class before awaiting-metrics, because size is permanent", () => {
+    // A 6-student class will never use relative grading, so "awaiting metrics" would be a
+    // misleading thing to tell its teacher.
+    const decision = resolveRegimeForCourse(theory(6, [70]))
+    expect(decision).toMatchObject({ regime: "absolute", reason: "small-class" })
+  })
+
+  it("reports non-theory-course before awaiting-metrics, for the same reason", () => {
+    const decision = resolveRegimeForCourse({
+      category: "LABORATORY",
+      enrolledCount: 40,
+      publishedTotals: [],
+    })
+    expect(decision).toMatchObject({ regime: "absolute", reason: "non-theory-course" })
+  })
+
+  it("carries no notice on the relative decision, because nothing is being withheld", () => {
+    const decision = resolveRegimeForCourse(theory(20, eleven))
+    expect(decision.regime).toBe("relative")
+    expect("notice" in decision).toBe(false)
+  })
+
+  it("computes the mean and sigma from the published totals", () => {
+    const decision = resolveRegimeForCourse(
+      theory(20, [60, 60, 70, 80, 90, 50, 55, 65, 75, 85, 95]),
+    )
+    if (decision.regime === "relative") {
+      expect(decision.markedCount).toBe(11)
+      expect(decision.mean).toBe(71.36)
+      expect(decision.standardDeviation).toBeGreaterThan(0)
+    } else {
+      throw new Error("expected relative")
+    }
+  })
+
+  it("falls back when the class has no spread yet, because sigma 0 has no bands", () => {
+    // Every total identical: sigma is 0, so `gradeBandRanges` returns null and every band
+    // would collapse onto the mean. Reporting "relative" without bands to draw would leave
+    // the caller with a regime it cannot render.
+    const decision = resolveRegimeForCourse(
+      theory(
+        20,
+        Array.from({ length: 11 }, () => 60),
+      ),
+    )
+    expect(decision).toMatchObject({ regime: "absolute", reason: "awaiting-base-metrics" })
+    if (decision.regime === "absolute") {
+      expect(decision.notice.detail).toContain("standard deviation is 0")
     }
   })
 })

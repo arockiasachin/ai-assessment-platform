@@ -330,3 +330,165 @@ export function absoluteLetter(mark: number, options: BandOptions = {}): Relativ
 
   return null
 }
+
+// ---------------------------------------------------------------------------
+// Which regime to actually use, and why
+// ---------------------------------------------------------------------------
+
+/**
+ * A notice to render when the platform falls back to absolute grading.
+ *
+ * Attached to every fallback so the UI never silently substitutes one regime for
+ * another. A relative-graded class shown absolute bands, with no explanation, would look
+ * like a correct grade that happens to be wrong — the failure mode this whole area has
+ * now produced twice.
+ */
+export type GradingNotice = {
+  tone: "info" | "warning"
+  title: string
+  detail: string
+  /** Present when the fallback is waiting for data, so the UI can show progress. */
+  progress?: { available: number; required: number }
+}
+
+export type RegimeDecision =
+  | {
+      regime: "relative"
+      /** The class's published grand totals, which the σ bands are computed from. */
+      mean: number
+      standardDeviation: number
+      markedCount: number
+    }
+  | {
+      regime: "absolute"
+      reason: "small-class" | "non-theory-course" | "awaiting-base-metrics"
+      notice: GradingNotice
+    }
+
+/**
+ * The minimum number of students with a **published grand total** before relative grading
+ * is used.
+ *
+ * Deliberately the same number as `RELATIVE_GRADING_MIN_STRENGTH`: VIT's own threshold is
+ * a statement about how many students a banding needs, and applying it to the *marked*
+ * cohort rather than only the enrolled one is the same rule read honestly. A class of 40
+ * with 4 published totals has σ computed from 4 students — and σ over 4 is not a base.
+ */
+export const RELATIVE_MIN_MARKED_STUDENTS = RELATIVE_GRADING_MIN_STRENGTH
+
+export type RegimeInput = {
+  category: CourseCategory
+  /** Students enrolled in the offering. */
+  enrolledCount: number
+  /** Published grand totals — one per student who has been marked. */
+  publishedTotals: readonly number[]
+}
+
+/**
+ * Decide the regime **and** produce the notice when the answer is "absolute".
+ *
+ * Three ways a course lands on absolute, and they are not equivalent to a user:
+ *
+ * | Reason | What it means |
+ * | ------ | ------------- |
+ * | `non-theory-course` | the regulation says absolute, always, whatever the size |
+ * | `small-class` | ≤ 10 students, so VIT grades absolutely instead of relatively |
+ * | `awaiting-base-metrics` | the class qualifies for relative, but too few marks are published to compute a mean and σ yet |
+ *
+ * The third is the one this function exists for. Relative grading needs the cohort's own
+ * mean and σ; until enough students have published totals there is nothing to compute
+ * them from, and **falling back to absolute with a visible notice is better than
+ * publishing bands derived from four marks.** The relative view is withheld rather than
+ * approximated.
+ *
+ * Order is deliberate: the categorical and size rules are checked first, because they are
+ * permanent facts about the course, and telling a 6-student lab that it is "awaiting
+ * metrics" would be misleading — it will never use relative grading.
+ */
+export function resolveRegimeForCourse(input: RegimeInput): RegimeDecision {
+  const { category, enrolledCount, publishedTotals } = input
+
+  // Checked first, because it is a permanent fact about the course. Telling a 6-student
+  // lab that it is "awaiting metrics" would be misleading — it will never use relative
+  // grading.
+  if (isCategoricallyAbsolute(category)) {
+    return {
+      regime: "absolute",
+      reason: "non-theory-course",
+      notice: {
+        tone: "info",
+        title: "Graded on absolute bands",
+        detail:
+          "VIT grades laboratory, project, soft-skills, extra-curricular and NGCR courses absolutely, whatever the class size.",
+      },
+    }
+  }
+
+  if (enrolledCount < RELATIVE_GRADING_MIN_STRENGTH) {
+    return {
+      regime: "absolute",
+      reason: "small-class",
+      notice: {
+        tone: "info",
+        title: `Absolute bands (class of ${enrolledCount})`,
+        detail: `VIT uses relative grading only above ${RELATIVE_GRADING_MIN_STRENGTH - 1} students. At ${enrolledCount}, absolute bands apply and the pass mark is ${RELATIVE_PASS_CAP}.`,
+      },
+    }
+  }
+
+  if (publishedTotals.length < RELATIVE_MIN_MARKED_STUDENTS) {
+    return {
+      regime: "absolute",
+      reason: "awaiting-base-metrics",
+      notice: {
+        tone: "warning",
+        title: "Absolute bands until the class mean and σ can be computed",
+        detail: `Relative grading needs at least ${RELATIVE_MIN_MARKED_STUDENTS} published totals to compute the class mean and standard deviation. ${publishedTotals.length} ${publishedTotals.length === 1 ? "is" : "are"} published so far, so absolute bands are shown meanwhile.`,
+        progress: {
+          available: publishedTotals.length,
+          required: RELATIVE_MIN_MARKED_STUDENTS,
+        },
+      },
+    }
+  }
+
+  const average = publishedTotals.reduce((sum, value) => sum + value, 0) / publishedTotals.length
+  const variance =
+    publishedTotals.reduce((sum, value) => sum + (value - average) ** 2, 0) / publishedTotals.length
+  const deviation = Math.sqrt(variance)
+
+  // A flat cohort: every published total identical, so σ is 0 and every band would
+  // collapse onto the mean. `gradeBandRanges` returns `null` for that case, which would
+  // leave the caller holding a "relative" regime with no bands to render — so the fallback
+  // belongs here, where the reason can be explained.
+  if (deviation === 0) {
+    return {
+      regime: "absolute",
+      reason: "awaiting-base-metrics",
+      notice: {
+        tone: "warning",
+        title: "Absolute bands — the class has no spread yet",
+        detail: `Every published total is ${Math.round(average * 100) / 100}, so the standard deviation is 0 and the relative bands would all fall on the same mark. Absolute bands are shown until the marks spread out.`,
+        progress: { available: publishedTotals.length, required: RELATIVE_MIN_MARKED_STUDENTS },
+      },
+    }
+  }
+
+  return {
+    regime: "relative",
+    mean: Math.round(average * 100) / 100,
+    standardDeviation: Math.round(deviation * 100) / 100,
+    markedCount: publishedTotals.length,
+  }
+}
+
+/** Whether the course's category is absolute regardless of headcount. */
+export function isCategoricallyAbsolute(category: CourseCategory): boolean {
+  return (
+    category === "LABORATORY" ||
+    category === "PROJECT" ||
+    category === "SOFT_SKILLS" ||
+    category === "EXTRA_CURRICULAR" ||
+    category === "NGCR"
+  )
+}

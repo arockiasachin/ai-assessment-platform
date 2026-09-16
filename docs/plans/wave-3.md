@@ -495,6 +495,39 @@ _marked but unreleased_.
 overridable per offering, and `null` still means "this course has no CAT gate" — which is
 a different statement from "the gate is at zero".
 
+### Which regime is actually used
+
+`resolveRegimeForCourse({ category, enrolledCount, publishedTotals })` decides, and returns
+the **notice** to render whenever the answer is absolute. Four outcomes:
+
+| Outcome                              | When                                                                                             |
+| ------------------------------------ | ------------------------------------------------------------------------------------------------ |
+| `relative`                           | theory or lab-embedded theory, > 10 enrolled, **and** ≥ 11 students with a published grand total |
+| `absolute` / `non-theory-course`     | lab, project, soft-skills, extra-curricular or NGCR — permanently, at any size                   |
+| `absolute` / `small-class`           | ≤ 10 students enrolled                                                                           |
+| `absolute` / `awaiting-base-metrics` | the class qualifies, but too few marks are published **or** σ is 0                               |
+
+**`awaiting-base-metrics` is the reason this function exists.** Relative grading needs the
+cohort's own mean and σ, and σ computed from four marks is not a base. So the relative view
+is **withheld rather than approximated**: the course falls back to absolute bands with a
+warning that names the numbers — _"4 of the 11 published totals needed"_ — so a teacher can
+see what is being waited on rather than wondering why the bands changed.
+
+The minimum is `RELATIVE_MIN_MARKED_STUDENTS = 11`, deliberately the same constant as VIT's
+class-strength threshold: the rule is a statement about how many students a banding needs,
+and applying it to the _marked_ cohort rather than only the enrolled one is the same rule
+read honestly.
+
+**σ = 0 is also a fallback, and it was a real gap.** A cohort whose published totals are all
+identical has no spread, so `gradeBandRanges` returns `null` and every band would collapse
+onto the mean — leaving a caller with a "relative" regime and no bands to draw. It falls back
+with its own explanation. This was found by running the scenarios, not by reasoning: the
+first version returned `relative`, σ 0, and nothing renderable.
+
+The categorical and size checks come **first**, because they are permanent facts about the
+course — telling a 6-student lab it is "awaiting metrics" would imply it might switch later,
+and it never will.
+
 ### Passing the course
 
 A student passes when their **combined CAT+FAT total is at least 50%**, checked _after_
