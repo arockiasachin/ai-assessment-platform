@@ -63,36 +63,37 @@ model User {
 }
 
 model StudentProfile {
-  id                String               @id @default(cuid())
-  userId            String               @unique
-  fullName          String
-  registerNumber    String               @unique
-  profilePicUrl     String?
+  id               String         @id @default(cuid())
+  userId           String         @unique
+  fullName         String
+  registerNumber   String         @unique
+  profilePicUrl    String?
   // Per-student team-formation attributes and availability, configured once by
   // the instructor. JSON because the attribute keys are instructor-defined and
   // vary per course (formation criteria reference arbitrary attribute names).
   // Shape: { attributes: Record<string, string|number|null>, availability?: string[] }
-  formationProfile  Json?
-  createdAt         DateTime             @default(now())
-  updatedAt         DateTime             @updatedAt
-  user              User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
-  enrollments       Enrollment[]
-  courseRatings     CourseRating[]
-  submissions       Submission[]
+  formationProfile Json?
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+  user             User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  enrollments      Enrollment[]
+  courseRatings    CourseRating[]
+  submissions      Submission[]
 
   // Phase 1 assessment spine
-  finalGrades           Grade[]
-  gradeReviews          GradeReview[]
-  aiGradeSuggestions    AIGradeSuggestion[]
-  quizAttempts          QuizAttempt[]
-  testRuns              TestRun[]
-  groupMemberships      GroupMember[]
-  peerEvaluationsGiven  PeerEvaluation[]  @relation("PeerEvaluationEvaluator")
-  peerEvaluationsReceived PeerEvaluation[] @relation("PeerEvaluationEvaluatee")
-  contributionEvents    ContributionEvent[]
-  similarityChecks      SimilarityCheck[] @relation("SimilarityCheckStudent")
-  comparedInSimilarity  SimilarityCheck[] @relation("SimilarityCheckComparedStudent")
-  ltiUserMappings       LtiUserMapping[]
+  finalGrades             Grade[]
+  gradeReviews            GradeReview[]
+  aiGradeSuggestions      AIGradeSuggestion[]
+  quizAttempts            QuizAttempt[]
+  testRuns                TestRun[]
+  groupMemberships        GroupMember[]
+  peerEvaluationsGiven    PeerEvaluation[]    @relation("PeerEvaluationEvaluator")
+  peerEvaluationsReceived PeerEvaluation[]    @relation("PeerEvaluationEvaluatee")
+  contributionEvents      ContributionEvent[]
+  similarityChecks        SimilarityCheck[]   @relation("SimilarityCheckStudent")
+  comparedInSimilarity    SimilarityCheck[]   @relation("SimilarityCheckComparedStudent")
+  ltiUserMappings         LtiUserMapping[]
+  retakeRequests          RetakeRequest[]
 }
 
 model StaffProfile {
@@ -109,79 +110,80 @@ model StaffProfile {
   gradedSubmissions  Submission[]     @relation("SubmissionGrader")
 
   // Phase 1 assessment spine
-  createdMaterials   Material[]      @relation("MaterialCreatedBy")
-  createdRubrics     Rubric[]        @relation("RubricCreatedBy")
-  reviewedReviews    GradeReview[]   @relation("GradeReviewReviewer")
-  assignedReviews    GradeReview[]   @relation("GradeReviewAssignee")
-  approvedGrades     Grade[]
-  publishedQuestions Question[]      @relation("QuestionPublisher")
+  createdMaterials      Material[]      @relation("MaterialCreatedBy")
+  createdRubrics        Rubric[]        @relation("RubricCreatedBy")
+  reviewedReviews       GradeReview[]   @relation("GradeReviewReviewer")
+  assignedReviews       GradeReview[]   @relation("GradeReviewAssignee")
+  approvedGrades        Grade[]
+  publishedQuestions    Question[]      @relation("QuestionPublisher")
+  decidedRetakeRequests RetakeRequest[] @relation("RetakeRequestDecider")
 }
 
 model Course {
-  id          String               @id @default(cuid())
-  code        String               @unique
+  id          String           @id @default(cuid())
+  code        String           @unique
   name        String
   description String?
-  credits     Int                  @default(3)
+  credits     Int              @default(3)
   // Which VIT grading regime this course uses. **Nullable, and null is not "theory".**
   // The platform cannot infer a course's category from its data, so an unset value falls
   // back to absolute bands with a notice asking for it — guessing `THEORY` would silently
   // put a laboratory course on relative bands, which is the failure this column exists to
   // prevent. See `resolveRegimeForCourse`.
   category    CourseCategory?
-  createdAt   DateTime             @default(now())
-  updatedAt   DateTime             @updatedAt
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
   offerings   CourseOffering[]
   assessments Assessment[]
   materials   Material[]
 }
 
 model ClassRoom {
-  id             String               @id @default(cuid())
-  code           String               @unique
+  id             String           @id @default(cuid())
+  code           String           @unique
   name           String
   academicYear   Int
   section        String?
-  createdAt      DateTime             @default(now())
-  updatedAt      DateTime             @updatedAt
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
   offerings      CourseOffering[]
   calendarEvents CalendarEvent[]
   assessments    Assessment[]
 }
 
 model CourseOffering {
-  id                 String              @id @default(cuid())
-  courseId           String
-  classId            String
-  teacherId          String
-  term               String
-  academicYear       Int
-  studentLimit       Int                 @default(40)
-  registrationOpenAt DateTime?
+  id                  String          @id @default(cuid())
+  courseId            String
+  classId             String
+  teacherId           String
+  term                String
+  academicYear        Int
+  studentLimit        Int             @default(40)
+  registrationOpenAt  DateTime?
   registrationCloseAt DateTime?
-  startsOn           DateTime?
-  endsOn             DateTime?
+  startsOn            DateTime?
+  endsOn              DateTime?
   // Retention anchor. Null means "results not published", so no student work
   // for this offering may be purged. Set once, by an explicit teacher action
   // (`POST /api/teacher/offerings/[offeringId]/results`); the purge clock is
   // `resultsPublishedAt + 15 days`, enforced server-side. Offering-level rather
   // than per-enrollment because results are published for a whole course
   // cohort at one moment, and the policy speaks of the whole course.
-  resultsPublishedAt DateTime?
+  resultsPublishedAt  DateTime?
   // Per-offering analytics settings. JSON so the intervention and item-analysis
   // threshold keys can evolve without a migration per threshold. Any missing
   // key falls back to the code defaults in lib/analytics/{alerts,item-analysis}.
   // Shape: { intervention?: Partial<InterventionThresholds>, itemAnalysis?: Partial<ItemAnalysisThresholds> }
-  analyticsSettings  Json?
-  course             Course              @relation(fields: [courseId], references: [id], onDelete: Restrict)
-  classRoom          ClassRoom           @relation(fields: [classId], references: [id], onDelete: Cascade)
-  teacher            StaffProfile        @relation("TeacherOfferings", fields: [teacherId], references: [id], onDelete: Restrict)
-  enrollments        Enrollment[]
-  assessments        Assessment[]
-  calendarEvents     CalendarEvent[]
-  materials          Material[]
-  groups             Group[]
-  ratings            CourseRating[]
+  analyticsSettings   Json?
+  course              Course          @relation(fields: [courseId], references: [id], onDelete: Restrict)
+  classRoom           ClassRoom       @relation(fields: [classId], references: [id], onDelete: Cascade)
+  teacher             StaffProfile    @relation("TeacherOfferings", fields: [teacherId], references: [id], onDelete: Restrict)
+  enrollments         Enrollment[]
+  assessments         Assessment[]
+  calendarEvents      CalendarEvent[]
+  materials           Material[]
+  groups              Group[]
+  ratings             CourseRating[]
 
   @@unique([courseId, classId, teacherId, term, academicYear])
   @@index([classId, courseId])
@@ -221,18 +223,18 @@ model CourseRating {
 }
 
 model Assessment {
-  id            String            @id @default(cuid())
-  offeringId    String
-  courseId      String
-  classId       String
-  title         String
-  type          AssessmentType
-  dueDate       DateTime
-  maxMarks      Int
-  createdById   String
+  id             String          @id @default(cuid())
+  offeringId     String
+  courseId       String
+  classId        String
+  title          String
+  type           AssessmentType
+  dueDate        DateTime
+  maxMarks       Int
+  createdById    String
   // Per-assessment quiz attempt cap. Null means "fall back to the
   // QUIZ_MAX_ATTEMPTS override, then the 3-attempt default".
-  maxAttempts   Int?
+  maxAttempts    Int?
   // When this assessment became visible to students. Null means released to
   // nobody, so it is absent from a student's calendar and planner while staying
   // visible to its teacher.
@@ -244,15 +246,26 @@ model Assessment {
   //     the purge clock, for a whole cohort at once.
   //   - `Grade.publishedAt` is per-*student*: whether one mark has been released.
   // Additive and nullable, so no backfill and no data migration are needed.
-  releasedAt    DateTime?
-  createdAt     DateTime          @default(now())
-  updatedAt     DateTime          @updatedAt
-  offering      CourseOffering    @relation(fields: [offeringId], references: [id], onDelete: Cascade)
-  course        Course            @relation(fields: [courseId], references: [id], onDelete: Restrict)
-  classRoom     ClassRoom         @relation(fields: [classId], references: [id], onDelete: Restrict)
-  createdBy     StaffProfile      @relation("AssessmentCreator", fields: [createdById], references: [id], onDelete: Restrict)
-  submissions   Submission[]
-  calendarLinks CalendarEvent[]
+  releasedAt     DateTime?
+  // How a student may obtain another graded sitting. Defaults to `FIXED`, which is what the
+  // platform already did via `maxAttempts` — so no assessment changes behaviour by gaining this
+  // column.
+  retakePolicy   RetakePolicy    @default(FIXED)
+  // The cap on *retakes* rather than total sittings, for the fixed policy. Null means "fall back
+  // to `maxAttempts`", so a teacher who sets nothing sees exactly today's behaviour.
+  //
+  // Separate from `maxAttempts` because the two answer different questions and the UI copy
+  // cannot be honest with one number: "one retake" after the first sitting is
+  // `maxAttempts = 2`, which reads as two attempts to a teacher who typed "1".
+  retakesAllowed Int?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  offering       CourseOffering  @relation(fields: [offeringId], references: [id], onDelete: Cascade)
+  course         Course          @relation(fields: [courseId], references: [id], onDelete: Restrict)
+  classRoom      ClassRoom       @relation(fields: [classId], references: [id], onDelete: Restrict)
+  createdBy      StaffProfile    @relation("AssessmentCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  submissions    Submission[]
+  calendarLinks  CalendarEvent[]
 
   // Phase 1 assessment spine
   rubric             Rubric?
@@ -263,6 +276,7 @@ model Assessment {
   gradeReviews       GradeReview[]
   finalGrades        Grade[]
   similarityChecks   SimilarityCheck[]
+  retakeRequests     RetakeRequest[]
 
   @@index([offeringId, dueDate])
   @@index([courseId, classId])
@@ -361,6 +375,56 @@ enum QuizAttemptKind {
   PRACTICE
 }
 
+// How a student may obtain another graded sitting beyond their first.
+//
+// `FIXED` is the default because it is what the platform already does: `maxAttempts` allows a
+// fixed number of sittings, and nothing before this column gated them. `APPROVAL` requires an
+// approved `RetakeRequest`, which is the teacher-defined variant the retake spec asked for.
+// `NONE` means one graded sitting only, whatever `maxAttempts` says.
+enum RetakePolicy {
+  NONE
+  FIXED
+  APPROVAL
+}
+
+// A student's request for another graded sitting, and the teacher's decision.
+//
+// Deliberately a record rather than a flag: an approval is a teacher action on a student's
+// record, so it carries who decided it and when, and it writes an `AuditLog` row like every
+// other high-trust mutation. The shape mirrors `GradeReview` — the closest existing
+// pending→decision record — rather than inventing a second pattern.
+enum RetakeRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model RetakeRequest {
+  id           String              @id @default(cuid())
+  assessmentId String
+  studentId    String
+  status       RetakeRequestStatus @default(PENDING)
+  // Null until a teacher decides. Kept as a plain relation so the record survives the teacher's
+  // departure, like every other audit-bearing model here.
+  decidedById  String?
+  decidedAt    DateTime?
+  // The student's own words, and the teacher's, so a decision has context later.
+  requestNote  String?
+  decisionNote String?
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+  assessment   Assessment          @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  student      StudentProfile      @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  decidedBy    StaffProfile?       @relation("RetakeRequestDecider", fields: [decidedById], references: [id], onDelete: SetNull)
+
+  // One request per student per assessment. A rejection does not delete the row — the student
+  // asks again by reverting it to PENDING, which keeps the decision history on one record rather
+  // than growing a pile of rejected attempts.
+  @@unique([assessmentId, studentId])
+  @@index([status, createdAt])
+  @@index([studentId])
+}
+
 enum GradeReviewStatus {
   PENDING
   AUTO_ACCEPTED
@@ -423,21 +487,21 @@ enum SimilarityVerdict {
 // column stays `Unsupported` so the datamodel validates without a live
 // Postgres; embeddings are read and written through raw SQL in lib/vector.
 model Material {
-  id          String         @id @default(cuid())
+  id          String          @id @default(cuid())
   courseId    String
   offeringId  String?
   createdById String?
   title       String
-  kind        MaterialKind   @default(DOCUMENT)
+  kind        MaterialKind    @default(DOCUMENT)
   sourceUrl   String?
   mimeType    String?
   contentText String?
   metadata    Json?
-  createdAt   DateTime       @default(now())
-  updatedAt   DateTime       @updatedAt
-  course      Course         @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+  course      Course          @relation(fields: [courseId], references: [id], onDelete: Cascade)
   offering    CourseOffering? @relation(fields: [offeringId], references: [id], onDelete: SetNull)
-  createdBy   StaffProfile?  @relation("MaterialCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdBy   StaffProfile?   @relation("MaterialCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
   chunks      MaterialChunk[]
 
   @@index([courseId, createdAt])
@@ -445,7 +509,7 @@ model Material {
 }
 
 model MaterialChunk {
-  id             String    @id @default(cuid())
+  id             String                       @id @default(cuid())
   materialId     String
   chunkIndex     Int
   content        String
@@ -453,8 +517,8 @@ model MaterialChunk {
   embeddingModel String?
   embedding      Unsupported("vector(1536)")?
   metadata       Json?
-  createdAt      DateTime  @default(now())
-  material       Material  @relation(fields: [materialId], references: [id], onDelete: Cascade)
+  createdAt      DateTime                     @default(now())
+  material       Material                     @relation(fields: [materialId], references: [id], onDelete: Cascade)
 
   @@unique([materialId, chunkIndex])
   @@index([materialId])
@@ -482,17 +546,17 @@ model Rubric {
 }
 
 model RubricCriterion {
-  id          String             @id @default(cuid())
+  id          String              @id @default(cuid())
   rubricId    String
   order       Int
   label       String
   description String?
   levelsJson  Json?
-  weight      Float              @default(1)
-  maxPoints   Decimal            @db.Decimal(6, 2)
-  createdAt   DateTime           @default(now())
-  updatedAt   DateTime           @updatedAt
-  rubric      Rubric             @relation(fields: [rubricId], references: [id], onDelete: Cascade)
+  weight      Float               @default(1)
+  maxPoints   Decimal             @db.Decimal(6, 2)
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+  rubric      Rubric              @relation(fields: [rubricId], references: [id], onDelete: Cascade)
   suggestions AIGradeSuggestion[]
 
   @@unique([rubricId, order])
@@ -699,21 +763,21 @@ model QuizAttempt {
 }
 
 model QuizResponse {
-  id                 String             @id @default(cuid())
+  id                 String              @id @default(cuid())
   attemptId          String
   questionId         String
   selectedOptionIds  Json?
   answerText         String?
   isCorrect          Boolean?
-  pointsAwarded      Decimal?           @db.Decimal(6, 2)
+  pointsAwarded      Decimal?            @db.Decimal(6, 2)
   rationale          String?
   timeSpentMs        Int?
   // Set by the retention purge when the student's answer content was redacted.
   purgedAt           DateTime?
-  createdAt          DateTime           @default(now())
-  updatedAt          DateTime           @updatedAt
-  attempt            QuizAttempt        @relation(fields: [attemptId], references: [id], onDelete: Cascade)
-  question           Question           @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+  attempt            QuizAttempt         @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  question           Question            @relation(fields: [questionId], references: [id], onDelete: Cascade)
   aiGradeSuggestions AIGradeSuggestion[]
 
   @@unique([attemptId, questionId])
@@ -721,20 +785,20 @@ model QuizResponse {
 }
 
 model CodeTask {
-  id                String           @id @default(cuid())
-  assessmentId      String?          @unique
-  language          String
-  instructions      String?
-  starterCode       String?
-  timeLimitMs       Int              @default(5000)
-  memoryLimitMb     Int              @default(256)
-  metadata          Json?
-  createdAt         DateTime         @default(now())
-  updatedAt         DateTime         @updatedAt
-  assessment        Assessment?      @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
-  testCases         TestCase[]
-  testRuns          TestRun[]
-  similarityChecks  SimilarityCheck[]
+  id               String            @id @default(cuid())
+  assessmentId     String?           @unique
+  language         String
+  instructions     String?
+  starterCode      String?
+  timeLimitMs      Int               @default(5000)
+  memoryLimitMb    Int               @default(256)
+  metadata         Json?
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  assessment       Assessment?       @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  testCases        TestCase[]
+  testRuns         TestRun[]
+  similarityChecks SimilarityCheck[]
 }
 
 model TestCase {
@@ -934,7 +998,9 @@ model LtiRegistration {
   clientId       String
   deploymentId   String
   keyId          String
-  /** Opaque reference to the signing key (env var name / secret-manager id). Never the key. */
+  /**
+   * Opaque reference to the signing key (env var name / secret-manager id). Never the key.
+   */
   privateKeyRef  String?
   lineItemsUrl   String?
   scopes         String[]         @default([])
@@ -949,15 +1015,17 @@ model LtiRegistration {
 }
 
 model LtiUserMapping {
-  id             String         @id @default(cuid())
+  id             String          @id @default(cuid())
   registrationId String
   studentId      String
-  /** The platform-side user id the LMS sends in an AGS score payload. */
+  /**
+   * The platform-side user id the LMS sends in an AGS score payload.
+   */
   ltiUserId      String
-  createdAt      DateTime       @default(now())
-  updatedAt      DateTime       @updatedAt
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
   registration   LtiRegistration @relation(fields: [registrationId], references: [id], onDelete: Cascade)
-  student        StudentProfile @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  student        StudentProfile  @relation(fields: [studentId], references: [id], onDelete: Cascade)
 
   @@unique([registrationId, ltiUserId])
   @@unique([registrationId, studentId])

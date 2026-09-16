@@ -16,7 +16,15 @@ import {
 import type { QuizAnswer } from "@/lib/contracts/quiz"
 import type { Grade, GradeReview } from "@/lib/generated/prisma/client"
 import { selectAdaptiveRetakeQuestions } from "@/lib/analytics/retake"
-import { finalizedAttemptWhere, GRADED, inProgressAttemptWhere, isCounted, isGraded } from "./kinds"
+import {
+  finalizedAttemptWhere,
+  GRADED,
+  inProgressAttemptWhere,
+  isCounted,
+  isGraded,
+  PRACTICE,
+} from "./kinds"
+import { decideRetake, resolveSittingCap } from "./retake-policy"
 import { recordAiSuggestion, writeAuditLog } from "@/lib/grading"
 import { QuizGenerationError } from "@/lib/quiz-generation/errors"
 import { gradeGeneratedQuiz, type GeneratedQuestionForScoring } from "@/lib/quiz-generation/grading"
@@ -352,6 +360,7 @@ async function loadOwnedAttempt(user: AuthUser, attemptId: string) {
       studentId: true,
       attemptNumber: true,
       status: true,
+      kind: true,
       score: true,
       maxScore: true,
       startedAt: true,
@@ -505,6 +514,8 @@ export async function startQuizAttempt(user: AuthUser, input: unknown): Promise<
       type: true,
       dueDate: true,
       maxAttempts: true,
+      retakePolicy: true,
+      retakesAllowed: true,
       questions: {
         orderBy: { order: "asc" },
         include: { options: { orderBy: { order: "asc" } } },
@@ -556,9 +567,42 @@ export async function startQuizAttempt(user: AuthUser, input: unknown): Promise<
     })
     // The cap gate: only graded sittings count, so practice cannot burn a real attempt.
     const used = attempts.filter((attempt) => isCounted(attempt)).length
+
+    // The retake policy decides whether another sitting is permitted *at all*; the cap below
+    // decides whether they are under the limit. Two questions, one place each — see
+    // `./retake-policy`.
+    const [request] = await Promise.all([
+      tx.retakeRequest.findUnique({
+        where: { assessmentId_studentId: { assessmentId: assessment.id, studentId } },
+        select: { status: true },
+      }),
+    ])
+    const policyDecision = decideRetake({
+      policy: assessment.retakePolicy,
+      gradedAttemptsUsed: used,
+      hasApprovedRequest: request?.status === "APPROVED",
+      hasPendingRequest: request?.status === "PENDING",
+    })
+    if (!policyDecision.allowed) {
+      throw new QuizAttemptError(
+        policyDecision.code === "cap"
+          ? 429
+          : policyDecision.code === "approval-required"
+            ? 403
+            : 409,
+        policyDecision.reason,
+      )
+    }
+
+    // `retakesAllowed` converts to total sittings here, so the cap is applied in one place.
+    const sittingCap = resolveSittingCap({
+      policy: assessment.retakePolicy,
+      maxAttempts: resolveMaxAttempts(assessment.maxAttempts),
+      retakesAllowed: assessment.retakesAllowed,
+    })
     const eligibility = evaluateAttemptEligibility({
       existingAttemptCount: used,
-      maxAttempts: resolveMaxAttempts(assessment.maxAttempts),
+      maxAttempts: sittingCap,
       now: new Date(),
       dueDate: assessment.dueDate,
     })
@@ -821,6 +865,15 @@ export async function submitQuizAttempt(
     return created
   })
 
+  // **A practice sitting never enters the grade pipeline.** The auto-scorer writes into a
+  // bucket keyed by a constant criterion label per (assessment, student), so a practice submit
+  // would *supersede the student's graded draft score* — silently replacing the mark their
+  // teacher is about to approve. Nothing here publishes a grade, and the score on the practice
+  // row itself is still written, so the student sees how they did.
+  if (attempt.kind === "PRACTICE") {
+    return getStudentAttempt(user, attemptId)
+  }
+
   if (hasTextQuestions) {
     await recordTextQuizSuggestions({
       assessmentId: rows.assessment.id,
@@ -1012,4 +1065,113 @@ export async function getTeacherAttempt(
     review: review ? toReviewResponse(review) : null,
     grade: grade ? toGradeResponse(grade) : null,
   }
+}
+
+/**
+ * Start a **practice** sitting.
+ *
+ * Practice exists so the retake surface has somewhere to send a student that is not a graded
+ * slot. It never counts against the cap, never enters the grade pipeline, and is never the
+ * source attempt for a further retake — see `./kinds`.
+ *
+ * ## The integrity rule this enforces
+ *
+ * **Practice is only available once the graded sitting is out of reach**: either the deadline
+ * has passed, or the student has already submitted a graded attempt. Starting a practice sitting
+ * before either would hand the student the questions — `getStudentAttempt` returns them — which
+ * is the paper itself, not a revision aid. This is the one rule that makes practice safe rather
+ * than a way around the assessment.
+ *
+ * ## What it does not check
+ *
+ * The retake policy and the cap. Practising is not retaking: a student on `NONE` may still
+ * practise after the deadline, and a student at their cap may still practise. Both are the
+ * point of the feature.
+ */
+export async function startPracticeAttempt(
+  user: AuthUser,
+  input: unknown,
+): Promise<QuizAttemptView> {
+  const request = quizAttemptStartRequestSchema.parse(input)
+  const studentId = await resolveStudentProfileId(user)
+
+  const assessment = await prisma.assessment.findUnique({
+    where: { id: request.assessmentId },
+    select: {
+      id: true,
+      type: true,
+      dueDate: true,
+      questions: {
+        orderBy: { order: "asc" },
+        include: { options: { orderBy: { order: "asc" } } },
+      },
+      offering: {
+        select: {
+          enrollments: { where: { studentId, status: "active" }, select: { id: true } },
+        },
+      },
+    },
+  })
+  if (!assessment) throw new QuizAttemptError(404, "Assessment not found.")
+  if (assessment.type !== "QUIZ") {
+    throw new QuizAttemptError(409, "Only quizzes can be practised.")
+  }
+  if (assessment.offering.enrollments.length === 0) {
+    throw new QuizAttemptError(403, "You are not enrolled in this assessment offering.")
+  }
+  assertDeliverable(assessment.questions)
+
+  const existing = await prisma.quizAttempt.findFirst({
+    where: inProgressAttemptWhere(assessment.id, studentId, PRACTICE),
+    orderBy: { attemptNumber: "desc" },
+    select: { id: true },
+  })
+  if (existing) return getStudentAttempt(user, existing.id)
+
+  const pastDeadline = new Date().getTime() > assessment.dueDate.getTime()
+  if (!pastDeadline) {
+    const gradedAttempts = await prisma.quizAttempt.count({
+      where: { assessmentId: assessment.id, studentId, kind: GRADED, status: "SUBMITTED" },
+    })
+    if (gradedAttempts === 0) {
+      throw new QuizAttemptError(
+        409,
+        "Practice opens once the assessment deadline has passed or you have submitted a graded attempt.",
+      )
+    }
+  }
+
+  const created = await prisma.$transaction(async (tx) => {
+    const attempts = await tx.quizAttempt.findMany({
+      where: { assessmentId: assessment.id, studentId, kind: PRACTICE },
+      select: { attemptNumber: true },
+    })
+    // Numbered within the practice sequence, so a student's practice history reads 1, 2, 3 …
+    // rather than continuing the graded numbering.
+    const attemptNumber =
+      attempts.reduce((max, attempt) => Math.max(max, attempt.attemptNumber), 0) + 1
+
+    const attempt = await tx.quizAttempt.create({
+      data: {
+        assessmentId: assessment.id,
+        studentId,
+        attemptNumber,
+        status: "IN_PROGRESS",
+        kind: PRACTICE,
+      },
+      select: { id: true },
+    })
+
+    await writeAuditLog(tx, {
+      entityType: "QuizAttempt",
+      entityId: attempt.id,
+      action: "quiz_attempt.practice_started",
+      actor: { id: user.id, role: user.role },
+      after: { assessmentId: assessment.id, attemptNumber, kind: PRACTICE },
+    })
+
+    return attempt
+  })
+
+  return getStudentAttempt(user, created.id)
 }
