@@ -437,17 +437,32 @@ table's assessment-kind line — the real payload has no assessment type. Peer "
 workspace returns no due date. The mockup's header actions — "Publish results" is inert there, and "New
 assessment" writes through the gradebook provider, which would not refresh a server-rendered page.
 
-#### Recorded, not fixed: a quiz-scoring defect the port surfaced
+#### Fixed: a quiz-scoring defect the port surfaced
 
-The teacher dashboard's "Cohort average" tile reads **12%** for the demo offering. Checked against the
-database, the arithmetic is correct — the graded attempts scored 4/20, 2/20 and 1/20. The defect is
-underneath: `lib/quiz-generation/generation.ts` persists **every generated question with `points: 1`**
-regardless of the assessment's `maxMarks`, while scoring divides by a `maxScore` taken from `maxMarks`. So
-a 4-question quiz on a 20-mark assessment caps a **perfect** attempt at 20%. The demo's student answered
-all four correctly and is shown at 20%, while the manual `Grade` for the same assessment says 20/20 — two
-subsystems disagreeing about one student, which is why the old student dashboard said 90% and the teacher's
-new one says 12%. **Left unfixed deliberately**: which side is canonical changes what a percentage means
-for every quiz, mark and export, so it is a decision rather than a cleanup.
+The teacher dashboard's "Cohort average" tile read **12%** for the demo offering. Checked against the
+database, the arithmetic was correct — the graded attempts scored 4/20, 2/20 and 1/20. The defect was
+underneath: `lib/quiz-generation/generation.ts` persisted **every generated question with `points: 1`**
+regardless of the assessment's `maxMarks`, while scoring divides by a `maxScore` taken from `maxMarks`. A
+four-question quiz on a twenty-mark assessment therefore capped a **perfect** attempt at 20% — the demo's
+student answered all four correctly and was shown at 20%, while their manual `Grade` for the same
+assessment said 20/20. Two subsystems disagreeing about one student, which is why the old student dashboard
+said 90% and the teacher's new one said 12%.
+
+Fixed by making the points sum to the marks, not by changing what a percentage means. `lib/quiz-generation/points.ts`
+splits `maxMarks` across the assessment's questions and `persistDrafts` reconciles them in the same
+transaction that creates them, so a four-question, twenty-mark quiz now carries `5, 5, 5, 5` and the same
+student reads **100%** from the auto-scored attempt — agreeing with their manual mark rather than
+contradicting it. The demo offering's cohort average moved from **11.67% to 58.33%**.
+
+- **An even split, not a proportional one**, and the tests are what settled it. Scaling each question by its
+  stored value was the first attempt, to preserve a per-question weight set through the edit contract. Two
+  flaws: after the first split the stored values are _derived_, so adding four questions at the default `1`
+  made the existing ones read as five times weightier and devalued the new ones to `0.83` each; and a zero
+  weight produced an unscoreable question. Both are documented in the module, including the trade-off — an
+  explicitly set per-question weight is overwritten on the next generation, which no UI can currently
+  produce, whereas the mis-weighting was reachable.
+- **The remainder is assigned to the last question** so the shares sum to exactly `maxMarks`; a cent out
+  would score a perfect attempt at 99.99%.
 
 ### Small fixes: dark-mode following the user, token contrast, and stale docs
 

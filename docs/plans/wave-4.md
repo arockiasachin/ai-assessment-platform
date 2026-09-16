@@ -476,6 +476,22 @@ while the manual `Grade` for the same assessment says 20/20. Two subsystems disa
 and the two dashboards read different ones — which is why the student's old dashboard said 90% and the
 teacher's new one says 12%.
 
-This is recorded rather than fixed: which side is canonical (question points, or the assessment's
-maxMarks) changes what a percentage means for every quiz, mark and export, so it is a decision and not a
-cleanup.
+**Fixed**, by making the questions' points sum to the assessment's marks rather than by changing what a
+percentage means: `lib/quiz-generation/points.ts` splits `maxMarks` across the assessment's questions,
+and `persistDrafts` reconciles them inside the same transaction that creates them. A four-question,
+twenty-mark quiz now carries `5, 5, 5, 5`, and the same student reads **100%** from the auto-scored
+attempt — agreeing with their manual `Grade` of 20/20 instead of contradicting it. The demo offering's
+cohort average moved from **11.67% to 58.33%**.
+
+Two details that were settled by writing the tests rather than by reasoning:
+
+- **An even split, not a proportional one.** The first implementation scaled each question by its stored
+  value, to preserve a per-question weight set through the edit contract. Two things were wrong with it:
+  after the first split the stored values are _derived_, so adding four questions (which arrive at the
+  default `1`) made the existing ones read as five times weightier and devalued the new ones to `0.83`
+  each; and a zero weight produced an unscoreable question. Both are recorded in the module docblock,
+  along with the trade-off an even split makes — a per-question weight set through the edit contract is
+  overwritten on the next generation, which is unreachable today because no UI writes that field, whereas
+  the mis-weighting was not.
+- **The remainder is assigned to the last question**, so the shares sum to exactly `maxMarks`. A cent out
+  would make a perfect attempt score 99.99%.

@@ -15,6 +15,7 @@ import { loadOwnedAssessment } from "./authz"
 import { QuizGenerationError } from "./errors"
 import { toQuestionMetadata, type GeneratedQuestionProvenance } from "./metadata"
 import { parseGeneratedQuestions } from "./parsing"
+import { distributePointsAcrossQuestions, pointsSumToMarks } from "./points"
 import { QUIZ_GENERATION_PROMPT_VERSION, buildQuizGenerationPrompt } from "./prompt"
 import { retrieveTopicMaterial } from "./retrieval"
 import { serializeQuestionForTeacher } from "./serialize"
@@ -95,6 +96,9 @@ async function persistDrafts(input: PersistDraftInput): Promise<string[]> {
           explanation: question.explanation,
           subtopic: question.subtopic,
           difficulty: question.difficulty,
+          // A neutral starting value; reconciled against the assessment's `maxMarks` once the batch
+          // is written (see the call to `distributePointsAcrossQuestions` below). This used to be
+          // the final value, which is what made a perfect quiz score 20%.
           points: 1,
           status: "draft",
           metadata: toQuestionMetadata(provenance),
@@ -131,6 +135,45 @@ async function persistDrafts(input: PersistDraftInput): Promise<string[]> {
       })
 
       createdIds.push(created.id)
+    }
+
+    /*
+     * Give the questions points that sum to the assessment's marks.
+     *
+     * They used to be created with a flat `points: 1` and left there, while scoring divided the
+     * earned total by `Assessment.maxMarks` — so the two agreed only when a quiz happened to have
+     * exactly as many questions as it had marks. A four-question quiz on a twenty-mark assessment
+     * capped a **perfect** attempt at 20%, which is what the dashboard's "Cohort average" tile
+     * showed before this existed.
+     *
+     * Inside the same transaction, and over the assessment's questions as a whole rather than just
+     * this batch: a teacher can generate more questions later, and distributing per batch would let
+     * the sum drift past `maxMarks` with every addition.
+     */
+    const assessment = await tx.assessment.findUnique({
+      where: { id: input.assessmentId },
+      select: { maxMarks: true },
+    })
+    const maxMarks = Number(assessment?.maxMarks ?? 0)
+
+    const allQuestions = await tx.question.findMany({
+      where: { assessmentId: input.assessmentId },
+      orderBy: [{ order: "asc" }, { id: "asc" }],
+      select: { id: true, points: true },
+    })
+
+    if (allQuestions.length > 0 && maxMarks > 0) {
+      const currentPoints = allQuestions.map((question) => Number(question.points))
+      if (!pointsSumToMarks(currentPoints, maxMarks)) {
+        const shares = distributePointsAcrossQuestions(currentPoints, maxMarks)
+        for (let index = 0; index < allQuestions.length; index += 1) {
+          if (currentPoints[index] === shares[index]) continue
+          await tx.question.update({
+            where: { id: allQuestions[index].id },
+            data: { points: shares[index] },
+          })
+        }
+      }
     }
 
     return createdIds
