@@ -1,44 +1,20 @@
 import { describe, expect, it } from "vitest"
 
-import { courseLetter, gradeBand } from "@/lib/gradebook"
+import { gradeBand } from "@/lib/gradebook"
 import { buildCohortDistribution, DEFAULT_PASS_THRESHOLD } from "@/lib/analytics/cohort"
 import { gradeDistribution } from "@/lib/analytics/legacy"
 
 /**
- * The VIT banding that the client views use.
+ * The VIT banding the client views use.
  *
- * These assert the *corrections*, because each replaced a number that appears in no VIT
- * document: the pass mark was 60 (VIT says 50), `E` did not exist (VIT's lowest passing
- * grade), and `D` sat at 60–69 (VIT puts it at 55–60).
+ * These assert the *corrections*, because each replaced a number that appears in no VIT document:
+ * the pass mark was 60 (VIT says 50), `E` did not exist (VIT's lowest passing grade), and `D` sat
+ * at 60–69 (VIT puts it at 55–60).
+ *
+ * The absolute Table-6 bands themselves are asserted in `analytics-grading-bands.test.ts`, against
+ * `absoluteLetter`. They used to be exercised here through `courseLetter`, a per-mark helper that
+ * was removed: it applied *course* bands to a single assessment's mark, and no surface asked for it.
  */
-
-describe("courseLetter", () => {
-  it("uses VIT's absolute Table-6 bands, not the old local ones", () => {
-    // The old function returned A>=90, B>=80, C>=70, D>=60, F<60 — five letters, no E.
-    expect(courseLetter(95)).toBe("S")
-    expect(courseLetter(88)).toBe("A")
-    expect(courseLetter(75)).toBe("B")
-    expect(courseLetter(65)).toBe("C")
-    expect(courseLetter(57)).toBe("D")
-    expect(courseLetter(52)).toBe("E")
-  })
-
-  it("has an E band, which the previous version lacked entirely", () => {
-    // 50-55 was previously rendered as F — a passing band shown as a failure.
-    expect(courseLetter(50)).toBe("E")
-    expect(courseLetter(54.99)).toBe("E")
-  })
-
-  it("fails only below 50", () => {
-    expect(courseLetter(49.99)).toBe("F")
-    expect(courseLetter(0)).toBe("F")
-  })
-
-  it("puts D at 55-60 rather than 60-69", () => {
-    expect(courseLetter(58)).toBe("D")
-    expect(courseLetter(62)).toBe("C")
-  })
-})
 
 describe("gradeBand", () => {
   it("passes at 50, not 60", () => {

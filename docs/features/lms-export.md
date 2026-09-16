@@ -73,8 +73,15 @@ configuration, the offering's assessment ids, and each student's raw candidates.
    with no usable mark is **excluded and renormalised away**, so an ungraded (or
    unpublished-only) category neither helps nor drags the grade to zero.
    `completedWeight` reports how much of the 100 was used and `incomplete` is set
-   when anything was excluded. The letter is the app-wide `letterGrade` band
-   (A ≥ 90, B ≥ 80, C ≥ 70, D ≥ 60, else F).
+   when anything was excluded.
+4. **Stop there — there is no letter.** The computation carries a percentage and
+   deliberately **no letter**. The platform cannot compute a VIT letter honestly without
+   knowing the course's regime, and this payload is an institutional record where a letter
+   disagreeing with the result sheet is worse than none, so the `letter` column was removed
+   rather than corrected. The offering's category decides the regime (resolved by
+   `lib/analytics/grading-regime.ts`). The only surviving in-app letters bin _marks_ on the
+   absolute scale in the distribution charts, each with a visible note that a VIT letter is
+   awarded for a course grand total.
 
 The service (`lib/lms-export/service.ts`) only loads data; the arithmetic is the
 pure kernel, which is why the invariant tests run without a database.

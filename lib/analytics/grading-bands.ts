@@ -22,18 +22,22 @@ import type { CourseCategory as PrismaCourseCategory } from "@/lib/generated/pri
  * `E`/`F` boundary drops below 50 and on a generous one it stays at 50. The research
  * that corrected this is recorded in `docs/plans/wave-3.md` §7.6.
  *
- * **This is deliberately separate from `letterGrade` in `lib/gradebook.ts`**, which
- * uses fixed absolute bands (`A ≥ 90, B ≥ 80, …`) and feeds the exported final grade.
- * The two are genuinely different scales — and they can disagree:
+ * **The two scales can disagree, and the platform keeps both.**
  *
- * - the bands here are **seven** letters (`S`…`F`), the absolute scale is five (`A`…`F`);
- * - a class averaging 82 with σ 6 puts the `F` floor at 70, so a student on 65 fails
+ * - the relative bands are **seven** letters (`S`…`F`); the absolute Table-6 scale is five
+ *   (`A`…`F`), with VIT's `E`/`F` boundary at 50;
+ * - a class averaging 82 with σ 6 puts the relative `F` floor at 70, so a student on 65 fails
  *   relatively while the absolute scale calls 65 a `D`.
  *
- * Nothing in this module decides which scale owns the exported grade. That is an open
- * decision (`docs/plans/wave-3.md` §3, D1), and this module exists so the relative
- * bands can be computed and tested before it is taken. Where the two are shown
- * together, the UI must say which is which.
+ * Which scale owns an offering's grade is **resolved, not open**: VIT chooses the regime from the
+ * course's category and its headcount, `Course.category` exists, and `resolveGradingRegime`
+ * applies the rule. The exported final grade carries **no letter at all** — it was removed rather
+ * than guessed, because a letter that disagrees with the result sheet is worse than none.
+ *
+ * The one place an absolute letter is still rendered in-app is the mark-distribution charts,
+ * which bin *marks* on the absolute scale and say so in a visible note: a VIT letter is awarded
+ * for a course grand total, not for one assessment. Wherever the two could be confused, the UI
+ * must say which is which.
  *
  * ## Two rules that are easy to get wrong
  *
@@ -290,9 +294,9 @@ export function resolveGradingRegime(
  * bands' convention so the two can share a lookup.
  *
  * The absolute `D`/`E` split is the one the platform has never had: **`D` is 55–60 and
- * `E` is 50–55**. `letterGrade` in `lib/gradebook.ts` has no `E` at all and passes at
- * 60, so it is wrong under this table — see the note on the export defect in
- * `docs/plans/wave-3.md` §7.6.
+ * `E` is 50–55**. The helper this table replaced had no `E` at all and passed at 60, so it was
+ * wrong under Table-6; it has since been removed entirely, leaving `absoluteLetter` as the only
+ * implementation. See the note on the export defect in `docs/plans/wave-3.md` §7.6.
  */
 export const ABSOLUTE_BANDS: readonly GradeBandRange[] = [
   { letter: "S", min: 90, max: null },

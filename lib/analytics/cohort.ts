@@ -5,8 +5,9 @@ import { ABSOLUTE_BANDS, ABSOLUTE_PASS_MARK, absoluteLetter } from "./grading-ba
  *
  * This complements the mark-map helpers in `./legacy`: those read the
  * gradebook's `MarksMap`, these read a list of per-student percentages (built
- * from `QuizAttempt` rows). The letter bands come from the same
- * `letterGrade` function the gradebook uses, so an A here is an A there.
+ * from `QuizAttempt` rows). The histogram bins *marks* on VIT's absolute Table-6 scale
+ * (`absoluteLetter`), and the chart carries a visible note saying so: a VIT letter is awarded
+ * for a course grand total, not for one assessment.
  */
 
 export type CohortScore = {

@@ -395,6 +395,48 @@ define and edit them, and a minimum-CAT gate that applied to anybody.
 - **The create contract is unchanged** (`Quiz | Assignment`). Teachers can weight the kinds that
   exist; authoring descriptive/code/group assessments from the gradebook remains a product decision.
 
+### The three audit follow-ups: similarity key, creator index, and the letters
+
+#### Fixed
+
+- **`SimilarityCheck` could store duplicate pairs.** The unique key led with a nullable
+  `assessmentId` (`[assessmentId, codeTaskId, studentId, comparedStudentId]`), and Postgres treats
+  NULLs as distinct in a unique index — so two identical rows for one student pair could both be
+  inserted whenever `assessmentId` was null. **Reproduced against a real database before changing
+  anything**, and `assessmentId: null` is reachable: `scanCohortSimilarityForTeacher` passes the
+  value it was given. Every reader counts or ranks pairs, so a duplicate is double-counted in the
+  similarity view and can appear twice in a teacher's queue. The parent plan had flagged this as
+  "confirm before surfacing for real"; it was surfaced and never confirmed.
+  `codeTaskId` is now **required** and the key is `[codeTaskId, studentId, comparedStudentId]`, so no
+  nullable column remains in it and uniqueness holds unconditionally. `assessmentId` is kept as a
+  denormalized convenience but removed from the key — it is fully determined by `codeTaskId`
+  (`CodeTask.assessmentId` is `@unique`), so it added nothing and its nullability was the hole.
+  Migration `20260917020000_similarity_check_unique_key` deletes rows with a null `codeTaskId` (no
+  code path can produce one) and collapses duplicates to the most recently checked row; both are
+  no-ops on this repository's databases and both operate on a recomputable analysis table.
+- **`Assessment.createdById` had no index** while every teacher page load filters on it — in both
+  the gradebook's assessment list and the calendar's event query — and the compound indexes lead with
+  `offeringId`/`courseId`, so neither could serve a creator-scoped filter. Added in
+  `20260917030000_assessment_creator_index`. The parent plan §6 listed this and said to add it when
+  the port touched that path.
+- **A course letter could still be produced for a single mark.** `courseLetter(pct)` applied course
+  bands to one assessment's mark, and its only consumer was `GradeBadge`'s `showCourseLetter` prop —
+  whose own docblock anticipated "the one call site that means it", which **never existed**. Both
+  removed, so no surface can render an unjustified letter. The mark-distribution histograms keep
+  their letters: they bin marks on the absolute scale and carry a visible note that a VIT letter is
+  awarded for a course grand total, so the bin is labelled rather than misleading.
+
+#### Documentation
+
+- Four stale claims corrected: `grading-bands.ts` said the absolute scale fed the exported final
+  grade (that letter was removed) and called the regime choice an open decision (`§3, D1` is
+  resolved and `Course.category` exists); `gradebook.ts` referenced a `CourseCategory` field "the
+  schema does not have" (it does); `cohort.ts`/`legacy.ts` named a `letterGrade` function that no
+  longer exists; and `docs/features/analytics.md` gave the pass rate as `>= 60%` when the code uses
+  VIT's 50 — the code had already recorded that 60 "appears in no VIT document". Dated plan sections
+  are left as written.
+- `docs/features/lms-export.md` now states plainly that the export carries **no letter**, and why.
+
 ### wave-4: admin surface, mock-layer scope, and the design-reference tree
 
 Wave 4 closed the mockup-to-backend migration. It landed the admin surface on the shared shell, then

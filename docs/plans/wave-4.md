@@ -303,3 +303,80 @@ were implemented and tested; nothing called them.
   inside the CAT pool, which is what the owner asked for ("others depend on the frequency or
   weights"); pinning explicit per-assessment weights is expressible in the grade configuration and
   in the export request body, but has no editor.
+
+## 9. The three follow-up items the audit left open
+
+`wave-4.md` §6 recorded what the audits raised; the policy wiring closed the largest of them (§8).
+These are the remaining three, all closed here.
+
+### The `SimilarityCheck` unique key could not prevent duplicates — reproduced, then fixed
+
+`docs/plans/mockup-to-backend.md` §6 had flagged this as needing confirmation before similarity was
+surfaced for real, and it never was: the key was
+`@@unique([assessmentId, codeTaskId, studentId, comparedStudentId])` with a **nullable**
+`assessmentId`, and Postgres treats NULLs as distinct in a unique index.
+
+**Confirmed by reproduction, not by reading.** Two identical rows for one student pair were inserted
+successfully with `assessmentId` null — and a null there is reachable, because
+`scanCohortSimilarityForTeacher` passes the value it was given. That matters because every reader
+counts or ranks pairs: a duplicated pair is double-counted in the similarity view and can appear
+twice in a teacher's queue.
+
+The fix removes the possibility rather than arguing about it. `codeTaskId` is now **required** and
+the key is `[codeTaskId, studentId, comparedStudentId]`, so **no nullable column remains in the
+key** and uniqueness holds unconditionally. A similarity check with no code task has nothing to
+compare, and the one writer always requires a task, so requiring it is the honest constraint.
+
+`assessmentId` is kept as a denormalized convenience for the readers but removed from the key: it is
+fully determined by `codeTaskId` (`CodeTask.assessmentId` is `@unique`), so it contributed nothing
+to uniqueness and its nullability was what created the hole.
+
+The migration (`20260917020000_similarity_check_unique_key`) has two destructive steps, both on a
+**derived analysis table** whose rows are reproducible by re-running the scan: rows with a null
+`codeTaskId` are deleted (no code path can produce one, and the column is becoming required), and
+duplicate groups are collapsed to the most recently checked row. Both were **no-ops on this
+repository's databases** (zero rows, zero duplicate groups) and are written to be safe on one where
+they are not.
+
+`tests/similarity-check-unique-key.test.ts` pins it against the database rather than the schema
+text — a `@@unique` in `schema.prisma` only proves something once Postgres agrees, and the whole
+point of this defect is that the two can disagree. It asserts the null case, the non-null case, that
+a different code task and the reverse pair are still allowed, that `codeTaskId` is genuinely NOT
+NULL, and that the old null-unsafe index is gone.
+
+### `Assessment.createdById` was unindexed
+
+§6 said to add it "when the port touches that query path"; the ports are done and the queries are
+live. `lib/gradebook-db.ts` filters `Assessment` by `createdById` on every teacher page load, in
+both the gradebook's assessment list and the calendar's event query, and the model's compound
+indexes lead with `offeringId` and `courseId`, so neither can serve a creator-scoped filter. Added in
+`20260917030000_assessment_creator_index` — purely additive.
+
+### The letter question: one decision, and the code brought in line with it
+
+Wave 3 §7.6 listed the surviving letter sites as "a product call, not a cleanup", and §2.1 recorded
+them as a deliberate deferral — so the two sections disagreed and neither was a decision. Resolved
+as follows.
+
+**The mark-distribution histograms keep their letters, because they are labelled.** `cohort.ts` and
+`legacy.ts` bin _marks_ on VIT's absolute Table-6 scale, and the analytics page carries a visible
+note that a VIT letter is awarded for a course grand total and not for one assessment. A labelled
+bin is an honest bin. That is the decision, and it is now recorded in the module docblocks rather
+than left to be inferred.
+
+**The unjustified per-mark helper is gone.** `courseLetter(pct)` applied _course_ bands to a single
+assessment's mark — exactly the misuse the analytics note warns about — and its only consumer was
+`GradeBadge`'s `showCourseLetter` prop, whose own docblock anticipated "the one call site that means
+it". **No call site ever passed `true`.** Both the helper and the prop are removed, so a course
+letter can no longer be produced for a bare percentage. The Table-6 bands they exercised are still
+asserted against `absoluteLetter` in `analytics-grading-bands.test.ts`.
+
+**Doc drift corrected with it.** Four claims had gone stale as the surrounding work landed:
+`grading-bands.ts` said the absolute scale "feeds the exported final grade" (that letter was
+removed) and called the regime choice "an open decision (`§3, D1`)" (D1 is resolved, and
+`Course.category` exists); `gradebook.ts` said a `CourseCategory` field "the schema does not have"
+(it does); `cohort.ts` and `legacy.ts` named a `letterGrade` function that no longer exists; and
+`docs/features/analytics.md` gave the pass rate as `>= 60%` when the module uses VIT's **50** — the
+code itself had already recorded that 60 was "a number that appears in no VIT document". Dated plan
+sections (`wave-3.md` §3, §7.6) are left as written, because a plan is a record of what was decided
+at the time.

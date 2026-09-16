@@ -1,0 +1,24 @@
+-- Index `Assessment.createdById`.
+--
+-- The teacher readers filter on it directly: `lib/gradebook-db.ts` scopes both the gradebook's
+-- assessment list (`where: { createdById: staff.id }`) and the calendar's event query
+-- (`assessment: { is: { createdById: staff.id } }`) by creator. The model's existing compound
+-- indexes lead with `offeringId` and `courseId`, so neither can serve a creator-scoped filter.
+--
+-- `docs/plans/mockup-to-backend.md` §6 listed this and said to add it "when the port touches that
+-- query path". The ports are done and the queries are live, so it is due rather than speculative:
+-- every teacher page load runs one of these.
+--
+-- Purely additive and non-blocking — no backfill, no rewrite of existing rows beyond the index
+-- itself.
+--
+-- Generated with:
+--   prisma migrate diff \
+--     --from-schema <prisma/schema.prisma at 094fc7b> \
+--     --to-schema prisma/schema.prisma \
+--     --script
+--
+-- Applied with `prisma migrate deploy` (never `migrate dev`, never `db push`).
+
+-- CreateIndex
+CREATE INDEX "Assessment_createdById_idx" ON "Assessment"("createdById");

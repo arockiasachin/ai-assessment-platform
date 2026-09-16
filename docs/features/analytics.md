@@ -102,9 +102,12 @@ to `notes`. The thresholds are exported as
 Per-student percentage is `sum(pointsAwarded) / maxScore * 100`, clamped to
 `[0, 100]`, using the attempt's `maxScore` and falling back to
 `Assessment.maxMarks`. `buildCohortDistribution` returns the count, average,
-pass rate (default pass mark `>= 60%`), high/low, and an A/B/C/D/F histogram
-using the same `letterGrade` bands as the gradebook. This builds on the
-mark-map helpers in `lib/analytics/legacy.ts` (the original `lib/analytics.ts`).
+pass rate (default pass mark `>= 50%` — VIT's Table-6, not the 60 this module used
+before it was corrected), high/low, and an S/A/B/C/D/E/F histogram binning **marks**
+on VIT's absolute Table-6 scale via `absoluteLetter`. The chart carries a visible note
+that a VIT letter is awarded for a course grand total and not for one assessment, because
+the bins are marks. This builds on the mark-map helpers in `lib/analytics/legacy.ts` (the
+original `lib/analytics.ts`).
 
 ### Intervention alerts (`lib/analytics/alerts.ts`)
 

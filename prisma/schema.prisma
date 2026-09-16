@@ -170,24 +170,24 @@ model CourseOffering {
   // than per-enrollment because results are published for a whole course
   // cohort at one moment, and the policy speaks of the whole course.
   resultsPublishedAt  DateTime?
-    // Per-offering analytics settings. JSON so the intervention and item-analysis
-    // threshold keys can evolve without a migration per threshold. Any missing
-    // key falls back to the code defaults in lib/analytics/{alerts,item-analysis}.
-    // Shape: { intervention?: Partial<InterventionThresholds>, itemAnalysis?: Partial<ItemAnalysisThresholds> }
-    analyticsSettings   Json?
-    // Course grading policy. JSON for the same reason as `analyticsSettings`, but
-    // note what is deliberately NOT stored: **category membership**. Only the
-    // policy is persisted — the CAT/FAT split, which assessment is the final one,
-    // and the FAT gate — and the category's assessment list is derived from this
-    // offering's assessments at read time (lib/grading/offering-config.ts).
-    // Storing `assessmentIds` would hard-bind the config to the assessment set at
-    // save time, so a teacher adding an assessment afterwards would silently drop
-    // it from every calculation.
-    // Shape: { catWeight, fatWeight, finalAssessmentId, minimumCatPercent,
-    //          minimumCatCompletionRatio? } — validated by lib/contracts/courses.ts.
-    // Null means "not configured"; readers fall back to DEFAULT_CATEGORY_WEIGHTS
-    // (CAT 40 / FAT 60) and DEFAULT_FAT_MINIMUM_CAT_PERCENT (30).
-    gradingConfig       Json?
+  // Per-offering analytics settings. JSON so the intervention and item-analysis
+  // threshold keys can evolve without a migration per threshold. Any missing
+  // key falls back to the code defaults in lib/analytics/{alerts,item-analysis}.
+  // Shape: { intervention?: Partial<InterventionThresholds>, itemAnalysis?: Partial<ItemAnalysisThresholds> }
+  analyticsSettings   Json?
+  // Course grading policy. JSON for the same reason as `analyticsSettings`, but
+  // note what is deliberately NOT stored: **category membership**. Only the
+  // policy is persisted — the CAT/FAT split, which assessment is the final one,
+  // and the FAT gate — and the category's assessment list is derived from this
+  // offering's assessments at read time (lib/grading/offering-config.ts).
+  // Storing `assessmentIds` would hard-bind the config to the assessment set at
+  // save time, so a teacher adding an assessment afterwards would silently drop
+  // it from every calculation.
+  // Shape: { catWeight, fatWeight, finalAssessmentId, minimumCatPercent,
+  //          minimumCatCompletionRatio? } — validated by lib/contracts/courses.ts.
+  // Null means "not configured"; readers fall back to DEFAULT_CATEGORY_WEIGHTS
+  // (CAT 40 / FAT 60) and DEFAULT_FAT_MINIMUM_CAT_PERCENT (30).
+  gradingConfig       Json?
   course              Course          @relation(fields: [courseId], references: [id], onDelete: Restrict)
   classRoom           ClassRoom       @relation(fields: [classId], references: [id], onDelete: Cascade)
   teacher             StaffProfile    @relation("TeacherOfferings", fields: [teacherId], references: [id], onDelete: Restrict)
@@ -244,6 +244,11 @@ model Assessment {
   type           AssessmentType
   dueDate        DateTime
   maxMarks       Int
+  // Indexed because the teacher readers filter on it directly (`lib/gradebook-db.ts` scopes both
+  // the gradebook's assessment list and the calendar's event query by `createdById`), and the
+  // existing compound indexes lead with `offeringId` / `courseId`, so neither can serve a
+  // creator-scoped filter. Flagged in `docs/plans/mockup-to-backend.md` §6, which said to add it
+  // when the port touched that query path — the ports are done, so it is due.
   createdById    String
   // Per-assessment quiz attempt cap. Null means "fall back to the
   // QUIZ_MAX_ATTEMPTS override, then the 3-attempt default".
@@ -293,6 +298,7 @@ model Assessment {
 
   @@index([offeringId, dueDate])
   @@index([courseId, classId])
+  @@index([createdById])
 }
 
 model Submission {
@@ -959,10 +965,26 @@ model Milestone {
   @@index([groupId, dueDate])
 }
 
+/// One comparison of two students' submissions for a code task.
+///
+/// The unique key is `[codeTaskId, studentId, comparedStudentId]` and `codeTaskId` is
+/// **required** — both deliberately. The key previously led with a nullable `assessmentId`
+/// (`[assessmentId, codeTaskId, studentId, comparedStudentId]`), and Postgres treats NULLs as
+/// distinct in a unique index, so a row with a null `assessmentId` could be inserted twice. Two
+/// identical rows for one pair were reachable, which a pairwise comparison must never allow.
+///
+/// `codeTaskId` is required rather than merely preferred because a similarity check with no code
+/// task has nothing to compare, and the only writer (`scanCohortSimilarityForTeacher`) always
+/// requires one. With no nullable column left in the key, uniqueness holds unconditionally instead
+/// of having to be argued case by case.
+///
+/// `assessmentId` is kept as a denormalized convenience for the readers, which filter by
+/// assessment. It is **fully determined by `codeTaskId`** (`CodeTask.assessmentId` is `@unique`),
+/// so it is deliberately no longer part of the key.
 model SimilarityCheck {
   id                String            @id @default(cuid())
   assessmentId      String?
-  codeTaskId        String?
+  codeTaskId        String
   studentId         String
   comparedStudentId String
   similarity        Float
@@ -975,7 +997,7 @@ model SimilarityCheck {
   student           StudentProfile    @relation("SimilarityCheckStudent", fields: [studentId], references: [id], onDelete: Cascade)
   comparedStudent   StudentProfile    @relation("SimilarityCheckComparedStudent", fields: [comparedStudentId], references: [id], onDelete: Cascade)
 
-  @@unique([assessmentId, codeTaskId, studentId, comparedStudentId])
+  @@unique([codeTaskId, studentId, comparedStudentId])
   @@index([assessmentId])
   @@index([codeTaskId])
 }

@@ -1,5 +1,5 @@
 import { cn } from "@/lib/utils"
-import { courseLetter, gradeBand, type GradeBand } from "@/lib/gradebook"
+import { gradeBand, type GradeBand } from "@/lib/gradebook"
 
 /**
  * Grade band chip.
@@ -21,27 +21,7 @@ const bandStyles: Record<GradeBand, string> = {
   ungraded: "bg-muted text-muted-foreground border-border",
 }
 
-export function GradeBadge({
-  pct,
-  /**
-   * Show a VIT letter beside the percentage.
-   *
-   * **Off by default, and that default is the point.** This badge is mostly rendered on a
-   * *single assessment's* mark — a cell in the gradebook, one row on a student's
-   * assessment list — where a course letter does not apply: VIT bands describe a course
-   * grand total, not a component. Those surfaces show the percentage, which is the whole
-   * truth about a single mark.
-   *
-   * Pass `true` only where the percentage really is a course total, so the one call site
-   * that means it is visible in the diff.
-   */
-  showCourseLetter = false,
-  className,
-}: {
-  pct: number | null
-  showCourseLetter?: boolean
-  className?: string
-}) {
+export function GradeBadge({ pct, className }: { pct: number | null; className?: string }) {
   const band = gradeBand(pct)
   return (
     <span
@@ -51,8 +31,13 @@ export function GradeBadge({
         className,
       )}
     >
+      {/*
+        The percentage, and deliberately **no letter**. A VIT letter describes a course grand
+        total, not one assessment, and every surface this badge appears on is a single mark — a
+        gradebook cell, one row of a student's assessment list. A conditional letter lived here for
+        a while and no call site ever asked for it, which is the honest answer.
+      */}
       {pct === null ? "—" : `${Math.round(pct)}%`}
-      {pct !== null && showCourseLetter && <span>{courseLetter(pct)}</span>}
     </span>
   )
 }

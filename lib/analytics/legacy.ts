@@ -6,7 +6,7 @@ import { ABSOLUTE_BANDS, ABSOLUTE_PASS_MARK, absoluteLetter } from "./grading-ba
  * Mark-map analytics (the original `lib/analytics.ts` helpers, moved verbatim
  * into the `lib/analytics` module). These operate on the gradebook's
  * `MarksMap` shape. The new quiz-attempt analytics in this module build on the
- * same grade bands (`letterGrade`) but read real `QuizAttempt` rows instead.
+ * same absolute bands (`absoluteLetter`) but read real `QuizAttempt` rows instead.
  */
 
 export function scorePct(marks: MarksMap, studentId: string, a: Assessment): number | null {
