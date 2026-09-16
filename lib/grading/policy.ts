@@ -181,10 +181,9 @@ export type FatEligibilityOptions = {
   /**
    * Minimum continuous-assessment percentage required to sit the FAT.
    *
-   * **There is no defensible default, and none is invented.** The institution sets this
-   * per course and it is not recorded anywhere in this repo, so the caller must pass it
-   * — a hard-coded guess here would silently fail students. Pass `null` to disable the
-   * gate entirely.
+   * Defaults to `DEFAULT_FAT_MINIMUM_CAT_PERCENT` (30). Pass `null` to disable the gate
+   * entirely — which is the only honest way to express "this course has no CAT gate",
+   * as distinct from "the gate is at zero".
    */
   minimumCatPercent: number | null
   /**
@@ -196,6 +195,17 @@ export type FatEligibilityOptions = {
    */
   minimumCatCompletionRatio?: number
 }
+
+/**
+ * The default minimum CAT percentage required to sit the FAT — the institution's
+ * figure, supplied by the owner rather than invented.
+ *
+ * **This one is a default and not a required argument, unlike an earlier version of
+ * this module.** It is still overridable per offering, because the number is course
+ * configuration; it simply now has a stated value to fall back on instead of forcing
+ * every caller to pass one.
+ */
+export const DEFAULT_FAT_MINIMUM_CAT_PERCENT = 30
 
 const DEFAULT_CAT_COMPLETION_RATIO = 0.5
 
@@ -242,13 +252,108 @@ export function evaluateFatEligibility(
   return { eligible: true, catPercent: progress.percent }
 }
 
+// ---------------------------------------------------------------------------
+// Passing the course
+// ---------------------------------------------------------------------------
+
+/**
+ * The combined CAT+FAT percentage required to pass.
+ *
+ * **Inclusive, and that is deliberate.** `>= 50` passes, matching VIT's absolute
+ * Table-6, where the `E` band starts *at* 50 — so a student on exactly 50 passes. The
+ * rule was stated as "above 50%", and read literally that would be `> 50` and would fail
+ * a student on exactly 50; the institution's own table says otherwise, so the inclusive
+ * reading is used and the discrepancy is recorded rather than guessed silently.
+ */
+export const PASS_MARK = 50
+
+export type CourseOutcome =
+  | { status: "pass"; grandTotal: number }
+  | { status: "fail"; grandTotal: number; reason: "below-pass-mark" }
+  /** The CAT gate was not cleared, so the FAT cannot be sat and the course cannot pass. */
+  | { status: "fail"; reason: "fat-ineligible"; catPercent: number; minimum: number }
+  /** Not judged: too little of the CAT pool is marked, or the FAT has not been taken. */
+  | { status: "not-judged"; reason: "insufficient-cat-work" | "no-grand-total" }
+
+export type CourseOutcomeOptions = {
+  minimumCatPercent?: number | null
+  minimumCatCompletionRatio?: number
+  passMark?: number
+}
+
+/**
+ * The whole verdict for one student: the CAT gate, then the combined pass mark.
+ *
+ * Modelled as a four-way union rather than a boolean for the same reason
+ * `FatEligibility` is: **"fail" and "not judged yet" are different facts**, and only one
+ * of them is about the student. A course mid-term has students with no FAT mark and a
+ * partly-marked CAT pool, and reporting those as failures would be wrong for every one
+ * of them.
+ *
+ * Order matters. The CAT gate is checked **first**, because a student who may not sit the
+ * FAT cannot have a grand total at all — so a missing grand total is expected for them,
+ * not an unexplained gap.
+ */
+export function evaluateCourseOutcome(
+  progress: CatProgress,
+  grandTotal: number | null,
+  options: CourseOutcomeOptions = {},
+): CourseOutcome {
+  const minimum =
+    options.minimumCatPercent === undefined
+      ? DEFAULT_FAT_MINIMUM_CAT_PERCENT
+      : options.minimumCatPercent
+
+  const eligibility = evaluateFatEligibility(progress, {
+    minimumCatPercent: minimum,
+    minimumCatCompletionRatio: options.minimumCatCompletionRatio,
+  })
+
+  if (!eligibility.eligible) {
+    if (eligibility.reason === "insufficient-cat-work") {
+      return { status: "not-judged", reason: "insufficient-cat-work" }
+    }
+    return {
+      status: "fail",
+      reason: "fat-ineligible",
+      catPercent: eligibility.catPercent,
+      minimum: eligibility.minimum,
+    }
+  }
+
+  if (grandTotal === null) {
+    return { status: "not-judged", reason: "no-grand-total" }
+  }
+
+  const passMark = options.passMark ?? PASS_MARK
+  return grandTotal >= passMark
+    ? { status: "pass", grandTotal }
+    : { status: "fail", grandTotal, reason: "below-pass-mark" }
+}
+
 /**
  * CAT progress from an assessment's marks.
  *
+ * **Precondition: pass one entry per CAT assessment, including the unmarked ones as
+ * `included: false`.** `totalCount` is the array length, so a caller who passes only the
+ * marked assessments gets `completionRatio: 1` and a fully-marked score from a
+ * part-marked pool — which then clears the `insufficient-cat-work` guard and judges a
+ * student on evidence that does not exist. There is a test that demonstrates exactly
+ * that outcome, so the trap is visible rather than only described here.
+ *
+ * The shape of a correct call:
+ *
+ * ```ts
+ * catProgress(assessments.map((a) => ({
+ *   percentage: marksByAssessment.get(a.id)?.percentage ?? 0,
+ *   included: isMarkIncludedInMean(a, marksByAssessment.get(a.id) ?? null),
+ * })))
+ * ```
+ *
  * `catPercent` is the **weighted average of percentages**, which is what
- * `computeFinalGrade` produces for a category — so the eligibility verdict and the
- * grand total cannot disagree about how the CAT pool scored. Missing marks are skipped
- * rather than counted as zero, for the same reason as `isMarkIncludedInMean`.
+ * `computeFinalGrade` produces for a category — so the eligibility verdict and the grand
+ * total cannot disagree about how the CAT pool scored. Missing marks are skipped rather
+ * than counted as zero, for the same reason as `isMarkIncludedInMean`.
  */
 export function catProgress(
   marks: readonly { percentage: number; weight?: number; included: boolean }[],

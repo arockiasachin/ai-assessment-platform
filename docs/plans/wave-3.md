@@ -491,10 +491,42 @@ cannot sit the exam when the truth is that their teacher has not finished markin
 is the same distinction `lib/student-assessments.ts` already draws between _not marked_ and
 _marked but unreleased_.
 
-**The minimum itself has no default and none was invented.** The institution sets it per
-course and it is not recorded anywhere in this repo, so the caller must supply it; passing
-`null` disables the gate. A hard-coded guess here would silently fail students, which is
-worse than asking.
+**The minimum is 30%, supplied by the owner.** `DEFAULT_FAT_MINIMUM_CAT_PERCENT = 30`,
+overridable per offering, and `null` still means "this course has no CAT gate" — which is
+a different statement from "the gate is at zero".
+
+### Passing the course
+
+A student passes when their **combined CAT+FAT total is at least 50%**, checked _after_
+the CAT gate — a student who may not sit the FAT cannot have a grand total, so a high
+total must not rescue them. `evaluateCourseOutcome` returns a four-way union:
+
+| Outcome                    | Meaning                                                                                                                                   |
+| -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| `pass`                     | gate cleared, total at or above 50                                                                                                        |
+| `fail` / `below-pass-mark` | gate cleared, total short — carries the total                                                                                             |
+| `fail` / `fat-ineligible`  | the CAT gate was not cleared, so the FAT cannot be sat                                                                                    |
+| `not-judged`               | **not a failure.** Either too little of the CAT pool is marked (`insufficient-cat-work`) or the FAT has not been taken (`no-grand-total`) |
+
+`not-judged` is the outcome that matters most in practice: mid-term, most students have a
+part-marked CAT pool and no FAT, and reporting them as failures would be wrong for all of
+them. It is the same distinction `lib/student-assessments.ts` already draws between
+_not marked_ and _marked but unreleased_.
+
+**The pass mark is inclusive — `>= 50` passes.** The rule was stated as "above 50%", and
+read literally that is `> 50`, which would fail a student on exactly 50. VIT's absolute
+Table-6 puts the `E` band at 50–55, inclusive of 50, so the inclusive reading is used and
+the discrepancy is pinned by a test rather than assumed.
+
+### One contract that cannot be enforced from inside
+
+`catProgress` takes **one entry per CAT assessment**, unmarked ones included as
+`included: false`. `totalCount` is the array length, so a caller who passes only the
+marked assessments reports 100% completion from a part-marked pool, which clears the
+insufficient-evidence guard and judges a student on evidence that does not exist. That is
+a precondition the function cannot check, so it is documented on the function _and_
+demonstrated by a test that asserts the wrong answer on purpose — the failure mode is
+visible in the suite rather than only in prose.
 
 ### D5 is resolved BY this
 

@@ -4,11 +4,14 @@ import {
   CAT_CATEGORY_ID,
   catProgress,
   DEFAULT_CATEGORY_WEIGHTS,
+  DEFAULT_FAT_MINIMUM_CAT_PERCENT,
+  evaluateCourseOutcome,
   deriveDefaultGradingConfig,
   evaluateFatEligibility,
   FAT_CATEGORY_ID,
   isMarkIncludedInMean,
   isPastDue,
+  PASS_MARK,
   type CatProgress,
   type GradingAssessmentInput,
 } from "@/lib/grading/policy"
@@ -197,6 +200,36 @@ describe("catProgress", () => {
     expect(progress.completionRatio).toBe(0)
   })
 
+  it("counts unmarked assessments when the caller passes them, which is required", () => {
+    // The correct shape: one entry per CAT assessment, unmarked ones as included:false.
+    // 1 of 3 marked is 33% complete, so the outcome is NOT judged — the student is not
+    // failed on a pool that is two-thirds unmarked.
+    const progress = catProgress([
+      { percentage: 70, included: true },
+      { percentage: 0, included: false },
+      { percentage: 0, included: false },
+    ])
+    expect(progress.totalCount).toBe(3)
+    expect(progress.completionRatio).toBeCloseTo(0.333, 3)
+    expect(progress.percent).toBe(70)
+    expect(evaluateCourseOutcome(progress, null)).toEqual({
+      status: "not-judged",
+      reason: "insufficient-cat-work",
+    })
+  })
+
+  it("misreports completion if the caller passes only the marked assessments", () => {
+    // **This test asserts the WRONG answer on purpose.** The precondition is that the
+    // caller passes one entry per CAT assessment; passing only the marked one makes
+    // `totalCount` 1, so completion reads as 100% and the insufficient-evidence guard
+    // is cleared. That is the trap this module cannot catch from the inside, and it is
+    // pinned here so the failure mode is visible in the suite rather than only in prose.
+    const misused = catProgress([{ percentage: 70, included: true }])
+    expect(misused.totalCount).toBe(1)
+    expect(misused.completionRatio).toBe(1)
+    expect(misused.percent).toBe(70)
+  })
+
   it("handles an empty pool without dividing by zero", () => {
     expect(catProgress([])).toEqual({
       markedCount: 0,
@@ -274,6 +307,113 @@ describe("evaluateFatEligibility", () => {
       reason: "below-cat-minimum",
       catPercent: 0,
       minimum: 50,
+    })
+  })
+})
+
+describe("the FAT minimum default", () => {
+  it("defaults to 30% so callers need not pass one", () => {
+    expect(DEFAULT_FAT_MINIMUM_CAT_PERCENT).toBe(30)
+  })
+
+  it("applies the default when options omit it", () => {
+    const full = (percent: number | null): CatProgress => ({
+      markedCount: 10,
+      totalCount: 10,
+      completionRatio: 1,
+      percent,
+    })
+    expect(evaluateFatEligibility(full(31), { minimumCatPercent: null }).eligible).toBe(true)
+    // Passing `undefined` is not expressible on the type, but the course outcome treats
+    // an omitted minimum as the default, which is what these assert.
+    expect(evaluateCourseOutcome(full(31), null).status).not.toBe("fail")
+    expect(evaluateCourseOutcome(full(29), null)).toMatchObject({
+      status: "fail",
+      reason: "fat-ineligible",
+      catPercent: 29,
+      minimum: 30,
+    })
+  })
+})
+
+describe("evaluateCourseOutcome", () => {
+  const fullyMarked = (percent: number | null): CatProgress => ({
+    markedCount: 10,
+    totalCount: 10,
+    completionRatio: 1,
+    percent,
+  })
+
+  it("passes a student at or above the pass mark", () => {
+    expect(evaluateCourseOutcome(fullyMarked(60), 60)).toEqual({ status: "pass", grandTotal: 60 })
+  })
+
+  it("passes a student on exactly 50", () => {
+    // Inclusive: VIT's absolute E band starts AT 50. "Above 50%" read literally would
+    // fail this student, so the boundary is pinned rather than assumed.
+    expect(evaluateCourseOutcome(fullyMarked(60), PASS_MARK)).toEqual({
+      status: "pass",
+      grandTotal: PASS_MARK,
+    })
+  })
+
+  it("fails a student just below the pass mark", () => {
+    expect(evaluateCourseOutcome(fullyMarked(60), 49.99)).toEqual({
+      status: "fail",
+      grandTotal: 49.99,
+      reason: "below-pass-mark",
+    })
+  })
+
+  it("fails a student below the CAT minimum without consulting the grand total", () => {
+    // The gate comes first, because a student who may not sit the FAT cannot have a
+    // grand total — a high one must not rescue them.
+    expect(evaluateCourseOutcome(fullyMarked(20), 95)).toMatchObject({
+      status: "fail",
+      reason: "fat-ineligible",
+      catPercent: 20,
+      minimum: 30,
+    })
+  })
+
+  it("does not judge when too little of the CAT pool is marked", () => {
+    // Not a failure: the marking is unfinished. Reporting it as a fail would be wrong
+    // for every student mid-term.
+    const partial: CatProgress = {
+      markedCount: 2,
+      totalCount: 10,
+      completionRatio: 0.2,
+      percent: 10,
+    }
+    expect(evaluateCourseOutcome(partial, 80)).toEqual({
+      status: "not-judged",
+      reason: "insufficient-cat-work",
+    })
+  })
+
+  it("does not judge when the FAT has not been taken", () => {
+    expect(evaluateCourseOutcome(fullyMarked(60), null)).toEqual({
+      status: "not-judged",
+      reason: "no-grand-total",
+    })
+  })
+
+  it("honours an overridden pass mark and CAT minimum", () => {
+    expect(evaluateCourseOutcome(fullyMarked(55), 55, { passMark: 60 })).toMatchObject({
+      status: "fail",
+      reason: "below-pass-mark",
+    })
+    expect(evaluateCourseOutcome(fullyMarked(55), 55, { minimumCatPercent: 60 })).toMatchObject({
+      status: "fail",
+      reason: "fat-ineligible",
+    })
+  })
+
+  it("can disable the CAT gate entirely", () => {
+    // `null` means "this course has no CAT gate", distinct from "the gate is at zero".
+    expect(evaluateCourseOutcome(fullyMarked(5), 55, { minimumCatPercent: null })).toEqual({
+      status: "pass",
+      grandTotal: 55,
     })
   })
 })
