@@ -402,17 +402,103 @@ were not recorded when it came back, which is itself a gap: each one changes a c
 number, so a slice that answers it silently would produce a page whose figures cannot be
 reconciled with another page's. Listed here so they are decided rather than discovered.
 
-| #      | Question                                                                                                                          | Why it matters                                                                                                                                                                 | Recommended answer                                                                                                                                                                             |
-| ------ | --------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **U1** | Which timestamp dates a weekly mark — `Assessment.dueDate`, `QuizAttempt.submittedAt`, or `Grade.publishedAt`?                    | It decides which week a point lands in, and therefore the whole trend chart.                                                                                                   | **`Assessment.dueDate`** — the only anchor that exists for all four assessment types; quizzes-only would drop three of the four.                                                               |
-| **U2** | Is a week's value the published average of that week's assessments, or a running mean up to that week?                            | A running mean's last point always equals the cohort mean, so the chart's end duplicates a KPI tile.                                                                           | **The week's own assessments**, not a running mean.                                                                                                                                            |
-| **U3** | What is a "grand total" with no `weightPercent`? Unweighted mean of published percentages, or points-weighted across assessments? | B3's at-risk boundary and the dashboards' cohort mean both need it, and the two forms give different students.                                                                 | The unweighted mean, matching `lib/teacher-roster.ts:100-102`, and say so — VIT's CAT+FAT pooling is not representable without weights.                                                        |
-| **U4** | Does a student with **zero published marks** belong on the at-risk list?                                                          | B3 cannot place them: there is no total to compare against the boundary. The mockup's own hint says "or no work submitted".                                                    | A **separate** "no published work" group, never folded into the σ comparison — otherwise the boundary decides something it has no information about.                                           |
-| **U5** | Is σ computed over all enrolled students, or only those with ≥1 published mark?                                                   | The boundary moves depending on how many students have been marked, so an unmarked student would silently change who is at risk.                                               | Only those with ≥1 published mark, which is what "published marks only" implies — but state it.                                                                                                |
-| **U6** | What minimum cohort size makes σ meaningful?                                                                                      | `standardDeviation` returns `0` for one student, so the boundary equals the mean and the roster **flags half the class**. The demo cohort is three.                            | A minimum-n guard. Note `minClassSampleSize = 5` exists in the _intervention alerts_ — reusing it silently couples two unrelated rules, so either reuse it deliberately or add a distinct one. |
-| **U7** | Is B1's mastery published-gated like B3/B5, or attempt-gated?                                                                     | On one page those are two different populations, so the same student can be counted in one card and not another.                                                               | Match B3/B5: published-gated, so every card on the page describes one cohort.                                                                                                                  |
-| **U8** | Does the "Analytics settings" button get wired to the existing route, or dropped?                                                 | The route exists (`app/api/teacher/analytics/settings/route.ts`) and **no UI calls it**; the mockup's button is inert. Porting it inert violates the dangling-affordance rule. | Decide explicitly. Wiring it is a real slice (form + contract + tests), not a port, so dropping it from this wave is defensible — but it must not ship as a dead button.                       |
+| #      | Question                                                                                                                                                              | Why it matters | Recommended answer |
+| ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------- | ------------------ |
+| **U1** | **RESOLVED — `Assessment.dueDate`.** Reinforced by the owner's rule that a mean is generated only after the due date.                                                 |
+| **U2** | **RESOLVED — the week's own assessments**, not a running mean.                                                                                                        |
+| **U3** | **RESOLVED — weighted, and the mechanism already existed.** See §9.                                                                                                   |
+| **U4** | **RESOLVED — a separate "no published work" group**, never folded into the σ comparison.                                                                              |
+| **U5** | **RESOLVED — only marks that are published _and_ past due.** See §9.                                                                                                  |
+| **U6** | **RESOLVED — use VIT's own ≤ 10 rule; no new constant.** Below it the course is graded absolutely, so σ is never consulted. `resolveGradingRegime` already does this. |
+| **U7** | **RESOLVED — published-gated**, matching B3/B5, so every card on a page describes one cohort.                                                                         |
+| **U8** | **RESOLVED — dropped from this wave**, and it must not ship inert. Wiring it is its own slice.                                                                        |
 
 **Two of these are the same question as D1**, one level down: U3 and U5 both ask _who is
 in the cohort and what is its centre_. D1 settled which banding applies; it did not settle
 which students the banding is computed over.
+
+---
+
+## 9. Course grading policy — the weights, the FAT gate, and what may enter a mean
+
+Resolves U3, U5 and D5 together, because they were one question: _what combines into a
+grand total, and which marks are allowed to contribute_.
+
+**The mechanism already existed and was not being used.** `lib/lms-export/final-grade.ts`
+computes a weighted grand total from a `FinalGradeConfig` of categories summing to 100,
+each holding assessments with optional relative weights — and it already applies the
+published-only rule and _excludes_ missing assessments rather than zero-filling them.
+Two things were missing:
+
+1. **Persistence.** The config was request-body only, so a teacher could pass weights to
+   one export call and lose them. Weights are course configuration: it now belongs on the
+   offering (`CourseOffering.gradingConfig`).
+2. **A derivable default.** `defaultFinalGradeConfig` weights everything equally in one
+   category — honest, but it does not express the CAT/FAT shape a VIT course has.
+
+`lib/grading/policy.ts` supplies both, plus the FAT gate.
+
+### The model
+
+| Pool    | What it holds                                                                                                                                                          | Default weight |
+| ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------- |
+| **CAT** | every mini-assessment through the term, weighted **equally** unless the teacher pins explicit weights — so the relative weight follows how much assessed work there is | 40             |
+| **FAT** | a **single** assessment at the end of the term                                                                                                                         | 60             |
+
+**The default is CAT 40 / FAT 60, and it is a stored default rather than a constant —
+deliberately.** VIT's FFCS regulations (v4.0 §9.1, v5.0) state the _opposite_ for theory:
+CAM 60 + FAT 40, the continuous pool carrying the larger share. The classic VIT split is
+CAT 40 + FAT 60. Both are real institutional configurations, so the number belongs to the
+course, not to the code, and a teacher edits it at creation or during the term.
+
+**The FAT is identified by due date**, because nothing in the schema marks one — there is
+no `FAT` in `AssessmentType` and no `isFinal` flag. That is a heuristic and it is labelled
+as one: an offering whose last-due assessment is not its final exam gets a wrong default,
+and the teacher corrects it. A flag was not added instead because a course can legitimately
+grade its final as several components, which the category model already expresses and a
+single flag cannot.
+
+### Which marks may enter a mean
+
+`isMarkIncludedInMean` requires **two** conditions:
+
+- **the due date has passed** — a mean taken mid-term must not contain an assessment
+  students have not sat, and this is also what keeps a weekly point stable while its
+  assessment is open; and
+- **the mark is published** — unpublished stays _excluded_, never zero.
+
+**"Exclude 0" is deliberately not implemented as "drop the value zero".** A student who
+submitted and scored 0 has a real mark, and dropping it would inflate their average —
+the same error as zero-filling, in the opposite direction, and equally silent. What is
+excluded is a mark that _does not exist_: no submission, or not yet published. That is
+the failure mode the rule is protecting against, and §8/U5 shows why it matters — treating
+five unmarked students as zero drove a boundary from 38.01 to −23.52, which flags nobody
+and makes the roster empty itself as marking gets under way.
+
+### FAT eligibility
+
+`evaluateFatEligibility` gates the final assessment on a **minimum CAT percentage**, and
+returns **three** outcomes rather than a boolean:
+
+| Outcome                 | Meaning                                                                        |
+| ----------------------- | ------------------------------------------------------------------------------ |
+| `eligible`              | the CAT pool is marked enough and the student is at or above the minimum       |
+| `below-cat-minimum`     | judged, and the student is short — carries their percentage and the minimum    |
+| `insufficient-cat-work` | **not judged.** Too little of the CAT pool is marked, so the platform abstains |
+
+The third outcome is the point. Collapsing it into "ineligible" would tell a student they
+cannot sit the exam when the truth is that their teacher has not finished marking — and it
+is the same distinction `lib/student-assessments.ts` already draws between _not marked_ and
+_marked but unreleased_.
+
+**The minimum itself has no default and none was invented.** The institution sets it per
+course and it is not recorded anywhere in this repo, so the caller must supply it; passing
+`null` disables the gate. A hard-coded guess here would silently fail students, which is
+worse than asking.
+
+### D5 is resolved BY this
+
+There were three disagreeing "class averages". With a persisted config and one inclusion
+rule there is now **one** definition: the weighted grand total over past-due published
+marks, computed by `computeFinalGrade`. The dashboards, the analytics page and the at-risk
+roster all read that, so they cannot disagree about the same class.
