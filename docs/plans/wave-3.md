@@ -30,16 +30,40 @@ routes, reads Prisma directly) and the remaining decision-list items (Wave 5).
 
 ## 2. Slices
 
-| Slice  | Content                                                                         | Ships independently  |
-| ------ | ------------------------------------------------------------------------------- | -------------------- |
-| **T1** | `lib/analytics/statistics.ts` + `weekly-series.ts` — the pure computable core.  | **landed** `8bad3a2` |
-| **T2** | Cohort mastery (B1) + at-risk roster (B3) + median tile (B5), as readers.       | yes                  |
-| **T3** | The trend series wired to real attempts (B2), replacing any synthesised points. | yes                  |
-| **T4** | `teacher/analytics` page on the derived metrics (depends on T2, T3).            | yes                  |
-| **T5** | `QuizAttempt.kind` + retake policy + practice pool (B7, schema change).         | yes                  |
-| **T6** | `student/retake` page + `RetakeRecommendation` (B6, depends on T5).             | yes                  |
-| **T7** | `GradebookProvider` → server props, then the two dashboards.                    | yes                  |
-| **T8** | `teacher/quiz-generation` Topics tab (depends on T2's mastery shape).           | yes                  |
+| Slice  | Content                                                                         | Status                                                                            |
+| ------ | ------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| **T1** | `lib/analytics/statistics.ts` + `weekly-series.ts` — the pure computable core.  | **landed** `8bad3a2`; VIT σ-bands + absolute regime `2936be3`, `3d1c30f`          |
+| **T2** | Cohort mastery (B1) + at-risk roster (B3) + median tile (B5), as readers.       | **landed** — at-risk roster `8a8802b`/`d40d3d8`; **B1 dropped by D4** (see below) |
+| **T3** | The trend series wired to real attempts (B2), replacing any synthesised points. | **landed** `8a8802b`/`d40d3d8` (U1/U2 decided)                                    |
+| **T4** | `teacher/analytics` page on the derived metrics (depends on T2, T3).            | **landed** `c15f05b`; on `AppShell`                                               |
+| **T5** | `QuizAttempt.kind` + retake policy + practice pool (B7, schema change).         | **landed** `2d4122f`; policy + requests `7e61488`                                 |
+| **T6** | `student/retake` page + `RetakeRecommendation` (B6, depends on T5).             | **landed** `a305bea` — practise + request, on `AppShell`                          |
+| **T7** | `GradebookProvider` → server props, then the two dashboards.                    | **landed** `bd2efb5`; dashboards `68369cc`                                        |
+| **T8** | `teacher/quiz-generation` Topics tab (depends on T2's mastery shape).           | **landed** `89d995c` — a token list, not a mastery chart (D4)                     |
+
+## 2.1 What shipped, and the two places it differs from the plan
+
+**Wave 3 is complete.** 1148 tests, verify and build clean. Three things diverged from the plan as
+written, each recorded where it happened rather than smoothed over:
+
+- **B1's mastery chart was dropped, not built (D4).** `Question.subtopic` is model-generated free
+  text with no controlled vocabulary, and the seeded assessment covers three tags with 6/3/3
+  responses — every row would have read "insufficient data" under B1's own threshold. What shipped
+  instead is a **token list** (`lib/analytics/subtopics.ts`): which topics an assessment covers and
+  how much of each, with no per-topic score. §7.1 has the evidence.
+- **A twelfth slice was needed: `CourseCategory`.** VIT runs two grading regimes and the platform
+  had no field to choose between them, so neither the exported letter nor an at-risk boundary could
+  be computed honestly. `09dbd21` added the column, a reader, and a write path; the exported letter
+  was _removed_ rather than corrected (`e0a7fc6`) because without the field it could not be.
+- **`GradebookProvider` was converted via a nested provider**, which the earlier blocker analysis
+  had called impractical. `app/(dashboard)/layout.tsx` seeds it, so `/quiz` and `/mockup` keep their
+  existing behaviour. §7.4 and the audit doc record it as resolved.
+
+Two deferred, both with a reason rather than an omission: **`StudentAssessmentsView` and
+`TeacherSubmissionsManager`** keep their page-scoped client fetches (a prop per page, not a layout),
+and **the in-app letter sites** show VIT's _absolute_ bands because a relative band needs the
+cohort's σ at the call site — correct for the demo (5 students → absolute) and labelled on the
+analytics page.
 
 T1 is landed because Wave 2's §5 already decided the metric definitions, so it needed
 no research. T2 and T3 are the readers over those pure functions. The page slices come
