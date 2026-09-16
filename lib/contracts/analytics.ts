@@ -206,6 +206,37 @@ export const analyticsAssessmentSummarySchema = z.object({
 })
 export type AnalyticsAssessmentSummary = z.infer<typeof analyticsAssessmentSummarySchema>
 
+/**
+ * The grading regime in force for an offering, as the analytics page reports it.
+ *
+ * `notice` is present exactly when the regime is absolute, and carries the reason so the UI
+ * can explain a fallback rather than silently substituting one banding for another. That is
+ * the whole point: a relative-graded class shown absolute bands with no explanation looks
+ * like a correct grade that happens to be wrong.
+ */
+export const gradingRegimeSummarySchema = z.object({
+  regime: z.enum(["relative", "absolute"]),
+  /** Why, when absolute. Absent for relative. */
+  reason: z
+    .enum(["category-unset", "small-class", "non-theory-course", "awaiting-base-metrics"])
+    .nullable(),
+  category: z.string().nullable(),
+  enrolledCount: z.number().int(),
+  publishedCount: z.number().int(),
+  /** Present for relative. */
+  mean: z.number().nullable(),
+  standardDeviation: z.number().nullable(),
+  notice: z
+    .object({
+      tone: z.enum(["info", "warning"]),
+      title: z.string(),
+      detail: z.string(),
+      progress: z.object({ available: z.number().int(), required: z.number().int() }).nullable(),
+    })
+    .nullable(),
+})
+export type GradingRegimeSummary = z.infer<typeof gradingRegimeSummarySchema>
+
 export const teacherAnalyticsOverviewResponseSchema = z.object({
   success: z.literal(true),
   offerings: z.array(analyticsOfferingSummarySchema),
@@ -213,6 +244,7 @@ export const teacherAnalyticsOverviewResponseSchema = z.object({
   assessments: z.array(analyticsAssessmentSummarySchema),
   alerts: z.array(interventionAlertSchema),
   thresholds: interventionThresholdsSchema,
+  gradingRegime: gradingRegimeSummarySchema,
   generatedAt: z.string(),
 })
 export type TeacherAnalyticsOverviewResponse = z.infer<

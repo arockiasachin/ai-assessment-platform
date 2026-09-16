@@ -5,6 +5,7 @@ import { AlertTriangle, BarChart3, Loader2 } from "lucide-react"
 
 import { ClassAverageChart, GradeDistributionChart } from "@/components/charts"
 import { Badge } from "@/components/ui/badge"
+import { Callout } from "@/components/ui/callout"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import {
@@ -158,6 +159,38 @@ export function TeacherAnalyticsDashboard({
 
   return (
     <div className="space-y-6">
+      {/* The grading regime, and the explanation when it is a fallback.
+            Rendered above everything else because it qualifies every number below it: the
+            cohort distribution and the pass rate are absolute-band figures, and a
+            relative-graded class shown them with no explanation would look like a correct
+            grade that happens to be wrong. */}
+      {overview?.gradingRegime.notice && (
+        <Callout
+          tone={overview.gradingRegime.notice.tone}
+          title={overview.gradingRegime.notice.title}
+          icon={AlertTriangle}
+        >
+          <p>{overview.gradingRegime.notice.detail}</p>
+          {overview.gradingRegime.notice.progress && (
+            <p className="mt-1 font-mono text-xs tabular-nums">
+              {overview.gradingRegime.notice.progress.available} of{" "}
+              {overview.gradingRegime.notice.progress.required} published totals
+            </p>
+          )}
+        </Callout>
+      )}
+
+      {overview?.gradingRegime.regime === "relative" && (
+        <Callout tone="info" title="Graded on relative bands" icon={BarChart3}>
+          <p>
+            Class mean {formatPercent(overview.gradingRegime.mean)} · standard deviation{" "}
+            {formatPercent(overview.gradingRegime.standardDeviation)}, over{" "}
+            {overview.gradingRegime.publishedCount} published totals. Bands are the class&apos;s own
+            mean ± kσ.
+          </p>
+        </Callout>
+      )}
+
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="flex items-center gap-2 text-base">

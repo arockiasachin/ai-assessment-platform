@@ -20,6 +20,8 @@ import {
   type InterventionThresholds,
 } from "./alerts"
 import { buildCohortDistribution, type CohortDistribution, type CohortScore } from "./cohort"
+import { gatherRegimeInputs } from "./grading-regime"
+import { resolveRegimeForCourse } from "./grading-bands"
 import {
   loadOwnedAssessment,
   loadOwnedOffering,
@@ -237,12 +239,35 @@ export async function getTeacherAnalyticsOverview(
     { ...(stored.intervention ?? {}), ...options.thresholds },
   )
 
+  // The regime is resolved from the offering's own numbers, so this page can say which
+  // banding is in force — and explain it when the answer is a fallback rather than
+  // silently substituting one for the other.
+  const regimeInputs = await gatherRegimeInputs(offering.id)
+  const regimeDecision = resolveRegimeForCourse(regimeInputs)
+
   return {
     offerings,
     offeringId: offering.id,
     assessments: summaries,
     alerts,
     thresholds: resolveInterventionThresholds(stored, options.thresholds),
+    gradingRegime: {
+      regime: regimeDecision.regime,
+      reason: regimeDecision.regime === "absolute" ? regimeDecision.reason : null,
+      category: regimeInputs.category,
+      enrolledCount: regimeInputs.enrolledCount,
+      publishedCount: regimeInputs.publishedTotals.length,
+      mean: regimeDecision.regime === "relative" ? regimeDecision.mean : null,
+      standardDeviation:
+        regimeDecision.regime === "relative" ? regimeDecision.standardDeviation : null,
+      // The contract carries `progress` as explicit null, while `GradingNotice` omits it
+      // when absent. Normalised here rather than loosened in the contract, because a client
+      // branching on "has progress" should not have to handle `undefined` as well.
+      notice:
+        regimeDecision.regime === "absolute"
+          ? { ...regimeDecision.notice, progress: regimeDecision.notice.progress ?? null }
+          : null,
+    },
     generatedAt: new Date().toISOString(),
   }
 }
