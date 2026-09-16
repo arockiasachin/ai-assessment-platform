@@ -1,5 +1,6 @@
 import type { LucideIcon } from "lucide-react"
 import { Card } from "@/components/ui/card"
+import { SUCCESS_TEXT, WARNING_TEXT } from "@/components/ui/tone"
 import { cn } from "@/lib/utils"
 
 type StatCardProps = {
@@ -10,10 +11,18 @@ type StatCardProps = {
   accent?: "primary" | "success" | "warning" | "destructive"
 }
 
+/**
+ * Accent tints for the icon chip.
+ *
+ * `success` and `warning` use the text-safe pairs from `@/components/ui/tone` rather than the raw
+ * tokens: both raw tokens fail against their own tint (`--success` reaches 2.76:1, `--warning`
+ * 2.54:1, where even the 3:1 non-text threshold for an icon is not met). `primary` and
+ * `destructive` pass as-is, which is why only two entries carry the helper.
+ */
 const accentMap = {
   primary: "text-primary bg-primary/10",
-  success: "text-success bg-success/12",
-  warning: "text-warning bg-warning/15",
+  success: `${SUCCESS_TEXT} bg-success/12`,
+  warning: `${WARNING_TEXT} bg-warning/15`,
   destructive: "text-destructive bg-destructive/12",
 } as const
 

@@ -14,10 +14,12 @@
  *    both (1.35:1 in dark). `text-*-foreground` on a `/10`–`/20` tint therefore
  *    fails badly in at least one theme — that is the shape of the dark-mode
  *    regression this file exists to prevent.
- * 2. **The light `--success` token is a fill, not text.** At `oklch(0.62 0.15 155)`
- *    it only reaches 2.76:1 as small text, so success copy uses a darker shade
- *    of the same hue (`SUCCESS_TEXT`) with `dark:text-success` for the dark
- *    theme, where the lighter token is the readable one.
+ * 2. **The raw `--success` and `--warning` tokens are fills, not text.** At
+ *    `oklch(0.62 0.15 155)` success reaches only 2.76:1 as small text, and warning is
+ *    worse at 2.54:1 on a card. Success copy therefore uses a darker shade of the same
+ *    hue (`SUCCESS_TEXT`) and warning uses its `-foreground` colour (`WARNING_TEXT`),
+ *    each with a `dark:` counterpart, because the lighter token is the readable one
+ *    there.
  *
  * The only colour literal here is that success shade. The oklch tokens in
  * `app/globals.css` are unchanged.
@@ -26,6 +28,17 @@ export type Tone = "info" | "success" | "warning" | "destructive"
 
 /** Success copy: darker shade of the `--success` hue in light, the token in dark. */
 export const SUCCESS_TEXT = "text-[oklch(0.45_0.12_155)] dark:text-success"
+
+/**
+ * Warning copy, the same pair `TONE_PANEL.warning` uses.
+ *
+ * It exists because success and warning both fail as text when used raw, and only success had a
+ * constant — so warning call sites either inlined the pair or used the token and failed. Warning is
+ * worse than success (`--warning` reaches 2.54:1 as small text on a card), and the `-foreground`
+ * token that fixes it is a *solid-fill* colour, so it needs the explicit `dark:` counterpart this
+ * pair carries rather than standing on its own.
+ */
+export const WARNING_TEXT = "text-warning-foreground dark:text-warning"
 
 /**
  * A tinted, bordered panel in a tone. Sets the text colour for everything

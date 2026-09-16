@@ -62,13 +62,13 @@ function submissionLabel(state: StudentAssessmentItem["submissionState"]) {
 // text readable on a dark page.
 function submissionTone(state: StudentAssessmentItem["submissionState"]) {
   if (state === "graded")
-    return "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 [@media(prefers-color-scheme:dark)]:text-emerald-400"
+    return "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"
   if (state === "submitted" || state === "resubmitted")
-    return "border-blue-500/30 bg-blue-500/10 text-blue-700 [@media(prefers-color-scheme:dark)]:text-blue-400"
+    return "border-blue-500/30 bg-blue-500/10 text-blue-700 dark:text-blue-400"
   if (state === "late")
-    return "border-amber-500/30 bg-amber-500/10 text-amber-700 [@media(prefers-color-scheme:dark)]:text-amber-400"
+    return "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-400"
   if (state === "draft")
-    return "border-slate-400/30 bg-slate-500/10 text-slate-700 [@media(prefers-color-scheme:dark)]:text-slate-300"
+    return "border-slate-400/30 bg-slate-500/10 text-slate-700 dark:text-slate-300"
   return "border-border bg-muted/20 text-foreground"
 }
 
@@ -236,7 +236,7 @@ export function StudentAssessmentsView({
       {message && (
         <div
           role="status"
-          className="rounded-md border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-700 [@media(prefers-color-scheme:dark)]:text-emerald-400"
+          className="rounded-md border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-700 dark:text-emerald-400"
         >
           {message}
         </div>

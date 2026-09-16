@@ -34,7 +34,7 @@ type Decision =
 function confidenceTone(confidence: number): string {
   return confidence < 0.6
     ? "border-destructive/30 bg-destructive/10 text-destructive"
-    : "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 [@media(prefers-color-scheme:dark)]:text-emerald-400"
+    : "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"
 }
 
 export function TeacherReviewQueue({
@@ -129,7 +129,7 @@ export function TeacherReviewQueue({
       {message && (
         <div
           role="status"
-          className="rounded-md border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-700 [@media(prefers-color-scheme:dark)]:text-emerald-400"
+          className="rounded-md border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-700 dark:text-emerald-400"
         >
           {message}
         </div>
@@ -268,7 +268,7 @@ export function TeacherReviewQueue({
                     {published && (
                       <Badge
                         variant="outline"
-                        className="border-emerald-500/30 text-emerald-700 [@media(prefers-color-scheme:dark)]:text-emerald-400"
+                        className="border-emerald-500/30 text-emerald-700 dark:text-emerald-400"
                       >
                         Published
                       </Badge>
@@ -276,7 +276,7 @@ export function TeacherReviewQueue({
                   </div>
                 </div>
                 {item.flags.length > 0 && (
-                  <ul className="mt-2 list-inside list-disc text-xs text-amber-700 [@media(prefers-color-scheme:dark)]:text-amber-400">
+                  <ul className="mt-2 list-inside list-disc text-xs text-amber-700 dark:text-amber-400">
                     {item.flags.map((flag) => (
                       <li key={flag}>{flag}</li>
                     ))}

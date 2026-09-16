@@ -124,10 +124,7 @@ export function StudentCodeSubmissionEditor({ task }: Props) {
       </div>
 
       {message && (
-        <p
-          role="status"
-          className="text-sm text-emerald-700 [@media(prefers-color-scheme:dark)]:text-emerald-400"
-        >
+        <p role="status" className="text-sm text-emerald-700 dark:text-emerald-400">
           {message}
         </p>
       )}

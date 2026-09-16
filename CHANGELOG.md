@@ -395,6 +395,48 @@ define and edit them, and a minimum-CAT gate that applied to anybody.
 - **The create contract is unchanged** (`Quiz | Assignment`). Teachers can weight the kinds that
   exist; authoring descriptive/code/group assessments from the gradebook remains a product decision.
 
+### Small fixes: dark-mode following the user, token contrast, and stale docs
+
+#### Fixed
+
+- **Dark-mode styling followed the operating system instead of the user's choice.** 21 sites across 8
+  components used an arbitrary `[@media(prefers-color-scheme:dark)]:` variant, on the belief — stated
+  in `grade-badge.tsx`'s own comment — that the app "never sets" a `.dark` class and therefore themes
+  purely via `prefers-color-scheme`. It does set one: `theme-toggle.tsx` maintains `.dark` / `.light`
+  on `<html>`, the pre-paint `themeInitScript` does the same, and `globals.css` declares
+  `@custom-variant dark (&:is(.dark *))`. So a media query was the wrong tool: a user on a dark-OS
+  machine who explicitly chose light mode still got the dark-mode text shades, and the reverse. All 21
+  now use `dark:`. Verified in the compiled CSS rather than by reading the diff: a fresh build emits
+  `:is(.dark *)` selectors for these utilities (50 of them) and no escaped media-variant class.
+- **`--success` / `--warning` used as text, which fails AA.** `--success` reaches 2.76:1 and
+  `--warning` 2.54:1 as small text — below even the 3:1 non-text threshold for an icon.
+  `components/stat-card.tsx` painted its icon chip with the raw tokens, and `components/quiz-runner.tsx`
+  used `text-success` on three text/icon sites. Both now use the text-safe pairs from
+  `@/components/ui/tone`, which already documented the rule.
+- **`WARNING_TEXT` added to `@/components/ui/tone`.** Only success had a constant, so warning call sites
+  either inlined the pair or used the raw token and failed. The pair needs an explicit `dark:`
+  counterpart because `--warning-foreground` is a solid-fill colour.
+
+#### Documentation
+
+- **Stale status lines corrected.** `plans/mockup-to-backend.md` and `plans/wave-2.md` both still read
+  "plan, not started" although the work is done, and `wave-2.md` listed S9 as "pending" — with a note
+  that its slice table is the plan as written, not the order things landed (S5 preceded S4).
+- **`README.md` claimed `main` and `dev` both pointed at `12e45be` with a divergence count of 0.** They
+  do not: `dev` is 114 commits ahead. Rewritten to describe the release line and to note that commit
+  hashes inside these documents are historical records rather than current pointers.
+- **The a11y audit overstated its outstanding P2 item.** It listed both `StudentAssessmentsView` and
+  `TeacherSubmissionsManager` as still fetching on mount; the first was converted to server-seeded
+  props during the Wave 1 port. Corrected, with the remaining one (`TeacherSubmissionsManager`) and why
+  it is harder — it renders inside another component, so it needs a prop threaded through two levels
+  rather than a page-level payload.
+- **The parent plan's §6 risk table** marked its two open items resolved, with what actually happened:
+  the similarity constraint was a **live defect** (reproduced, then fixed) rather than a theoretical
+  one, and the index was added.
+- **`/mockup` is now tagged `design-reference-v1`**, satisfying §8's "deleted or explicitly kept as a
+  tagged design reference" literally rather than by convention. The tag names `ee08004`, the last
+  commit that changed the tree.
+
 ### The grading-policy editor: logic extracted, and verified in a browser
 
 The editor (`components/offering-grading-policy.tsx`) shipped without a test, because this

@@ -108,6 +108,13 @@ is a design decision, not a mechanical fix, so it is deferred — see "needs a h
    before, since `role` defaulted to `"teacher"`) and carries the student's register number before
    hydration.
 
-   Still outstanding from the same finding: `StudentAssessmentsView` and `TeacherSubmissionsManager`
-   keep their own client fetches. Both are page-scoped rather than subtree-wide, so the fix is a
-   prop per page rather than a layout, and neither is on the dashboard path this covered.
+   **Still outstanding from the same finding: `TeacherSubmissionsManager`**, which keeps its own
+   client fetch (`components/teacher-submissions-manager.tsx`, the `useEffect` that calls `load`).
+   It renders _inside_ `TeacherAssignmentsManager` rather than at a page root, so seeding it means
+   threading a prop through two components rather than the page-level `initialPayload` the other
+   views took.
+
+   **This paragraph previously also named `StudentAssessmentsView`, and that was stale.** It was
+   converted during the Wave 1 port: `app/(dashboard)/student/assessments/page.tsx` server-fetches and
+   passes `initialPayload`. Corrected here because a "still outstanding" list that overstates its
+   remainder is how a fixed item stays fixed in the reader's mind and never gets re-checked.

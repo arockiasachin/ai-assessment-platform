@@ -27,6 +27,7 @@ import { useGradebook } from "@/components/gradebook-provider"
 import type { QuizGradeResponse } from "@/lib/contracts"
 import { formatDate } from "@/lib/format"
 import { initials, quizForAssessment, round, type Assessment } from "@/lib/gradebook"
+import { SUCCESS_TEXT } from "@/components/ui/tone"
 import { cn } from "@/lib/utils"
 
 type Stage = "select" | "taking" | "results"
@@ -347,7 +348,7 @@ export function QuizRunner() {
                     <CardContent className="flex flex-col gap-3 py-4">
                       <div className="flex items-start gap-2">
                         {correct ? (
-                          <CheckCircle2 className="mt-0.5 size-5 shrink-0 text-success" />
+                          <CheckCircle2 className={cn("mt-0.5 size-5 shrink-0", SUCCESS_TEXT)} />
                         ) : (
                           <XCircle className="mt-0.5 size-5 shrink-0 text-destructive" />
                         )}
@@ -358,14 +359,14 @@ export function QuizRunner() {
                       <div className="flex flex-col gap-1.5 pl-7 text-sm">
                         <p className="text-muted-foreground">
                           Your answer:{" "}
-                          <span className={correct ? "text-success" : "text-destructive"}>
+                          <span className={correct ? SUCCESS_TEXT : "text-destructive"}>
                             {result.selectedText ?? "—"}
                           </span>
                         </p>
                         {!correct && (
                           <p className="text-muted-foreground">
                             Correct answer:{" "}
-                            <span className="text-success">{result.correctText}</span>
+                            <span className={SUCCESS_TEXT}>{result.correctText}</span>
                           </p>
                         )}
                         {result.explanation && (

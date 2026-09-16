@@ -1,7 +1,9 @@
 # Wave 2 — readers that do not exist yet
 
-Status: **plan, not started.** Written against `dev` @ `dfe1151` (Wave 1 complete). Companion to
-[`wave-1.md`](./wave-1.md), whose scope table this document acts on.
+Status: **Wave 2 complete (S1–S9).** Written against `dev` @ `dfe1151` (Wave 1 complete). Companion
+to [`wave-1.md`](./wave-1.md), whose scope table this document acts on. The slice table below is the
+plan as written, not the order the slices landed in — S5 preceded S4, because the calendar reader
+needed the assessment-release concept S5 added.
 
 Wave 1 was a **presentation port**: every page already had a working backend. **Wave 2 is not.**
 The pages left over need code that does not exist, and the risk is in the query and the derivation
@@ -23,7 +25,7 @@ rather than in the composition.
 | **S6** | **Seed: calendar** — the 10 rows in §2.3, with `releasedAt` | yes                 | **landed** `21c0561`           |
 | **S7** | `student/events` page                                       | yes                 | **landed** `1161a3e`           |
 | **S8** | `teacher/planner` page                                      | yes                 | **landed** `78e7a30`           |
-| **S9** | `teacher/observability` re-skin (optional, droppable)       | yes                 | pending                        |
+| **S9** | `teacher/observability` re-skin (optional, droppable)       | yes                 | shipped                        |
 
 **S5 landed before S4**, which is the correction described below: the calendar reader
 cannot be written correctly until release exists, because the student reader has to

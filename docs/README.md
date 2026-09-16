@@ -3,11 +3,15 @@
 An LLM-assisted assessment platform in which teachers keep final grading authority, grading is
 server-authoritative, and group projects receive fair per-student assessment.
 
-This directory is the documentation index for the greenfield rebuild. The status below reflects
-`dev` at commit `12e45be` (`Merge branch 'p4/verify-unified' into dev`), where all of Phases 0–4 have
-landed. Local `main`, `dev`, `origin/main` and `origin/dev` all point at `12e45be`; `git rev-list
---count main..dev` and `git rev-list --count origin/main..dev` are both **0**. There is no Phase 5 in
-the plan or the repository.
+This directory is the documentation index for the greenfield rebuild. All of Phases 0–4 have landed,
+and so has the mockup-to-backend migration (Waves 0–4). There is no Phase 5 in the plan or the
+repository.
+
+**Commit hashes inside these documents are historical records, not current pointers.** Each was
+written against the `dev` tip at the time (Phase 4's boundary was `12e45be`), and the migration has
+landed on top since. `main` is the release line and `dev` is where work lands, so the two are
+deliberately not level between releases; see the branch note near the end of this file for the current
+relationship.
 
 ## Start here
 
@@ -99,6 +103,11 @@ reference. It is **kept**: the 38 routes each document their own build guide, wh
 evidence worth retaining, and the tree is operationally inert (outside `proxy.ts`, outside the real
 navigation).
 
+It is tagged **`design-reference-v1`**, naming `ee08004` — the last commit that changed the tree (the
+Wave 4 close-out, which severed the final dependencies the app had on `lib/mock`). Commits after the
+tag change the product, not the reference. The tag exists so the reference has a fixed point rather
+than only a directory that happens to still be there.
+
 Keeping it required a real change rather than a decision alone. `lib/mock` had been load-bearing for
 the **app**: `lib/labels.ts` imported nine view unions from it, `lib/teacher-submissions.ts` two more,
 `components/shell/nav-config.ts` imported `MockupRole`, and `components/shell/top-bar.tsx` imported
@@ -172,10 +181,14 @@ Branch protection is enabled on both long-lived branches (verified 2026-09-12 wi
 - **`dev`** — required status check: `Verify` only (no required pull-request reviews;
   `enforce_admins: false`).
 
-`main` and `dev` both point at `12e45be`; `git rev-list --count main..dev` is **0** and
-`git rev-list --count origin/main..dev` is **0**. The Phase 1–4 boundary merges are all on both
-branches. The no-direct-pushes-to-`main` rule remains a convention for administrators rather than an
-absolute GitHub block, because `enforce_admins` is `false`.
+`main` is the release line and `dev` carries the work: Phase 1–4 boundary merges are on both, and the
+mockup-to-backend migration (Waves 0–4) sits on `dev` on top of them, so `git rev-list --count
+main..dev` is **114** rather than 0. An earlier version of this paragraph claimed both branches pointed
+at the same commit and the count was 0; that was true when it was written and stopped being true as the
+migration landed, which is the usual way a status line in a document goes wrong.
+
+The no-direct-pushes-to-`main` rule remains a convention for administrators rather than an absolute
+GitHub block, because `enforce_admins` is `false`.
 
 CI ([`../.github/workflows/ci.yml`](../.github/workflows/ci.yml)) runs on every pull request and on
 pushes to **both** `main` and `dev`. The `Verify` job installs dependencies, generates and validates
