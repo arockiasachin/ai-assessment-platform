@@ -1,3 +1,5 @@
+import type { CourseCategory as PrismaCourseCategory } from "@/lib/generated/prisma/enums"
+
 /**
  * VIT's relative-grading bands.
  *
@@ -242,15 +244,14 @@ export function ceilGrandTotals(percentages: readonly number[]): number[] {
  * category and the headcount rather than inferring from data.
  */
 
-/** What a course is, for the purpose of choosing a regime. */
-export type CourseCategory =
-  | "THEORY"
-  | "LAB_EMBEDDED_THEORY"
-  | "LABORATORY"
-  | "PROJECT"
-  | "SOFT_SKILLS"
-  | "EXTRA_CURRICULAR"
-  | "NGCR"
+/**
+ * What a course is, for the purpose of choosing a regime.
+ *
+ * Re-exported from the Prisma enum rather than declared again, because two definitions of
+ * the same vocabulary drift. It is a **type-only** import, which is erased at build time, so
+ * this module stays pure and safe to load in a client component.
+ */
+export type CourseCategory = PrismaCourseCategory
 
 export type GradingRegime = "relative" | "absolute"
 
@@ -361,7 +362,7 @@ export type RegimeDecision =
     }
   | {
       regime: "absolute"
-      reason: "small-class" | "non-theory-course" | "awaiting-base-metrics"
+      reason: "category-unset" | "small-class" | "non-theory-course" | "awaiting-base-metrics"
       notice: GradingNotice
     }
 
@@ -377,7 +378,16 @@ export type RegimeDecision =
 export const RELATIVE_MIN_MARKED_STUDENTS = RELATIVE_GRADING_MIN_STRENGTH
 
 export type RegimeInput = {
-  category: CourseCategory
+  /**
+   * The course's category, or `null` when it has not been set.
+   *
+   * **Null is not `THEORY`.** The platform cannot infer a course's kind from its data, and
+   * guessing `THEORY` would silently put a laboratory course on relative bands — the exact
+   * failure this field exists to prevent. An unset category falls back to absolute with a
+   * notice asking for it, which is the same treatment as missing base metrics: withhold and
+   * explain rather than assume.
+   */
+  category: CourseCategory | null
   /** Students enrolled in the offering. */
   enrolledCount: number
   /** Published grand totals — one per student who has been marked. */
@@ -387,28 +397,43 @@ export type RegimeInput = {
 /**
  * Decide the regime **and** produce the notice when the answer is "absolute".
  *
- * Three ways a course lands on absolute, and they are not equivalent to a user:
+ * Five ways a course lands on absolute, and they are not equivalent to a user:
  *
  * | Reason | What it means |
  * | ------ | ------------- |
+ * | `category-unset` | nobody has said what kind of course this is, so no rule can be applied |
  * | `non-theory-course` | the regulation says absolute, always, whatever the size |
  * | `small-class` | ≤ 10 students, so VIT grades absolutely instead of relatively |
- * | `awaiting-base-metrics` | the class qualifies for relative, but too few marks are published to compute a mean and σ yet |
+ * | `awaiting-base-metrics` | the class qualifies for relative, but too few marks are published to compute a mean and σ yet, or σ is 0 |
  *
- * The third is the one this function exists for. Relative grading needs the cohort's own
+ * The last is the one this function exists for. Relative grading needs the cohort's own
  * mean and σ; until enough students have published totals there is nothing to compute
  * them from, and **falling back to absolute with a visible notice is better than
  * publishing bands derived from four marks.** The relative view is withheld rather than
  * approximated.
  *
- * Order is deliberate: the categorical and size rules are checked first, because they are
- * permanent facts about the course, and telling a 6-student lab that it is "awaiting
- * metrics" would be misleading — it will never use relative grading.
+ * Order is deliberate: facts about the *course* are checked before facts about its *data*.
+ * A 6-student lab is permanently absolute, so telling it "awaiting metrics" would imply it
+ * might switch later — and it never will. `category-unset` comes first of all, because
+ * without a category no later rule can be evaluated at all.
  */
 export function resolveRegimeForCourse(input: RegimeInput): RegimeDecision {
   const { category, enrolledCount, publishedTotals } = input
 
-  // Checked first, because it is a permanent fact about the course. Telling a 6-student
+  if (category === null) {
+    return {
+      regime: "absolute",
+      reason: "category-unset",
+      notice: {
+        tone: "warning",
+        title: "Absolute bands — course category not set",
+        detail:
+          "VIT grades theory courses relatively and laboratory, project and NGCR courses absolutely, so the course's category decides which bands apply. It has not been set, so absolute bands are shown meanwhile.",
+      },
+    }
+  }
+
+  // Checked next, because it is a permanent fact about the course. Telling a 6-student
   // lab that it is "awaiting metrics" would be misleading — it will never use relative
   // grading.
   if (isCategoricallyAbsolute(category)) {

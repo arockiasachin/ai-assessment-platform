@@ -13,6 +13,7 @@ export * from "./groups"
 export * from "./analytics"
 export * from "./lms-export"
 export * from "./code-eval"
+export * from "./courses"
 export * from "./observability"
 export * from "./retention"
 

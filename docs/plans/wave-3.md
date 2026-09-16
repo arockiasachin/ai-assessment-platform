@@ -495,6 +495,44 @@ _marked but unreleased_.
 overridable per offering, and `null` still means "this course has no CAT gate" — which is
 a different statement from "the gate is at zero".
 
+### `CourseCategory` — the field that unlocked this
+
+`Course.category CourseCategory?` is now on the schema (migration
+`20260916170000_course_category`, additive and nullable), and the demo course is seeded
+`THEORY`.
+
+**Nullable, and null is not `THEORY`.** The platform cannot infer a course's kind from its
+data, and guessing would silently put a laboratory course on relative bands — the failure the
+column exists to prevent. So an unset category is a fifth absolute reason,
+`category-unset`, with its own notice asking for it. That is the same treatment as missing
+base metrics: withhold and explain rather than assume.
+
+The enum is defined **once**, in Prisma. `lib/analytics/grading-bands.ts` re-exports it via a
+type-only import, which is erased at build time, so that module stays pure and loadable from
+a client component while the vocabulary has a single home.
+
+The category lives on `Course` rather than `CourseOffering` because "what kind of course is
+this" is a property of the course, not of a particular section or term.
+
+**Two new readers/writers:**
+
+| Surface                                                                          | Purpose                                                                                                                                       |
+| -------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| `getOfferingGradingRegime(user, offeringId)`                                     | gathers the category, the enrolment count and the students' published grand totals, and returns the decision with its notice, ready to render |
+| `PATCH /api/teacher/courses/[courseId]/category` → `setCourseCategoryForTeacher` | the write path, without which the field could only ever be set by the seed and every course would permanently fall back to absolute           |
+
+The write path's authorization is **teaches at least one offering of this course**, since the
+field is on `Course` but a teacher owns _offerings_. A course they do not teach reports 404
+rather than 403, so the endpoint never confirms another teacher's course exists — the same
+convention the assessment release action uses. Clearing is deliberately not expressible by
+omitting the field, because that is how a category gets wiped by a client that never knew
+about it.
+
+**Grand totals for the σ are one number per student**, computed from published `Grade` rows
+with `publishedAt` set. Reading attempts instead would band a different population from the
+one the grade sheet describes, and counting rows rather than students would band a cohort
+several times the real size — both are pinned by tests.
+
 ### Which regime is actually used
 
 `resolveRegimeForCourse({ category, enrolledCount, publishedTotals })` decides, and returns

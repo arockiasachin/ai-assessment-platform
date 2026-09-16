@@ -403,6 +403,11 @@ async function createCourseAndOfferings() {
       name: "Algebra Foundations",
       description: "A demo course that exercises the whole assessment spine end to end.",
       credits: 4,
+      // Set explicitly, because an unset category falls back to absolute bands with a
+      // warning — deliberate, but it would make the demo show the warning rather than the
+      // grading path. This course is a theory course, so it is graded relatively once 11
+      // students have published totals.
+      category: "THEORY",
     },
   })
 
