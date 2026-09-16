@@ -30,7 +30,8 @@ Wave 3 is **"the data exists; the aggregations don't"**. Four surfaces:
 | `teacher/quiz-generation` Topics tab | Partially blocked in Wave 2; its materials panel is now built.                                                                    |
 
 **Not in Wave 3:** the admin surface (Wave 4 — structurally different, no admin API
-routes, reads Prisma directly) and the remaining decision-list items (Wave 5).
+routes, reads Prisma directly) and the remaining decision-list items (Wave 5 — since
+**consumed**; see the ledger in [`mockup-to-backend.md`](./mockup-to-backend.md) §Wave 5).
 
 ---
 
@@ -135,9 +136,11 @@ nothing derives. Recorded here so no slice quietly invents one:
 
 - **`completionPercent` — dropped** (B4). `62` matches neither 58% (submitted/expected)
   nor 69% (released assessments), so there is no formula to implement.
-- **`Assessment.weightPercent` — dropped** from the UI. No column exists; weights live
-  only in the LMS export request body. Making them persistent course config is a Wave 5
-  decision, not a Wave 3 derivation.
+  - **`Assessment.weightPercent` — dropped** from the UI, and the _course-level_ weights that
+    replaced it are now persistent config: making them so was the Wave 5 schema decision, and it
+    landed as `CourseOffering.gradingConfig` in [`wave-4.md`](./wave-4.md) §8. A teacher sets the
+    CAT/FAT split per offering and the export applies it. The per-assessment column stays dropped —
+    the pool weighting is what the institution specifies, not a weight per assessment.
 - **`ExportRow`** (target/platform/mapped users/issues) — no export-job model. Out of
   scope; the real export page is already a working, tested surface with a different noun.
 - **`MockNotification`** — no `Notification` model. Dropped.
@@ -269,8 +272,10 @@ Two properties the implementation commits to, both tested: **no normalisation** 
 differing by case or whitespace stay separate tokens, because merging them would be
 inventing a taxonomy in a string heuristic), and **untagged questions are counted
 separately** rather than given a name like "Uncategorised", which would put a fabricated
-token beside real ones. A controlled vocabulary — a tag table or an enum — remains a
-Wave 5 schema decision.
+token beside real ones. A controlled vocabulary — a tag table or an enum — remains open, and is
+**not** part of Wave 5: that decision list is consumed (see
+[`mockup-to-backend.md`](./mockup-to-backend.md) §Wave 5), and this was never on it. It is the
+follow-on to reshaping "mastery" into a token list, and needs its own call.
 
 ### 7.2 There is no canonical "class average" — **new decision D5**
 

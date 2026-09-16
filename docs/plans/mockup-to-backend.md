@@ -158,9 +158,25 @@ So porting the admin mockups reuses that pattern — no API routes needed. But i
 with no model at all: `AdminDataset` (retention/rowCount/source), `AdminTool` run history,
 `FeatureFlag`, institution settings.
 
-### Wave 5 — the decision list
+### Wave 5 — the decision list: **consumed**
 
-See §4. Each item needs a call before it can be built.
+See §4. Each item needed a call before it could be built, and every one now has one. This is no longer
+a wave to schedule; it is a ledger. The disposition of each row, with where it was decided:
+
+| §4 fixture field                                | Disposition                                                                                                                                                                                                                                                                                          |
+| ----------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `QuizInProgressAttempt.kind`                    | **Migrated.** `QuizAttempt.kind` landed in Wave 3 (T5), so a practice sitting is a real, distinguishable attempt rather than a read-only notion.                                                                                                                                                     |
+| `Assessment.weightPercent`                      | **Split.** Course-level CAT/FAT weights are persistent config (`CourseOffering.gradingConfig`, wired in [`wave-4.md`](./wave-4.md) §8) with a teacher-facing editor; the _per-assessment_ weight column is dropped from the UI, since the pool weighting is what the institution actually specifies. |
+| `Student.lastActiveAt`, `AdminUser.lastLoginAt` | **Dropped** (Wave 1 D9). No activity timestamp exists and `AuditLog` records no login, so deriving one would need a new write on every sign-in — a column added to fill a table.                                                                                                                     |
+| `ExportRow`                                     | **Dropped.** No export-job model, so target/platform/mapped-users have no source. An export history needs a model, and only one export kind exists.                                                                                                                                                  |
+| `AdminDataset`, `AdminTool`, `FeatureFlag`      | **Resolved** ([`wave-4.md`](./wave-4.md) §3): the dataset is a read-only view over real tables rather than a new entity; tool run history and feature flags are dropped, having no model and no settings surface.                                                                                    |
+| `MockNotification`                              | **Dropped.** No `Notification` model; the popover renders only in the mockup tree, and app scope has no path to it.                                                                                                                                                                                  |
+| `MaterialView.indexed/chunks/state/sizeLabel`   | **Derived** (Wave 2): `chunks`/`indexed` from a count over `MaterialChunk`; `state` and `sizeLabel` dropped.                                                                                                                                                                                         |
+| `SubmissionRow.versionCount`                    | **Derived** — a `_count.versions`, which the reader returns.                                                                                                                                                                                                                                         |
+| `TeacherAnalyticsSummary` trend/mastery         | **Derived, partly reshaped** (Wave 3): the trend is a real reader; "mastery" became a subtopic token list, because `Question.subtopic` is uncontrolled LLM free text and a mastery score over it would be a number nothing can justify.                                                              |
+
+The one item §4 called "the biggest single decision" — whether a practice attempt is a real attempt —
+was answered **yes**, and the schema followed the answer.
 
 ---
 
