@@ -3,6 +3,9 @@
 import { useEffect, useMemo, useState } from "react"
 import { CheckCircle2, FileText, Search, Sparkles } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
+import { formatDateTime } from "@/lib/format"
+import { ASSESSMENT_KIND_LABEL } from "@/lib/labels"
+import type { AssessmentType } from "@/lib/generated/prisma/enums"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -30,7 +33,7 @@ type SubmissionItem = {
   assessment: {
     id: string
     title: string
-    type: "Quiz" | "Assignment"
+    type: AssessmentType
     dueDate: string
     maxMarks: number
     courseCode: string
@@ -40,17 +43,6 @@ type SubmissionItem = {
     academicYear: number
   }
   score: number | null
-}
-
-function formatDateTime(iso: string | null) {
-  if (!iso) return "—"
-  return new Date(iso).toLocaleString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  })
 }
 
 function statusLabel(status: string) {
@@ -287,7 +279,7 @@ export function TeacherSubmissionsManager() {
                   </p>
                 </div>
                 <div className="flex items-center gap-2">
-                  <Badge variant="outline">{item.assessment.type}</Badge>
+                  <Badge variant="outline">{ASSESSMENT_KIND_LABEL[item.assessment.type]}</Badge>
                   <Badge variant={item.score === null ? "secondary" : "outline"}>
                     {item.score === null ? "Pending" : "Graded"}
                   </Badge>

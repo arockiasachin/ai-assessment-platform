@@ -17,7 +17,8 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { filterAssessments, scorePct } from "@/lib/analytics"
-import { formatDate, initials, round } from "@/lib/gradebook"
+import { formatDate } from "@/lib/format"
+import { initials, round } from "@/lib/gradebook"
 
 export function StudentView() {
   const {

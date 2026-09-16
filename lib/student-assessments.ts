@@ -3,9 +3,11 @@ import "server-only"
 import { toAssessmentScale } from "@/lib/gradebook"
 import { prisma } from "@/lib/prisma"
 import { quizDeliveryStatus } from "@/lib/quiz-attempts/metadata"
+import type { AssessmentType } from "@/lib/generated/prisma/enums"
 import type { AuthUser } from "@/lib/session"
 
-export type AssessmentKind = "Quiz" | "Assignment"
+/** Kept as an alias so existing call sites read the same, but it is the Prisma enum now. */
+export type AssessmentKind = AssessmentType
 export type SubmissionState =
   "not_submitted" | "draft" | "submitted" | "resubmitted" | "graded" | "late"
 
@@ -187,7 +189,7 @@ export async function listStudentAssessments(
       return {
         id: assessment.id,
         title: assessment.title,
-        type: assessment.type === "QUIZ" ? "Quiz" : "Assignment",
+        type: assessment.type,
         dueDate: assessment.dueDate.toISOString(),
         maxMarks: assessment.maxMarks,
         courseId: assessment.courseId,

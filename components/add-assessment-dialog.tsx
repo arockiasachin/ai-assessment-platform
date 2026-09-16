@@ -22,16 +22,18 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { useGradebook } from "@/components/gradebook-provider"
-import { type AssessmentType } from "@/lib/gradebook"
+import type { CreateAssessmentRequest } from "@/lib/contracts"
 
-const TYPES: AssessmentType[] = ["Quiz", "Assignment"]
+type FormAssessmentType = CreateAssessmentRequest["type"]
+
+const TYPES: FormAssessmentType[] = ["Quiz", "Assignment"]
 
 export function AddAssessmentDialog() {
   const { offerings, addAssessment } = useGradebook()
   const [open, setOpen] = useState(false)
   const [title, setTitle] = useState("")
   const [offeringId, setOfferingId] = useState("")
-  const [type, setType] = useState<AssessmentType>("Assignment")
+  const [type, setType] = useState<FormAssessmentType>("Assignment")
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10))
   const [maxMarks, setMaxMarks] = useState("50")
 
@@ -110,7 +112,7 @@ export function AddAssessmentDialog() {
             </div>
             <div className="grid gap-2">
               <Label htmlFor="assessment-type">Type</Label>
-              <Select value={type} onValueChange={(v) => setType(v as AssessmentType)}>
+              <Select value={type} onValueChange={(v) => setType(v as FormAssessmentType)}>
                 <SelectTrigger id="assessment-type">
                   <SelectValue />
                 </SelectTrigger>

@@ -3,9 +3,14 @@
  *
  * These used to live in `lib/mock/format.ts`, which meant eight real modules
  * imported from the mockup tree — the same trap `lib/labels.ts` was created to
- * close, because `lib/mock/**` is scheduled for reduction to test fixtures. The
- * mock module now re-exports these, so the mockups keep working and each helper
- * has one definition.
+ * close. The mock module now re-exports these, so the mockups keep working and each
+ * helper has one definition. (`lib/mock/**` itself is kept as the design-reference
+ * tree's data layer, but it is no longer load-bearing for the app.)
+ *
+ * Two of these replaced hand-rolled duplicates that had drifted: `lib/gradebook.ts`
+ * and `components/teacher-submissions-manager.tsx` each defined their own
+ * `formatDate`/`formatDateTime` without a `timeZone`, which is the mismatch the
+ * first bullet describes.
  *
  * Two deliberate properties, both of which this module exists to enforce:
  *

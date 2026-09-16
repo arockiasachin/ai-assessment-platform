@@ -25,7 +25,8 @@ import {
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { useGradebook } from "@/components/gradebook-provider"
 import type { QuizGradeResponse } from "@/lib/contracts"
-import { formatDate, initials, quizForAssessment, round, type Assessment } from "@/lib/gradebook"
+import { formatDate } from "@/lib/format"
+import { initials, quizForAssessment, round, type Assessment } from "@/lib/gradebook"
 import { cn } from "@/lib/utils"
 
 type Stage = "select" | "taking" | "results"
@@ -45,7 +46,7 @@ export function QuizRunner() {
   const available = useMemo(
     () =>
       quizzes
-        .map((q) => assessments.find((a) => a.id === q.assessmentId && a.type === "Quiz"))
+        .map((q) => assessments.find((a) => a.id === q.assessmentId && a.type === "QUIZ"))
         .filter((a): a is Assessment => Boolean(a)),
     [assessments, quizzes],
   )

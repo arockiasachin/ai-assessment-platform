@@ -19,7 +19,6 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import {
-  assessmentAverage,
   assessmentsWithAverage,
   classAverage,
   filterAssessments,

@@ -369,6 +369,29 @@ settled what happens to the mockup tree itself — the item the plan left as a d
   reintroducing `?? 0` in the helper fails four of the seven cases.
 - **Four dead locals removed** — two unused imports and two unused test fixtures. All `no-unused-vars`
   warnings are gone.
+- **Three hand-rolled date formatters removed, and every rendered date is UTC.** `lib/format.ts`
+  documents the rule — an explicit `timeZone` on every format, because a `toLocaleString` without one
+  renders differently on a UTC server and a non-UTC browser — and three sites violated it.
+  `lib/gradebook.ts` and `components/teacher-submissions-manager.tsx` each had their own
+  `formatDate`/`formatDateTime` duplicate without one; both are deleted and their callers use the
+  shared helpers. `components/upcoming-events-panel.tsx` needed more: it read ISO instants with the
+  **local** accessors, so the initial month and day grid resolved to the server's answer during SSR
+  and the browser's after hydration. Its whole date model is now UTC.
+  `tests/format-utc.test.ts` pins the rule, asserting both offset directions so it does not merely
+  pass because CI is UTC; removing the `timeZone` options fails 4 of its 5 cases.
+- **The assessment kind no longer mislabels real data.** `lib/gradebook.ts` declared its own
+  `AssessmentType = "Quiz" | "Assignment"`, shadowing the Prisma enum of the same name, and the reader
+  fed a five-value column through it — so the seed's `DESCRIPTIVE`, `CODE` and `GROUP_PROJECT`
+  assessments all rendered as **"Assignment"** in the gradebook table and the submissions queue, while
+  the submissions _table_ labelled the same data correctly from the Prisma enum. `lib/student-assessments.ts`
+  and `lib/admin-db.ts` held second and third copies. All three are gone: the read path carries the
+  Prisma enum and labels it through `ASSESSMENT_KIND_LABEL`. The four `as DbAssessmentType` casts went
+  with them — they existed only to silence the mismatch. The **create** path keeps the API contract's
+  two-kind vocabulary deliberately; widening it is a product decision, left open.
+- **Correction, same change:** `AssessmentKind`'s values in `lib/student-assessments.ts` were the
+  collapsed pair, so a student's assessment list could not distinguish a descriptive or code
+  assessment from an assignment. The type filter also offered only Quiz and Assignment, which could
+  not isolate kinds the list actually contains; it now offers every kind in the label map.
 
 #### Changed
 

@@ -28,10 +28,7 @@ function assessment(id: string, title: string, maxMarks = 100): Assessment {
     title,
     courseId: "c1",
     courseName: "Data Structures",
-    // Note `"Quiz"`, not the Prisma `"QUIZ"`: `lib/gradebook.ts` defines its own view-level
-    // `AssessmentType` as `"Quiz" | "Assignment"`, which shadows the Prisma enum name with a
-    // different value set. See the report's note on that collision.
-    type: "Quiz",
+    type: "QUIZ",
     date: "2026-09-01",
     maxMarks,
     offeringId: "o1",

@@ -1,6 +1,5 @@
 import { absoluteLetter, ABSOLUTE_PASS_MARK } from "@/lib/analytics/grading-bands"
-
-export type AssessmentType = "Quiz" | "Assignment"
+import type { AssessmentType } from "@/lib/generated/prisma/enums"
 
 export type Course = {
   id: string
@@ -145,14 +144,6 @@ export function initials(name: string) {
     .slice(0, 2)
     .join("")
     .toUpperCase()
-}
-
-export function formatDate(iso: string) {
-  return new Date(iso).toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  })
 }
 
 export function round(n: number, dp = 1) {

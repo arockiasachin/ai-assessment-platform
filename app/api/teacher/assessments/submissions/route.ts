@@ -85,7 +85,7 @@ export async function GET() {
         assessment: {
           id: item.assessment.id,
           title: item.assessment.title,
-          type: item.assessment.type === "QUIZ" ? "Quiz" : "Assignment",
+          type: item.assessment.type,
           dueDate: item.assessment.dueDate.toISOString(),
           maxMarks: item.assessment.maxMarks,
           courseCode: item.assessment.offering.course.code,

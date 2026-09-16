@@ -156,7 +156,73 @@ an outlier. Unmarked assessments are now omitted from the series.
 - **Having `gradeBandRanges` accept `BandOptions`.** The parameter was read into an unused local, so
   it could not change the output: boundary inclusivity is a property of the _comparison_, not of the
   boundary list. Removed rather than implemented; `relativeLetter` / `absoluteLetter` keep it.
-- **A stricter `timeZone` sweep.** Three app-scope formatters still call `toLocaleDateString` /
-  `toLocaleString` with an explicit locale but no `timeZone`, which can render a different day west of
-  UTC. Flagged by the audit as an adjacent hazard in the same family as the implicit-locale defects
-  A1 fixed, **not** fixed here — it is a separate behaviour change and belongs with its own tests.
+- **A stricter `timeZone` sweep — since done (see §7).** Three app-scope formatters called
+  `toLocaleDateString` / `toLocaleString` with an explicit locale but no `timeZone`, which can render
+  a different day west of UTC. Flagged by the audit as an adjacent hazard in the same family as the
+  implicit-locale defects A1 fixed.
+
+## 7. Follow-up: one vocabulary for the assessment kind, and UTC everywhere
+
+Two findings the audits raised were left open in §6 because neither was the underived-number class.
+Both are now closed, in the same commit as the close-out.
+
+### The assessment kind had four names, and one of them mislabelled real data
+
+`lib/gradebook.ts` declared its own `AssessmentType = "Quiz" | "Assignment"`, **shadowing the Prisma
+enum of the same name** with a different value set. `lib/student-assessments.ts` added a second copy
+(`AssessmentKind`), and `lib/admin-db.ts` a third (`DbAssessmentType`).
+
+The gradebook's copy was not merely redundant — the reader fed a five-value column into a two-value
+type:
+
+```ts
+type DbAssessmentType = "QUIZ" | "ASSIGNMENT"
+
+function toUiAssessmentType(type: DbAssessmentType) {
+  return type === "QUIZ" ? "Quiz" : "Assignment"
+}
+```
+
+The seed contains `QUIZ`, `DESCRIPTIVE`, `CODE` and `GROUP_PROJECT`. So a descriptive, code or group
+assessment was labelled **"Assignment"** wherever the payload's type was rendered — the gradebook
+table (`{a.courseName} · {a.type}`) and the submissions queue's badge — while
+`teacher-submissions-table.tsx` labelled the _same data_ correctly from the Prisma enum. Two
+vocabularies, one of them wrong.
+
+The four `as DbAssessmentType` casts were the tell: they existed only to silence the mismatch between
+a five-value column and a two-value type.
+
+**Resolution:** the view types are gone. The read path carries the Prisma enum and labels it through
+`ASSESSMENT_KIND_LABEL`; `lib/admin-db.ts` and `lib/student-assessments.ts` use the same enum.
+
+The **create** path deliberately keeps the contract's vocabulary (`"Quiz" | "Assignment"`): it is
+`createAssessmentRequestSchema`'s input, the form offers two kinds, and the server maps them to
+`QUIZ`/`ASSIGNMENT`. Widening it so teachers can author descriptive/code/group assessments from the
+gradebook is a **product decision**, not a defect fix, and is left open.
+
+Verified in the rendered product, not just by type: the teacher gradebook now shows
+`Algebra Foundations · Quiz`, `· Descriptive`, `· Group project` where it previously showed
+`· Assignment` for three of those four.
+
+### Every rendered date is now UTC
+
+`lib/format.ts` documents the rule: every date is formatted with an explicit `timeZone`, because a
+`toLocaleString` without one renders differently on a UTC server and a non-UTC browser. Three places
+violated it, and two of those were **hand-rolled duplicates** of the shared helpers — the same
+duplicate-vocabulary shape as the type above:
+
+| Site                                                          | Problem                                                       | Resolution                                         |
+| ------------------------------------------------------------- | ------------------------------------------------------------- | -------------------------------------------------- |
+| `lib/gradebook.ts` `formatDate`                               | no `timeZone`; also a duplicate of `lib/format.ts`            | deleted; the three importers use the shared helper |
+| `components/teacher-submissions-manager.tsx` `formatDateTime` | the same                                                      | deleted; imports the shared helper                 |
+| `components/upcoming-events-panel.tsx`                        | three formats with no `timeZone` — and a deeper problem below | calendar model made UTC                            |
+
+The calendar needed more than a `timeZone` argument. It read events (ISO **instants**) with the local
+accessors (`getMonth`, `getDate`, `getDay`), so the initial month and the day grid resolved to the
+_server's_ answer during SSR and the _browser's_ after hydration — a different month, west of UTC.
+The whole model is now UTC (`getUTCMonth`, `setUTCDate`, `timeZone: "UTC"`), which is what makes the
+SSR and client renders agree.
+
+`tests/format-utc.test.ts` pins the rule, asserting both offset directions so it has teeth wherever it
+runs rather than only passing because CI is UTC. Removing the `timeZone` options fails 4 of its 5
+cases under `TZ=America/Los_Angeles`.

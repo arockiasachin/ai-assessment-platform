@@ -6,6 +6,7 @@ import { GradeBadge } from "@/components/grade-badge"
 import { useGradebook } from "@/components/gradebook-provider"
 import { studentAverage } from "@/lib/analytics"
 import { initials, markKey, type Assessment } from "@/lib/gradebook"
+import { ASSESSMENT_KIND_LABEL } from "@/lib/labels"
 import { cn } from "@/lib/utils"
 
 function EditableMarkCell({
@@ -102,7 +103,7 @@ export function GradebookTable({ assessments }: { assessments: Assessment[] }) {
                   {a.title}
                 </span>
                 <span className="mt-0.5 block text-[10px] font-normal text-muted-foreground">
-                  {a.courseName} · {a.type}
+                  {a.courseName} · {ASSESSMENT_KIND_LABEL[a.type]}
                 </span>
               </th>
             ))}

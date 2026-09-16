@@ -5,7 +5,6 @@ import { usePathname } from "next/navigation"
 import {
   markKey,
   type Assessment,
-  type AssessmentType,
   type Course,
   type MarksMap,
   type Offering,
@@ -13,6 +12,7 @@ import {
   type Quiz,
   type Student,
 } from "@/lib/gradebook"
+import type { CreateAssessmentRequest } from "@/lib/contracts"
 
 export type Role = "teacher" | "student"
 
@@ -23,7 +23,8 @@ type NewAssessment = {
    * several offerings for one course and only the offering identifies the class.
    */
   offeringId: string
-  type: AssessmentType
+  /** The API contract's vocabulary, not the Prisma enum: this is a create input. */
+  type: CreateAssessmentRequest["type"]
   date: string
   maxMarks: number
 }

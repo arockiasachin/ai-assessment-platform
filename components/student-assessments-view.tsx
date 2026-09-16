@@ -26,6 +26,8 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { formatDateTime } from "@/lib/format"
+import type { AssessmentType } from "@/lib/generated/prisma/enums"
+import { ASSESSMENT_KIND_LABEL } from "@/lib/labels"
 import type { StudentAssessmentItem, StudentAssessmentsPayload } from "@/lib/student-assessments"
 
 function round(value: number, places = 1) {
@@ -80,7 +82,7 @@ export function StudentAssessmentsView({
   // `refresh` below stays for the explicit refresh path a submission triggers.
   const [isLoading, setIsLoading] = useState(false)
   const [search, setSearch] = useState("")
-  const [typeFilter, setTypeFilter] = useState<"all" | "Quiz" | "Assignment">("all")
+  const [typeFilter, setTypeFilter] = useState<"all" | AssessmentType>("all")
   const [courseFilter, setCourseFilter] = useState<string>("all")
   const [statusFilter, setStatusFilter] = useState<"all" | "graded" | "pending" | "overdue">("all")
   const [expanded, setExpanded] = useState<Record<string, boolean>>({})
@@ -311,17 +313,18 @@ export function StudentAssessmentsView({
 
           <Select
             value={typeFilter}
-            onValueChange={(value) =>
-              setTypeFilter((value as "all" | "Quiz" | "Assignment") ?? "all")
-            }
+            onValueChange={(value) => setTypeFilter((value as "all" | AssessmentType) ?? "all")}
           >
             <SelectTrigger aria-label="Filter by assessment type">
               <SelectValue placeholder="Type" />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All types</SelectItem>
-              <SelectItem value="Quiz">Quiz</SelectItem>
-              <SelectItem value="Assignment">Assignment</SelectItem>
+              {Object.entries(ASSESSMENT_KIND_LABEL).map(([value, label]) => (
+                <SelectItem key={value} value={value}>
+                  {label}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
 
@@ -428,7 +431,7 @@ export function StudentAssessmentsView({
                       <div className="rounded-lg border border-border/70 bg-background px-3 py-2">
                         <p className="text-xs text-muted-foreground">Quiz questions</p>
                         <p className="mt-1 font-medium">
-                          {assessment.type === "Quiz" ? assessment.quizQuestionCount : "N/A"}
+                          {assessment.type === "QUIZ" ? assessment.quizQuestionCount : "N/A"}
                         </p>
                       </div>
                     </div>
@@ -443,7 +446,7 @@ export function StudentAssessmentsView({
                     )}
 
                     <div className="mt-3 flex flex-wrap gap-2">
-                      {assessment.type === "Quiz" ? (
+                      {assessment.type === "QUIZ" ? (
                         <Link href="/quiz" className="inline-flex">
                           <Button size="sm" variant="outline">
                             <BookOpenCheck className="size-4" />

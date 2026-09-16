@@ -1,8 +1,7 @@
 import "server-only"
 
+import type { AssessmentType } from "@/lib/generated/prisma/enums"
 import { prisma } from "@/lib/prisma"
-
-type DbAssessmentType = "QUIZ" | "ASSIGNMENT" | "DESCRIPTIVE" | "CODE" | "GROUP_PROJECT"
 
 export type AdminOverview = {
   totals: {
@@ -22,7 +21,7 @@ export type AdminOverview = {
   recentAssessments: Array<{
     id: string
     title: string
-    type: DbAssessmentType
+    type: AssessmentType
     dueDate: string
     courseName: string
     teacherName: string

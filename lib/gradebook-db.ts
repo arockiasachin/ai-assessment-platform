@@ -1,5 +1,6 @@
 import "server-only"
 
+import type { AssessmentType } from "@/lib/generated/prisma/enums"
 import { prisma } from "@/lib/prisma"
 import { recordManualMark } from "@/lib/grading/review-service"
 import { quizDeliveryStatus } from "@/lib/quiz-attempts/metadata"
@@ -34,19 +35,13 @@ type GradebookPayload = {
   offerings: Offering[]
 }
 
-type DbAssessmentType = "QUIZ" | "ASSIGNMENT"
-
-function toUiAssessmentType(type: DbAssessmentType) {
-  return type === "QUIZ" ? "Quiz" : "Assignment"
-}
-
 function toAssessmentUpcomingEvent(assessment: {
   id: string
   title: string
   dueDate: Date
   courseId: string
   classId: string
-  type: DbAssessmentType
+  type: AssessmentType
   course: { name: string }
 }): UpcomingEvent {
   return {
@@ -60,7 +55,7 @@ function toAssessmentUpcomingEvent(assessment: {
     courseName: assessment.course.name,
     classId: assessment.classId,
     assessmentId: assessment.id,
-    assessmentType: toUiAssessmentType(assessment.type),
+    assessmentType: assessment.type,
   }
 }
 
@@ -217,7 +212,7 @@ export async function getGradebookPayloadForSessionUser(
       title: a.title,
       courseId: a.courseId,
       courseName: a.course.name,
-      type: toUiAssessmentType(a.type as DbAssessmentType),
+      type: a.type,
       date: a.dueDate.toISOString().slice(0, 10),
       maxMarks: a.maxMarks,
       offeringId: a.offeringId,
@@ -273,9 +268,7 @@ export async function getGradebookPayloadForSessionUser(
       courseName: event.assessment?.course.name ?? event.offering?.course.name ?? null,
       classId: event.classId,
       assessmentId: event.assessmentId,
-      assessmentType: event.assessment
-        ? toUiAssessmentType(event.assessment.type as DbAssessmentType)
-        : null,
+      assessmentType: event.assessment ? event.assessment.type : null,
     }))
 
     const calendarAssessmentIds = new Set(
@@ -293,7 +286,7 @@ export async function getGradebookPayloadForSessionUser(
           dueDate: assessment.dueDate,
           courseId: assessment.courseId,
           classId: assessment.classId,
-          type: assessment.type as DbAssessmentType,
+          type: assessment.type,
           course: { name: assessment.course.name },
         }),
       )
@@ -370,7 +363,7 @@ export async function getGradebookPayloadForSessionUser(
     title: a.title,
     courseId: a.courseId,
     courseName: a.course.name,
-    type: toUiAssessmentType(a.type as DbAssessmentType),
+    type: a.type,
     date: a.dueDate.toISOString().slice(0, 10),
     maxMarks: a.maxMarks,
     offeringId: a.offeringId,
@@ -432,9 +425,7 @@ export async function getGradebookPayloadForSessionUser(
     courseName: event.assessment?.course.name ?? event.offering?.course.name ?? null,
     classId: event.classId,
     assessmentId: event.assessmentId,
-    assessmentType: event.assessment
-      ? toUiAssessmentType(event.assessment.type as DbAssessmentType)
-      : null,
+    assessmentType: event.assessment ? event.assessment.type : null,
   }))
 
   const calendarAssessmentIds = new Set(
@@ -452,7 +443,7 @@ export async function getGradebookPayloadForSessionUser(
         dueDate: assessment.dueDate,
         courseId: assessment.courseId,
         classId: assessment.classId,
-        type: assessment.type as DbAssessmentType,
+        type: assessment.type,
         course: { name: assessment.course.name },
       }),
     )
@@ -622,7 +613,7 @@ export async function createAssessmentForSessionUser(
     title: created.title,
     courseId: created.courseId,
     courseName: created.course.name,
-    type: toUiAssessmentType(created.type as DbAssessmentType),
+    type: created.type,
     date: created.dueDate.toISOString().slice(0, 10),
     maxMarks: created.maxMarks,
     offeringId: created.offeringId,

@@ -13,7 +13,8 @@ import {
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { cn } from "@/lib/utils"
-import { formatDate, type UpcomingEvent } from "@/lib/gradebook"
+import { formatDate } from "@/lib/format"
+import { type UpcomingEvent } from "@/lib/gradebook"
 
 type Props = {
   role: "teacher" | "student"
@@ -23,24 +24,33 @@ type Props = {
 
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const
 
+/**
+ * Calendar-day keys are **UTC**, like every other date in this app.
+ *
+ * The events arrive as ISO instants, so `new Date(iso)` is an instant; reading it with the local
+ * accessors (`getMonth`, `getDate`) gives the *server's* answer on the server and the *browser's* in
+ * the browser, which can differ by a day — a hydration mismatch in the month header, the grid, and
+ * the selected day. UTC accessors plus `timeZone: "UTC"` formatting make the two agree, which is the
+ * rule `lib/format.ts` documents.
+ */
 function toDateKey(date: Date) {
-  const year = date.getFullYear()
-  const month = String(date.getMonth() + 1).padStart(2, "0")
-  const day = String(date.getDate()).padStart(2, "0")
+  const year = date.getUTCFullYear()
+  const month = String(date.getUTCMonth() + 1).padStart(2, "0")
+  const day = String(date.getUTCDate()).padStart(2, "0")
   return `${year}-${month}-${day}`
 }
 
 function startOfMonth(date: Date) {
-  return new Date(date.getFullYear(), date.getMonth(), 1)
+  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), 1))
 }
 
 function getCalendarDays(monthStart: Date) {
   const gridStart = new Date(monthStart)
-  gridStart.setDate(1 - monthStart.getDay())
+  gridStart.setUTCDate(1 - monthStart.getUTCDay())
 
   return Array.from({ length: 42 }, (_, i) => {
     const day = new Date(gridStart)
-    day.setDate(gridStart.getDate() + i)
+    day.setUTCDate(gridStart.getUTCDate() + i)
     return day
   })
 }
@@ -99,7 +109,7 @@ export function UpcomingEventsPanel({ role, events, onFocusCourse }: Props) {
       .split("-")
       .map((part) => Number(part))
     return formatDate(
-      new Date(selectedYear, selectedMonth - 1, selectedDay, 12, 0, 0).toISOString(),
+      new Date(Date.UTC(selectedYear, selectedMonth - 1, selectedDay, 12)).toISOString(),
     )
   }, [selectedDate])
 
@@ -120,7 +130,9 @@ export function UpcomingEventsPanel({ role, events, onFocusCourse }: Props) {
               size="icon"
               onClick={() =>
                 setMonthStart((prev) =>
-                  startOfMonth(new Date(prev.getFullYear(), prev.getMonth() - 1, 1)),
+                  startOfMonth(
+                    new Date(Date.UTC(prev.getUTCFullYear(), prev.getUTCMonth() - 1, 1)),
+                  ),
                 )
               }
               aria-label="Previous month"
@@ -128,7 +140,11 @@ export function UpcomingEventsPanel({ role, events, onFocusCourse }: Props) {
               <ChevronLeft className="size-4" />
             </Button>
             <p className="text-sm font-semibold">
-              {monthStart.toLocaleDateString("en-US", { month: "long", year: "numeric" })}
+              {monthStart.toLocaleDateString("en-US", {
+                month: "long",
+                year: "numeric",
+                timeZone: "UTC",
+              })}
             </p>
             <Button
               type="button"
@@ -136,7 +152,9 @@ export function UpcomingEventsPanel({ role, events, onFocusCourse }: Props) {
               size="icon"
               onClick={() =>
                 setMonthStart((prev) =>
-                  startOfMonth(new Date(prev.getFullYear(), prev.getMonth() + 1, 1)),
+                  startOfMonth(
+                    new Date(Date.UTC(prev.getUTCFullYear(), prev.getUTCMonth() + 1, 1)),
+                  ),
                 )
               }
               aria-label="Next month"
@@ -154,7 +172,7 @@ export function UpcomingEventsPanel({ role, events, onFocusCourse }: Props) {
           <div className="grid grid-cols-7 gap-1">
             {calendarDays.map((day) => {
               const dayKey = toDateKey(day)
-              const inMonth = day.getMonth() === monthStart.getMonth()
+              const inMonth = day.getUTCMonth() === monthStart.getUTCMonth()
               const isSelected = selectedDate === dayKey
               const count = eventsByDate.get(dayKey)?.length ?? 0
 
@@ -168,6 +186,7 @@ export function UpcomingEventsPanel({ role, events, onFocusCourse }: Props) {
                     month: "long",
                     day: "numeric",
                     year: "numeric",
+                    timeZone: "UTC",
                   })}${count > 0 ? `, ${count} event${count === 1 ? "" : "s"}` : ", no events"}`}
                   onClick={() => setSelectedDate(dayKey)}
                   className={cn(
@@ -176,7 +195,7 @@ export function UpcomingEventsPanel({ role, events, onFocusCourse }: Props) {
                     isSelected ? "bg-primary text-primary-foreground" : "hover:bg-muted",
                   )}
                 >
-                  <span>{day.getDate()}</span>
+                  <span>{day.getUTCDate()}</span>
                   {count > 0 && (
                     <span
                       className={cn(
@@ -199,9 +218,11 @@ export function UpcomingEventsPanel({ role, events, onFocusCourse }: Props) {
             <ul className="mt-3 space-y-2">
               {selectedEvents.map((event) => {
                 const Icon = eventIcon(event.eventType)
+                // UTC, like every other rendered date: the server and the browser must agree.
                 const eventTime = new Date(event.date).toLocaleTimeString("en-US", {
                   hour: "2-digit",
                   minute: "2-digit",
+                  timeZone: "UTC",
                 })
 
                 return (
@@ -237,7 +258,7 @@ export function UpcomingEventsPanel({ role, events, onFocusCourse }: Props) {
                           Filter to course
                         </Button>
                       )}
-                      {event.assessmentType === "Quiz" && role === "student" && (
+                      {event.assessmentType === "QUIZ" && role === "student" && (
                         <Link href="/quiz" className="inline-flex">
                           <Button type="button" variant="outline" size="sm">
                             Open quiz center
