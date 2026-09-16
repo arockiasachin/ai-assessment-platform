@@ -61,9 +61,19 @@ export type StudentMaterialView = {
   updatedAt: string
   courseCode: string
   /**
-   * Whether retrieval can search it. `chunks` is a real count, so `0` is a fact
-   * rather than a missing value — the em-dash rule does not apply here, and the
-   * UI says "Not searchable yet" rather than showing a dash.
+   * Whether this material has indexed content: it has chunk rows, so it contributes
+   * to retrieval.
+   *
+   * Phrased as "has indexed content" rather than "retrieval can search it" because
+   * retrieval additionally requires `embedding IS NOT NULL`, and `_count` cannot
+   * filter on a pgvector column. `indexMaterial` writes chunks and embeddings in one
+   * transaction, so in practice the two coincide and
+   * `tests/demo-seed-shape.test.ts` asserts that for the seed — but the definition
+   * here is the weaker of the two, and saying otherwise would overclaim.
+   *
+   * `chunks` is a real count, so `0` is a fact rather than a missing value — the
+   * em-dash rule does not apply, and the UI says "Not searchable yet" rather than
+   * showing a dash.
    */
   indexed: boolean
   chunks: number

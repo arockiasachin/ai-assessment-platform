@@ -20,6 +20,17 @@ export type SimilaritySearchOptions = {
   courseId?: string | null
   offeringId?: string | null
   materialId?: string | null
+  /**
+   * Restrict to **course-wide** material: rows whose `offeringId` is null.
+   *
+   * This exists because `courseId` alone is not a cohort boundary. A course has
+   * many offerings — different sections, terms and years — and filtering by
+   * `courseId` therefore matches material belonging to *every* offering of that
+   * course, including a different cohort's. That is why this is a separate flag
+   * rather than reusing `offeringId`, where `null` would be indistinguishable from
+   * "not supplied" under the truthiness checks below.
+   */
+  courseWideOnly?: boolean
   /** Maximum hits returned (1-100). */
   limit?: number
   /** Drop hits below this cosine similarity. */
@@ -71,6 +82,7 @@ export async function similaritySearch(
   const filters: Prisma.Sql[] = [Prisma.sql`mc."embedding" IS NOT NULL`]
   if (options.courseId) filters.push(Prisma.sql`m."courseId" = ${options.courseId}`)
   if (options.offeringId) filters.push(Prisma.sql`m."offeringId" = ${options.offeringId}`)
+  if (options.courseWideOnly) filters.push(Prisma.sql`m."offeringId" IS NULL`)
   if (options.materialId) filters.push(Prisma.sql`mc."materialId" = ${options.materialId}`)
 
   const where = Prisma.join(filters, " AND ")

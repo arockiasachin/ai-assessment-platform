@@ -20,9 +20,9 @@ rather than in the composition.
 | **S3** | `student/resources` page                                    | yes                 | **landed** `0996858`           |
 | **S4** | `lib/calendar.ts` + pure mapper + tests. **No page.**       | yes                 | **landed** (with S5, see note) |
 | **S5** | **`Assessment` release**: migration, publish action, audit  | yes                 | **landed** `dadaf48`           |
-| **S6** | **Seed: calendar** — the 10 rows in §2.3, with `releasedAt` | yes                 | pending                        |
-| **S7** | `student/events` page                                       | yes                 | pending                        |
-| **S8** | `teacher/planner` page                                      | yes                 | pending                        |
+| **S6** | **Seed: calendar** — the 10 rows in §2.3, with `releasedAt` | yes                 | **landed** `21c0561`           |
+| **S7** | `student/events` page                                       | yes                 | **landed** `1161a3e`           |
+| **S8** | `teacher/planner` page                                      | yes                 | **landed** `78e7a30`           |
 | **S9** | `teacher/observability` re-skin (optional, droppable)       | yes                 | pending                        |
 
 **S5 landed before S4**, which is the correction described below: the calendar reader
@@ -30,6 +30,52 @@ cannot be written correctly until release exists, because the student reader has
 exclude an un-released assessment's event while the teacher reader must show it.
 Writing S4 first would have meant writing the filter against a column that did not
 exist yet.
+
+### Corrections to this plan found during implementation
+
+Three things this plan specified turned out to be wrong or incomplete. They are
+recorded here rather than quietly worked around.
+
+1. **§3.1's central claim was false, and the code disagreed with its own comment.**
+   The S1 reader was specified to "mirror the two-tier rule the retriever already
+   uses". It did not: the retriever's second tier filtered on `courseId` alone, which
+   is **not** a cohort boundary — a course has many offerings (sections, terms,
+   years), so that filter matched material attached to _other offerings of the same
+   course_. `lib/quiz-generation/retrieval.ts`'s own header said "materials with no
+   offering", so the code contradicted its documentation. The practical effect: a
+   student could be quizzed on a sibling offering's material — in the demo, the 2025
+   revision handout — while that material was correctly hidden from their resources
+   page. Masked in the demo only because that row has no chunks. Fixed by adding
+   `courseWideOnly` to `SimilaritySearchOptions` and passing it from the retriever,
+   so the retriever now matches both its comment and the reader. `tests/materials-read.test.ts`
+   and `tests/quiz-generation-pipeline.test.ts` each gained a **same-course sibling
+   offering** fixture, because the pre-existing cross-course tests could not catch
+   this: they were rejected by the `courseId` filter before the tier in question was
+   consulted.
+
+2. **§2.2's chunk count for the VIDEO row was wrong (3).** It produces **4**, because
+   its prose chunks naturally under `maxChars: 260`. Total is 15, which is what §2.2
+   implies elsewhere. No test depends on the per-row number.
+
+3. **§2.4's term requirement was not met by S2, and §2.4 conflicts with §5.3 about
+   which slice owns it.** S6 fixed it: the offering is now a 15-instructional-week
+   window containing today, and every due date is relative to the run. Doing so was
+   not cosmetic — the seed delivers the quiz through the real attempt flow, and
+   `lib/quiz-attempts/eligibility.ts` blocks a new attempt once `dueDate` has passed,
+   so the old fixed dates would have made `prisma:seed:demo` **throw** once they
+   expired. §5.3 was right about the ownership; §2.4 was the wrong place for it.
+
+Two deliberate departures from this plan, both recorded in the code:
+
+- The real view model is **`StudentMaterialView`**, not the `MaterialView` at
+  `lib/mock/types.ts:555` that §3.1 points at. The mockup's type carries three fields
+  no column backs, so reusing its name for a narrower type would mean same name,
+  different fields across the tree. The mockup's own type is untouched.
+- The planner's **`averagePercent` is dropped rather than derived** (§3.4 says
+  DERIVE). A per-assessment average exists, but behind `getTeacherAnalyticsOverview`,
+  which is scoped to one offering; the planner spans every offering, so reusing it
+  means one call each and reimplementing it means a second implementation of a number
+  the analytics page owns. Extracting the shared summary is the follow-up.
 
 Two corrections to the slice order, recorded here rather than silently renumbered. **S4 is blocked
 on S5**, not the other way round: the plan's §3.3 already says the calendar reader depends on the

@@ -729,6 +729,20 @@ async function createAssessments() {
         dueDate: assessment.dueDate,
         maxMarks: assessment.maxMarks,
         maxAttempts: assessment.maxAttempts,
+        // Written directly rather than through `releaseAssessment`, and that is a
+        // **deliberate exception to this seed's own rule** that publish-like facts go
+        // through the real service with its audit row (which is why grades use
+        // `recordManualMark` and reviews use `submitReviewDecision`).
+        //
+        // The reason is that `releaseAssessment` can only stamp `now`, so routing
+        // through it would make all four release instants identical and minutes old,
+        // whereas a demo is much more legible when an assessment was visibly released
+        // a fortnight ago while another is still unreleased. The cost is that a
+        // seeded database has released assessments with no `assessment.released`
+        // audit row — a state the write path cannot produce, and one worth knowing
+        // about when inspecting the trail. Both instants are in the past, which the
+        // write path *would* also produce, so the stored value is at least
+        // representable.
         releasedAt: assessment.releasedAt,
         createdById: TEACHER_STAFF_ID,
       },

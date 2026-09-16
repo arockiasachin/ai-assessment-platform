@@ -88,8 +88,12 @@ describe("filterMaterials", () => {
 
   it("does not mutate the list it is given", () => {
     const input = [...fixtures]
+    const before = input.map((row) => row.id)
     filterMaterials(input, { search: "khan", kind: "all" })
-    expect(input).toHaveLength(5)
+    // The order and the contents must both survive. Asserting only the length would
+    // pass for an in-place `sort()`, which is the plausible bug in a helper that
+    // returns a filtered list.
+    expect(input.map((row) => row.id)).toEqual(before)
   })
 
   it("treats a whitespace-only search as no search", () => {
@@ -149,9 +153,14 @@ describe("deriveMaterialKpis", () => {
     })
   })
 
-  it("derives pending as total minus indexed, so the two cannot disagree", () => {
+  it("counts pending and indexed independently, not by subtraction", () => {
+    // `pending` is implemented as `total - indexed`, so asserting
+    // `pending + indexed === total` would be an arithmetic tautology that holds for
+    // either implementation. These are counted directly from the fixture instead.
     const kpis = deriveMaterialKpis(fixtures)
-    expect(kpis.pending + kpis.indexed).toBe(kpis.total)
+    expect(kpis.total).toBe(fixtures.length)
+    expect(kpis.indexed).toBe(fixtures.filter((row) => row.indexed).length)
+    expect(kpis.pending).toBe(fixtures.filter((row) => !row.indexed).length)
   })
 
   it("counts zero chunks as a real zero rather than treating it as missing", () => {

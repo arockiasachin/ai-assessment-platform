@@ -357,6 +357,88 @@ describe("quiz generation pipeline", () => {
     expect(outcome.retrieval.sourceTitles).not.toContain("Other course notes")
   })
 
+  it("does not retrieve material belonging to a sibling offering of the same course", async () => {
+    // The cross-course test above cannot catch this: `courseId` alone is not a
+    // cohort boundary. A course has many offerings -- sections, terms, years --
+    // so a `courseId` filter also matches material attached to *another* offering
+    // of the *same* course, which is a different cohort's material (or a previous
+    // year's). This is the case that separates the two tiers, and it is the shape
+    // the demo seed has: the 2025 offering's revision handout shares the active
+    // offering's course.
+    const { fixture, material, provider, teacherUser } = await seed()
+
+    const siblingClass = await prisma.classRoom.create({
+      data: { code: "SIBLING-CLASS", name: "Sibling Class", academicYear: 2025 },
+    })
+    const siblingOffering = await prisma.courseOffering.create({
+      data: {
+        // Same course as the fixture's offering, deliberately.
+        courseId: fixture.course.id,
+        classId: siblingClass.id,
+        teacherId: fixture.teacher.staffProfile!.id,
+        term: "Term-Sibling",
+        academicYear: 2025,
+      },
+    })
+    const siblingMaterial = await prisma.material.create({
+      data: {
+        courseId: fixture.course.id,
+        offeringId: siblingOffering.id,
+        createdById: fixture.teacher.staffProfile!.id,
+        title: "Last year's revision handout",
+        kind: "DOCUMENT",
+        contentText: "Photosynthesis in the previous cohort's handout.",
+      },
+    })
+    await indexMaterial(siblingMaterial.id, { provider })
+
+    const outcome = await generateQuizDraftsForTeacher(
+      teacherUser,
+      { assessmentId: fixture.assessment.id, topic: "photosynthesis", questionCount: 1 },
+      { provider },
+    )
+
+    const ownChunks = new Set(
+      (
+        await prisma.materialChunk.findMany({
+          where: { materialId: material.id },
+          select: { id: true },
+        })
+      ).map((chunk) => chunk.id),
+    )
+
+    expect(outcome.retrieval.sourceTitles).not.toContain("Last year's revision handout")
+    expect(outcome.retrieval.chunkIds.every((id) => ownChunks.has(id))).toBe(true)
+  })
+
+  it("does retrieve material that is genuinely course-wide", async () => {
+    // The other half of the boundary: `courseWideOnly` must not exclude the
+    // material tier 2 exists for. Without this, narrowing the filter to nothing
+    // would pass the test above.
+    const { fixture, provider, teacherUser } = await seed()
+
+    const courseWide = await prisma.material.create({
+      data: {
+        // No offering: shared across the whole course by definition.
+        courseId: fixture.course.id,
+        offeringId: null,
+        createdById: fixture.teacher.staffProfile!.id,
+        title: "Shared course syllabus",
+        kind: "DOCUMENT",
+        contentText: "Photosynthesis is covered in the shared syllabus.",
+      },
+    })
+    await indexMaterial(courseWide.id, { provider })
+
+    const outcome = await generateQuizDraftsForTeacher(
+      teacherUser,
+      { assessmentId: fixture.assessment.id, topic: "photosynthesis", questionCount: 1 },
+      { provider },
+    )
+
+    expect(outcome.retrieval.sourceTitles).toContain("Shared course syllabus")
+  })
+
   it("rejects a malformed model response and writes no drafts", async () => {
     const { fixture, teacherUser } = await seed()
 

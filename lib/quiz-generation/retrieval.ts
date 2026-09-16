@@ -13,6 +13,15 @@ import { searchMaterialChunks, type ChunkSearchHit } from "@/lib/vector"
  *
  * Everything comes back through `lib/vector/search.ts` (pgvector cosine
  * search); no raw vectors ever leave this module.
+ *
+ * **Tier 2 must pass `courseWideOnly`.** `courseId` alone is not a cohort
+ * boundary: a course has many offerings (sections, terms, years), so filtering by
+ * `courseId` also matches material attached to *other* offerings of the same
+ * course — a different cohort's slides, or a previous year's handout. That was the
+ * behaviour before this flag existed, and it contradicted this comment. The list
+ * reader (`lib/materials.ts`) scopes a student to their enrolled offerings plus
+ * course-wide material, so leaving the retriever broader would mean a student could
+ * be quizzed on material their own resources page does not show.
  */
 
 export type TopicRetrieval = {
@@ -56,6 +65,9 @@ export async function retrieveTopicMaterial(
     searchMaterialChunks(topic, {
       provider: options.provider,
       courseId: scope.courseId,
+      // Cohort boundary: without this, "course-wide" silently means "everything
+      // in the course", including other offerings' material. See the header.
+      courseWideOnly: true,
       limit,
     }),
   ])

@@ -29,6 +29,7 @@ let visibleOfferingMaterial: string
 let visibleCourseWideMaterial: string
 let otherCourseWideMaterial: string
 let otherOfferingMaterial: string
+let siblingOfferingMaterial: string
 
 beforeAll(async () => {
   await truncateAll()
@@ -118,6 +119,43 @@ beforeAll(async () => {
   })
   otherOfferingMaterial = otherOfferingMaterialRow.id
 
+  // 5. Attached to a **sibling offering of the SAME course** the student is
+  // enrolled in — must NOT be visible.
+  //
+  // This is the case that separates the reader's two tiers, and cases 3 and 4 do
+  // not cover it: they both sit in a *different* course, so the `courseId` half of
+  // tier 2 rejects them before `offeringId: null` is ever consulted. A sibling
+  // offering matches the enrolled `courseId`, so only the `offeringId: null`
+  // requirement keeps it out. Without this row, widening the reader to "all
+  // material in the course" would pass every assertion here.
+  //
+  // It is also the shape the retriever got wrong: it searched all material in the
+  // course, so this row's chunks were reachable for a quiz while being hidden from
+  // the page (see `lib/quiz-generation/retrieval.ts` and the sibling test in
+  // `tests/quiz-generation-pipeline.test.ts`).
+  const siblingClassroom = await prisma.classRoom.create({
+    data: { code: "SIBLING-CLASS-TEST", name: "Sibling Test Class", academicYear: 2025 },
+  })
+  const siblingOffering = await prisma.courseOffering.create({
+    data: {
+      courseId: fixture.course.id,
+      classId: siblingClassroom.id,
+      teacherId,
+      term: "Term-Sibling",
+      academicYear: 2025,
+    },
+  })
+  const siblingMaterial = await prisma.material.create({
+    data: {
+      courseId: fixture.course.id,
+      offeringId: siblingOffering.id,
+      createdById: teacherId,
+      title: "Last year's revision handout",
+      kind: "DOCUMENT",
+    },
+  })
+  siblingOfferingMaterial = siblingMaterial.id
+
   // 5. A student with no enrolments at all.
   const outsider = await prisma.user.create({
     data: {
@@ -156,6 +194,14 @@ describe("listMaterialsForStudent", () => {
   it("does not see another offering's material", async () => {
     const views = await listMaterialsForStudent(asUser(enrolledUserId))
     expect(views.map((view) => view.id)).not.toContain(otherOfferingMaterial)
+  })
+
+  it("does not see a sibling offering's material from the same course", async () => {
+    // The assertion that actually tests the second tier. Material in another course
+    // is rejected by the `courseId` filter alone; this row shares the enrolled
+    // course, so only the `offeringId: null` requirement excludes it.
+    const views = await listMaterialsForStudent(asUser(enrolledUserId))
+    expect(views.map((view) => view.id)).not.toContain(siblingOfferingMaterial)
   })
 
   it("returns exactly the two visible materials", async () => {

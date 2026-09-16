@@ -82,7 +82,10 @@ describe("toMaterialView", () => {
 
   it("does not mutate the row it is given", () => {
     const input = row()
+    const before = { ...input, course: { ...input.course } }
     toMaterialView(input)
-    expect(input.chunks).toBe(5)
+    // Deep comparison, not one field: checking a single field would pass even if
+    // the mapper overwrote the rest.
+    expect(input).toEqual(before)
   })
 })

@@ -163,7 +163,78 @@ describe("releaseAssessment", () => {
   it("leaves both neighbouring publish facts alone", async () => {
     // The trap this slice exists to avoid: releasing an assessment is not
     // publishing results (the retention anchor) and not releasing a mark.
-    expect(await prisma.grade.count({ where: { assessmentId: f.assessment.id } })).toBe(0)
+    //
+    // A `Grade.publishedAt` that a buggy release could touch has to *exist* for this
+    // to prove anything. Asserting `grade.count === 0` would be satisfied by
+    // construction on a fixture that creates no grades -- an implementation doing
+    // `grade.updateMany({ data: { publishedAt: now } })` would pass it. So a grade is
+    // created first with a known instant, and the assertion is that the instant is
+    // byte-identical afterwards.
+    const existingGrade = await prisma.grade.create({
+      data: {
+        assessmentId: f.assessment.id,
+        studentId: f.student.studentProfile!.id,
+        points: 15,
+        maxPoints: 20,
+        source: "TEACHER_OVERRIDE",
+        publishedAt: new Date("2026-09-01T08:00:00.000Z"),
+        approvedById: f.teacher.staffProfile!.id,
+      },
+    })
+
+    // The fixture's assessment was released by an earlier test, so this exercises
+    // the idempotent path -- which is the path a repeat release would take.
+    await releaseAssessment(teacher, f.assessment.id)
+
+    const gradeAfter = await prisma.grade.findUniqueOrThrow({
+      where: { id: existingGrade.id },
+      select: { publishedAt: true, points: true },
+    })
+    // Not merely "still set": the exact instant must survive, or a release would
+    // have silently re-dated a student's mark.
+    expect(gradeAfter.publishedAt?.toISOString()).toBe("2026-09-01T08:00:00.000Z")
+    expect(Number(gradeAfter.points)).toBe(15)
+
+    // And releasing created no additional grade.
+    expect(await prisma.grade.count({ where: { assessmentId: f.assessment.id } })).toBe(1)
+
+    // The retention anchor, untouched. This half always bit, because the offering
+    // row exists and has the column.
+    const offering = await prisma.courseOffering.findUniqueOrThrow({
+      where: { id: f.offering.id },
+      select: { resultsPublishedAt: true },
+    })
+    expect(offering.resultsPublishedAt).toBeNull()
+  })
+
+  it("leaves an existing mark alone when it is the release that does the writing", async () => {
+    // The assertion above runs against an already-released assessment, so it takes
+    // the early-return path and never executes the write. This one uses a *fresh*
+    // assessment, so the write genuinely runs, and checks the mark afterwards --
+    // which is the only version of the claim that can fail.
+    const assessment = await createAssessmentOnOwnOffering()
+    const grade = await prisma.grade.create({
+      data: {
+        assessmentId: assessment.id,
+        studentId: f.student.studentProfile!.id,
+        points: 7,
+        maxPoints: 10,
+        source: "TEACHER_OVERRIDE",
+        publishedAt: new Date("2026-08-15T08:00:00.000Z"),
+        approvedById: f.teacher.staffProfile!.id,
+      },
+    })
+
+    const result = await releaseAssessment(teacher, assessment.id)
+    // A real write happened, which is the precondition for this test to mean
+    // anything.
+    expect(result.kind).toBe("released")
+
+    const after = await prisma.grade.findUniqueOrThrow({
+      where: { id: grade.id },
+      select: { publishedAt: true },
+    })
+    expect(after.publishedAt?.toISOString()).toBe("2026-08-15T08:00:00.000Z")
 
     const offering = await prisma.courseOffering.findUniqueOrThrow({
       where: { id: f.offering.id },
