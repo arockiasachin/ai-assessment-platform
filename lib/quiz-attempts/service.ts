@@ -16,6 +16,7 @@ import {
 import type { QuizAnswer } from "@/lib/contracts/quiz"
 import type { Grade, GradeReview } from "@/lib/generated/prisma/client"
 import { selectAdaptiveRetakeQuestions } from "@/lib/analytics/retake"
+import { finalizedAttemptWhere, GRADED, inProgressAttemptWhere, isCounted, isGraded } from "./kinds"
 import { recordAiSuggestion, writeAuditLog } from "@/lib/grading"
 import { QuizGenerationError } from "@/lib/quiz-generation/errors"
 import { gradeGeneratedQuiz, type GeneratedQuestionForScoring } from "@/lib/quiz-generation/grading"
@@ -58,9 +59,6 @@ import { recordTextQuizSuggestions } from "./text-suggestions"
  * this. A client never sends a correctness value, and the pre-submission view
  * has no answer-key field at all.
  */
-
-const FINALIZED_STATUSES = ["SUBMITTED", "GRADED"] as const
-const COUNTED_STATUSES = ["IN_PROGRESS", "SUBMITTED", "GRADED", "EXPIRED"] as const
 
 type TextGradingContext = {
   answerByQuestion: Map<string, QuizAnswer>
@@ -120,14 +118,14 @@ async function attemptSettings(
   assessmentId: string,
   assessmentMaxAttempts: number | null,
 ) {
+  // Only graded sittings count. A practice sitting is recorded but must not consume a slot,
+  // or "practise" would be indistinguishable from "sit it again" — see `./kinds`.
   const attempts = await prisma.quizAttempt.findMany({
     where: { assessmentId, studentId },
-    select: { status: true },
+    select: { status: true, kind: true },
   })
   const maxAttempts = resolveMaxAttempts(assessmentMaxAttempts)
-  const used = attempts.filter((attempt) =>
-    (COUNTED_STATUSES as readonly string[]).includes(attempt.status),
-  ).length
+  const used = attempts.filter((attempt) => isCounted(attempt)).length
   return {
     maxAttempts,
     attemptsUsed: used,
@@ -287,6 +285,7 @@ export async function listStudentQuizzes(user: AuthUser): Promise<StudentQuizSum
           assessmentId: true,
           attemptNumber: true,
           status: true,
+          kind: true,
           score: true,
           maxScore: true,
           startedAt: true,
@@ -298,11 +297,14 @@ export async function listStudentQuizzes(user: AuthUser): Promise<StudentQuizSum
 
   return assessments.map((assessment) => {
     const maxAttempts = resolveMaxAttempts(assessment.maxAttempts)
-    const used = assessment.quizAttempts.filter((attempt) =>
-      (COUNTED_STATUSES as readonly string[]).includes(attempt.status),
-    ).length
-    const latest = assessment.quizAttempts.at(-1) ?? null
-    const inProgress = assessment.quizAttempts.some((attempt) => attempt.status === "IN_PROGRESS")
+    const used = assessment.quizAttempts.filter((attempt) => isCounted(attempt)).length
+    // The latest *graded* sitting, and an in-progress *graded* one: a practice sitting must
+    // not be shown as the student's latest attempt, nor make the graded quiz look started.
+    const gradedAttempts = assessment.quizAttempts.filter((attempt) => isGraded(attempt))
+    const latest = gradedAttempts.at(-1) ?? null
+    const inProgress = assessment.quizAttempts.some(
+      (attempt) => attempt.status === "IN_PROGRESS" && isGraded(attempt),
+    )
     const delivery = quizDeliveryStatus(assessment.questions)
 
     let canStart = delivery.deliverable
@@ -418,7 +420,10 @@ export async function listStudentAttempts(
   if (!assessment) throw new QuizAttemptError(404, "Assessment not found.")
 
   const attempts = await prisma.quizAttempt.findMany({
-    where: { assessmentId, studentId },
+    // Graded only. This payload carries review status and marks, and a practice sitting has
+    // neither — rendered in this list it would read as "submitted and never marked". Showing
+    // practice history is a decision for the retake surface, which can label it.
+    where: { assessmentId, studentId, kind: GRADED },
     orderBy: { attemptNumber: "asc" },
     select: {
       id: true,
@@ -466,8 +471,11 @@ export async function listStudentAttempts(
     throw new QuizAttemptError(403, "You are not enrolled in this assessment offering.")
   }
 
+  // The retake's *source* must be a graded sitting. A practice sitting that reached
+  // SUBMITTED would otherwise become the latest finalized attempt, and the retake would be
+  // built from practice answers — a silent, wrong result rather than an error.
   const latest = await prisma.quizAttempt.findFirst({
-    where: { assessmentId, studentId, status: { in: [...FINALIZED_STATUSES] } },
+    where: finalizedAttemptWhere(assessmentId, studentId),
     orderBy: { attemptNumber: "desc" },
     select: { id: true, responses: { select: { questionId: true, isCorrect: true } } },
   })
@@ -534,8 +542,9 @@ export async function startQuizAttempt(user: AuthUser, input: unknown): Promise<
   const created = await prisma.$transaction(async (tx) => {
     await tx.$queryRaw`SELECT "id" FROM "Assessment" WHERE "id" = ${assessment.id} FOR UPDATE`
 
+    // Kind-scoped: a graded start must not resume an in-progress *practice* sitting.
     const existing = await tx.quizAttempt.findFirst({
-      where: { assessmentId: assessment.id, studentId, status: "IN_PROGRESS" },
+      where: inProgressAttemptWhere(assessment.id, studentId),
       orderBy: { attemptNumber: "desc" },
       select: { id: true },
     })
@@ -543,11 +552,10 @@ export async function startQuizAttempt(user: AuthUser, input: unknown): Promise<
 
     const attempts = await tx.quizAttempt.findMany({
       where: { assessmentId: assessment.id, studentId },
-      select: { attemptNumber: true, status: true },
+      select: { attemptNumber: true, status: true, kind: true },
     })
-    const used = attempts.filter((attempt) =>
-      (COUNTED_STATUSES as readonly string[]).includes(attempt.status),
-    ).length
+    // The cap gate: only graded sittings count, so practice cannot burn a real attempt.
+    const used = attempts.filter((attempt) => isCounted(attempt)).length
     const eligibility = evaluateAttemptEligibility({
       existingAttemptCount: used,
       maxAttempts: resolveMaxAttempts(assessment.maxAttempts),
@@ -561,10 +569,20 @@ export async function startQuizAttempt(user: AuthUser, input: unknown): Promise<
       )
     }
 
+    // Numbered within its own kind. Sharing one sequence would label a student's first
+    // graded attempt "#4" after three practice sittings.
     const attemptNumber =
-      attempts.reduce((max, attempt) => Math.max(max, attempt.attemptNumber), 0) + 1
+      attempts
+        .filter((attempt) => isGraded(attempt))
+        .reduce((max, attempt) => Math.max(max, attempt.attemptNumber), 0) + 1
     const attempt = await tx.quizAttempt.create({
-      data: { assessmentId: assessment.id, studentId, attemptNumber, status: "IN_PROGRESS" },
+      data: {
+        assessmentId: assessment.id,
+        studentId,
+        attemptNumber,
+        status: "IN_PROGRESS",
+        kind: GRADED,
+      },
     })
     await writeAuditLog(tx, {
       entityType: "QuizAttempt",
@@ -864,7 +882,9 @@ export async function listTeacherAttempts(
   const owned = await loadOwnedAssessment(user, assessmentId)
   const [attempts, reviews, grades] = await Promise.all([
     prisma.quizAttempt.findMany({
-      where: { assessmentId: owned.id },
+      // Graded only: the teacher's table is for reviewing marked work, and a practice sitting
+      // has no review status or mark to show.
+      where: { assessmentId: owned.id, kind: GRADED },
       orderBy: [{ attemptNumber: "asc" }],
       select: {
         id: true,

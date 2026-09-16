@@ -395,6 +395,57 @@ props (`GenerationAssessmentSummary` has none). Purely additive, and it depends 
 
 ---
 
+## 7.7 T5 — `QuizAttempt.kind`, and the eleven read sites it touched
+
+`QuizAttempt.kind` (`GRADED | PRACTICE`, `@default(GRADED)`) with the unique constraint moved
+from `(assessmentId, studentId, attemptNumber)` to include `kind`, and the `(assessmentId,
+studentId)` index replaced by `(assessmentId, studentId, kind, status)`. Migration
+`20260916220000_quiz_attempt_kind` — `NOT NULL DEFAULT 'GRADED'`, so **no backfill**: before this
+column nothing could produce a practice sitting, so every existing row _is_ graded.
+
+**Two reasons the constraint had to move, and one is a trap.** A practice sitting and a graded
+sitting both starting at `attemptNumber = 1` collide under the old global constraint. Sharing one
+sequence instead is worse — after three practice sittings the student's first _graded_ attempt
+would be labelled "#4", and the teacher-facing attempt number would be nonsense. So numbering is
+kind-scoped, and a test pins that the first graded attempt is `#1` even after three practice
+sittings.
+
+**The rule now lives once**, in `lib/quiz-attempts/kinds.ts`, as predicates. It was two
+hand-maintained constant pairs declared **twice** — in `quiz-attempts/service.ts` and
+`analytics/service.ts` — with eleven read sites between them. Adding `kind` to that shape would
+have meant editing eleven sites and hoping none was missed, and **the ones that matter fail
+silently**: a miscount does not throw, it tells a student they have an attempt left when they do
+not, or moves a cohort average.
+
+| Site                                           | What it decides                                            | If missed                                    |
+| ---------------------------------------------- | ---------------------------------------------------------- | -------------------------------------------- |
+| `attemptSettings`                              | attempts used/remaining on the attempt view                | remaining count is wrong                     |
+| `listStudentQuizzes`                           | the quizzes page's `attemptsUsed` / `canStart`             | same                                         |
+| the cap gate (in the `FOR UPDATE` transaction) | whether a student may sit again                            | practice burns a graded slot                 |
+| `latestFailedQuestionIds`                      | **the source attempt for a retake**                        | a retake built from _practice_ answers       |
+| `getTeacherAnalyticsOverview`                  | `attemptCount`, average, pass rate, alerts                 | practice moves cohort numbers                |
+| `getAssessmentItemAnalysisForTeacher`          | difficulty and discrimination                              | practice distorts item indices               |
+| `listStudentRetakableAssessmentsForStudent` ×2 | whether an assessment is retakable, and the source attempt | a student who only practised looks retakable |
+| `getAdaptiveRetakeForStudent`                  | the source attempt                                         | same as above                                |
+
+Plus four decisions the dossier flagged and this slice took:
+
+- **Resume is kind-scoped.** Without it, starting a graded sitting would resume an in-progress
+  _practice_ one, and the graded attempt would silently be the practice answers.
+- **`listStudentAttempts` and `listTeacherAttempts` show graded only.** Both payloads carry review
+  status and marks, which a practice sitting has neither of — rendered there it would read as
+  "submitted and never marked". Showing practice history is a decision for the retake surface,
+  which can label it.
+- **A row with no `kind` is graded.** Pinned by test, because the opposite would have silently
+  un-counted every pre-existing attempt and handed students extra sittings.
+- **Retention still purges practice responses.** That is a privacy-surface decision rather than an
+  oversight: practice answers are student work too. Recorded, not changed.
+
+**Not yet built, and deliberately:** `Assessment.retakePolicy`, `RetakeRequest`, and the practice
+question pool. They are the retake _feature_ (T6), and adding the models before anything reads
+them would be dead weight. The foundation they need — a practice sitting that does not consume a
+graded attempt — now exists and is tested.
+
 ## 8. Open questions carried into the slices
 
 Eight questions the analytics dossier raised and could not settle from the code. They

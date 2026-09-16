@@ -352,6 +352,15 @@ enum QuizAttemptStatus {
   ABANDONED
 }
 
+// Whether a quiz sitting is graded work or practice.
+//
+// Practice exists because the retake surface needs somewhere to send a student that is not a
+// graded slot — before this, "practise" was indistinguishable from "sit the assessment again".
+enum QuizAttemptKind {
+  GRADED
+  PRACTICE
+}
+
 enum GradeReviewStatus {
   PENDING
   AUTO_ACCEPTED
@@ -650,6 +659,18 @@ model QuizAttempt {
   studentId     String
   attemptNumber Int               @default(1)
   status        QuizAttemptStatus @default(IN_PROGRESS)
+  // Whether this sitting counts as graded work or as practice.
+  //
+  // Only `GRADED` attempts count against `Assessment.maxAttempts` and contribute to analytics;
+  // a `PRACTICE` sitting from the retake surface is recorded so the student can see their
+  // history, but must not consume a graded slot or move the cohort's numbers. Before this
+  // column existed, "practice" was indistinguishable from "graded", so exercising it silently
+  // burned an attempt — see `lib/quiz-attempts/kinds.ts`, which is the single place the rule
+  // lives.
+  //
+  // Defaults to `GRADED`, which is both the safe value and the correct reading of every row
+  // that predates the column: no backfill is needed.
+  kind          QuizAttemptKind   @default(GRADED)
   score         Decimal?          @db.Decimal(7, 2)
   maxScore      Decimal?          @db.Decimal(7, 2)
   startedAt     DateTime          @default(now())
@@ -661,8 +682,19 @@ model QuizAttempt {
   student       StudentProfile    @relation(fields: [studentId], references: [id], onDelete: Cascade)
   responses     QuizResponse[]
 
-  @@unique([assessmentId, studentId, attemptNumber])
-  @@index([assessmentId, studentId])
+  // Kind-scoped numbering, so practice and graded sittings each run their own sequence.
+  //
+  // The previous constraint was `[assessmentId, studentId, attemptNumber]` — global across
+  // kinds — which would collide the moment a student practised before their first graded
+  // sitting: practice #1 and graded #1 would both want `attemptNumber = 1`. Sharing the
+  // sequence instead was worse, because a student who practised three times would see their
+  // first graded attempt labelled "#4". Existing rows are all `GRADED`, so they already satisfy
+  // this constraint.
+  @@unique([assessmentId, studentId, kind, attemptNumber])
+  // Replaces the old `[assessmentId, studentId]` index: the leading columns are the same, so it
+  // serves every query that index did, and adds `kind`/`status` for the two hot filters
+  // (counting a student's graded sittings, and finding their in-progress one).
+  @@index([assessmentId, studentId, kind, status])
   @@index([status])
 }
 

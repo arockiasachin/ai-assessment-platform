@@ -298,6 +298,80 @@ describe("quiz attempts", () => {
     expect(attempts[0].gradePublishedAt).not.toBeNull()
   })
 
+  it("does not let a practice sitting consume a graded attempt", async () => {
+    // The invariant the `kind` column exists for, and precisely the one the old shape could not
+    // express. Before it, exercising the retake surface silently burned one of a student's
+    // graded attempts — a bug with no error and no visible trace.
+    //
+    // The existing cap test still passes with `@default(GRADED)`, which is exactly why this
+    // sibling is needed: without it, a regression that counted practice rows would be invisible.
+    const { fixture, questions, studentId, studentUser } = await seedQuiz()
+    await prisma.assessment.update({
+      where: { id: fixture.assessment.id },
+      data: { maxAttempts: 2 },
+    })
+
+    // Three practice sittings, persisted directly — nothing in the product creates them yet, so
+    // this stands in for the retake surface that will.
+    for (let index = 0; index < 3; index += 1) {
+      await prisma.quizAttempt.create({
+        data: {
+          assessmentId: fixture.assessment.id,
+          studentId,
+          attemptNumber: index + 1,
+          status: "SUBMITTED",
+          kind: "PRACTICE",
+          score: 1,
+          maxScore: questions.length,
+          submittedAt: new Date(),
+        },
+      })
+    }
+
+    // Practice numbering did not shift the graded sequence: the first graded attempt is #1.
+    const first = await startQuizAttempt(studentUser, { assessmentId: fixture.assessment.id })
+    const stored = await prisma.quizAttempt.findUniqueOrThrow({
+      where: { id: first.id },
+      select: { attemptNumber: true, kind: true },
+    })
+    expect(stored.kind).toBe("GRADED")
+    expect(stored.attemptNumber).toBe(1)
+
+    // And the graded cap is untouched: one used of two, so a second start is still allowed.
+    const settings = await prisma.quizAttempt.count({
+      where: { assessmentId: fixture.assessment.id, studentId, kind: "GRADED" },
+    })
+    expect(settings).toBe(1)
+
+    await submitQuizAttempt(studentUser, first.id, {
+      answers: questions.map((question) => ({
+        questionId: question.id,
+        selectedIndex: 0,
+      })),
+    })
+    const second = await startQuizAttempt(studentUser, { assessmentId: fixture.assessment.id })
+    expect(second.id).not.toBe(first.id)
+
+    await submitQuizAttempt(studentUser, second.id, {
+      answers: questions.map((question) => ({
+        questionId: question.id,
+        selectedIndex: 0,
+      })),
+    })
+
+    // Two graded sittings used, so the cap now bites — while the three practice rows remain
+    // irrelevant to it.
+    await expect(
+      startQuizAttempt(studentUser, { assessmentId: fixture.assessment.id }),
+    ).rejects.toMatchObject({ status: 429 })
+
+    expect(
+      await prisma.quizAttempt.count({
+        where: { assessmentId: fixture.assessment.id, studentId, kind: "PRACTICE" },
+      }),
+    ).toBe(3)
+  })
+
   it("enforces the deadline for new attempts", async () => {
     const past = await seedQuiz({ dueDate: new Date(Date.now() - DAY) })
     await expect(

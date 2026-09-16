@@ -19,6 +19,7 @@ import {
   type InterventionAlert,
   type InterventionThresholds,
 } from "./alerts"
+import { FINALIZED_STATUSES, GRADED } from "@/lib/quiz-attempts/kinds"
 import { buildCohortDistribution, type CohortDistribution, type CohortScore } from "./cohort"
 import { gatherRegimeInputs } from "./grading-regime"
 import { buildRosterForOffering } from "./at-risk"
@@ -49,8 +50,6 @@ import {
  * before reading anything, so a teacher cannot see another teacher's offering
  * and a student only ever sees their own attempts.
  */
-
-const FINALIZED_STATUSES = ["SUBMITTED", "GRADED"] as const
 
 function toNumber(value: unknown): number {
   if (value === null || value === undefined) return 0
@@ -147,7 +146,7 @@ export async function getTeacherAnalyticsOverview(
       dueDate: true,
       maxMarks: true,
       quizAttempts: {
-        where: { status: { in: [...FINALIZED_STATUSES] } },
+        where: { status: { in: [...FINALIZED_STATUSES] }, kind: GRADED },
         orderBy: { attemptNumber: "asc" },
         select: {
           id: true,
@@ -370,7 +369,7 @@ export async function getAssessmentItemAnalysisForTeacher(
       select: { id: true, order: true, prompt: true, subtopic: true },
     }),
     prisma.quizAttempt.findMany({
-      where: { assessmentId: assessment.id, status: { in: [...FINALIZED_STATUSES] } },
+      where: { assessmentId: assessment.id, status: { in: [...FINALIZED_STATUSES] }, kind: GRADED },
       orderBy: { attemptNumber: "asc" },
       select: {
         id: true,
@@ -446,7 +445,11 @@ export async function listStudentRetakableAssessmentsForStudent(
     where: {
       offering: { enrollments: { some: { studentId: student.studentId, status: "active" } } },
       quizAttempts: {
-        some: { studentId: student.studentId, status: { in: [...FINALIZED_STATUSES] } },
+        some: {
+          studentId: student.studentId,
+          status: { in: [...FINALIZED_STATUSES] },
+          kind: GRADED,
+        },
       },
     },
     orderBy: { dueDate: "desc" },
@@ -458,7 +461,11 @@ export async function listStudentRetakableAssessmentsForStudent(
       offering: { select: { course: { select: { code: true, name: true } } } },
       questions: { orderBy: { order: "asc" }, select: { id: true } },
       quizAttempts: {
-        where: { studentId: student.studentId, status: { in: [...FINALIZED_STATUSES] } },
+        where: {
+          studentId: student.studentId,
+          status: { in: [...FINALIZED_STATUSES] },
+          kind: GRADED,
+        },
         orderBy: { attemptNumber: "asc" },
         select: {
           id: true,
@@ -531,7 +538,11 @@ export async function getAdaptiveRetakeForStudent(
         include: { options: { orderBy: { order: "asc" } } },
       },
       quizAttempts: {
-        where: { studentId: student.studentId, status: { in: [...FINALIZED_STATUSES] } },
+        where: {
+          studentId: student.studentId,
+          status: { in: [...FINALIZED_STATUSES] },
+          kind: GRADED,
+        },
         orderBy: { attemptNumber: "asc" },
         select: {
           id: true,
