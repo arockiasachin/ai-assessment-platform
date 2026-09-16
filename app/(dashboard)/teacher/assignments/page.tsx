@@ -5,6 +5,7 @@ import { RoleGuard } from "@/components/role-guard"
 import { AppShell, PageHeader } from "@/components/shell"
 import { TeacherAssignmentsManager } from "@/components/teacher-assignments-manager"
 import { getSessionUser } from "@/lib/auth"
+import { listSubmissionsForTeacher } from "@/lib/teacher-submissions"
 import { initialsFromEmail, roleLabelFromRole } from "@/lib/user-identity"
 
 export const dynamic = "force-dynamic"
@@ -23,6 +24,15 @@ export default async function TeacherAssignmentsPage() {
   const user = await getSessionUser()
   if (!user || user.role !== "teacher") redirect("/login")
 
+  /*
+   * Fetched here rather than by the submissions queue, which used to call the canvas route in a mount
+   * effect and is the P2 finding in `docs/quality/a11y-perf-audit.md`. The queue renders inside
+   * `TeacherAssignmentsManager`, so its rows have to be threaded through rather than arriving as a
+   * page-level payload — which is why this conversion was deferred while its sibling
+   * `student/assessments` was done during the Wave 1 port.
+   */
+  const submissionRows = await listSubmissionsForTeacher(user)
+
   return (
     <RoleGuard role="teacher">
       <AppShell
@@ -39,7 +49,7 @@ export default async function TeacherAssignmentsPage() {
           title="Assignments"
           description="Create assignments manually or import quiz assessments from JSON."
         />
-        <TeacherAssignmentsManager />
+        <TeacherAssignmentsManager submissionRows={submissionRows} />
       </AppShell>
     </RoleGuard>
   )

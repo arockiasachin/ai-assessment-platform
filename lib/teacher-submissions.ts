@@ -9,15 +9,18 @@ import { resolveTeacherStaffId } from "@/lib/teacher-staff"
 /**
  * The teacher's submissions queue.
  *
- * This is a **server** read for the queue page. It is deliberately separate from
- * the older `GET /api/teacher/assessments/submissions` response, which exists to
- * feed an inline editor (`components/teacher-submissions-manager.tsx`) and
- * collapses the assessment kind and hides unpublished marks. The queue needs the
- * opposite of both: the real kind, and the mark whether or not it has been
- * released — "marked, withheld" is a state the count has to name.
+ * This is a **server** read for the queue page, and since the P2 conversion it also feeds the inline
+ * grading editor (`components/teacher-submissions-manager.tsx`) — the editor takes these rows as a
+ * prop instead of fetching after paint (`docs/quality/a11y-perf-audit.md`).
  *
- * Ownership is the same rule as the route: only submissions whose assessment
- * belongs to the acting teacher's offering.
+ * It returns the **real** assessment kind rather than a Quiz/Assignment collapse, and the mark
+ * **whether or not it has been released**, because "marked, withheld" is a state the queue's count
+ * has to name. The editor deliberately shows no more than it did before: `lib/teacher-submissions-view.ts`
+ * maps the mark to a score only when `published` is set, so the extra information is available without
+ * silently changing a grading screen.
+ *
+ * The route that used to duplicate this projection is gone; having two was the defect. Ownership is
+ * only submissions whose assessment belongs to the acting teacher's offering.
  */
 
 export type TeacherSubmissionRow = {
@@ -47,6 +50,17 @@ export type TeacherSubmissionRow = {
   published: boolean
   feedback: string | null
   versionCount: number
+  /**
+   * The submission body, which the grading editor shows before scoring it.
+   *
+   * Added so the editor can be seeded from the server. That route used to be the only way to obtain
+   * this field, which is why the editor fetched it on mount
+   * (`docs/quality/a11y-perf-audit.md`, P2) — a round trip after first paint for data the page
+   * could have had immediately.
+   */
+  contentText: string | null
+  /** The student's login address. Rendered in the editor beside their name. */
+  studentEmail: string
 }
 
 /**
@@ -63,10 +77,12 @@ export type SubmissionQueryRow = {
   gradedAt: Date | null
   feedback: string | null
   versionCount: number
+  contentText: string | null
   student: {
     id: string
     fullName: string
     registerNumber: string | null
+    user: { email: string }
   }
   assessment: {
     id: string
@@ -135,6 +151,8 @@ export function toTeacherSubmissionRow(row: SubmissionQueryRow): TeacherSubmissi
     submittedAt: row.submittedAt?.toISOString() ?? null,
     gradedAt: row.gradedAt?.toISOString() ?? null,
     points,
+    contentText: row.contentText,
+    studentEmail: row.student.user.email,
     maxPoints: row.assessment.maxMarks,
     published: grade?.publishedAt != null,
     feedback: row.feedback,
@@ -164,8 +182,14 @@ export async function listSubmissionsForTeacher(user: AuthUser): Promise<Teacher
       gradedAt: true,
       feedback: true,
       _count: { select: { versions: true } },
+      contentText: true,
       student: {
-        select: { id: true, fullName: true, registerNumber: true },
+        select: {
+          id: true,
+          fullName: true,
+          registerNumber: true,
+          user: { select: { email: true } },
+        },
       },
       assessment: {
         select: {

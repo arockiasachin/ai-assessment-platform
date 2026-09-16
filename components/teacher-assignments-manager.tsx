@@ -16,6 +16,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { TeacherSubmissionsManager } from "@/components/teacher-submissions-manager"
+import type { TeacherSubmissionRow } from "@/lib/teacher-submissions"
 
 type QuizImportResponse = {
   success: boolean
@@ -37,7 +38,16 @@ function todayIsoDate() {
   return new Date().toISOString().slice(0, 10)
 }
 
-export function TeacherAssignmentsManager() {
+export function TeacherAssignmentsManager({
+  submissionRows,
+}: {
+  /**
+   * The submissions queue's rows, fetched on the server by `app/(dashboard)/teacher/assignments/page.tsx`.
+   * Threaded through this component rather than fetched by the queue itself, because the queue renders
+   * inside this one rather than at a page root — see the note on `TeacherSubmissionsManager`.
+   */
+  submissionRows: TeacherSubmissionRow[]
+}) {
   const { offerings, refresh } = useGradebook()
 
   const [offeringId, setOfferingId] = useState("")
@@ -353,7 +363,7 @@ export function TeacherAssignmentsManager() {
         </CardContent>
       </Card>
 
-      <TeacherSubmissionsManager />
+      <TeacherSubmissionsManager rows={submissionRows} />
     </div>
   )
 }

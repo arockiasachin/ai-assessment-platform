@@ -395,6 +395,49 @@ define and edit them, and a minimum-CAT gate that applied to anybody.
 - **The create contract is unchanged** (`Quiz | Assignment`). Teachers can weight the kinds that
   exist; authoring descriptive/code/group assessments from the gradebook remains a product decision.
 
+### P2 resolved: the submissions editor no longer fetches on mount
+
+`docs/quality/a11y-perf-audit.md`'s last outstanding item. `TeacherSubmissionsManager` called
+`GET /api/teacher/assessments/submissions` in a mount effect, so the section painted "Loading
+submissions…" and then filled in. Its sibling `student/assessments` was converted during the Wave 1
+port; this one renders _inside_ `TeacherAssignmentsManager` rather than at a page root, so its rows had
+to be threaded through two components instead of arriving as a page-level payload — which is why it was
+deferred.
+
+#### Changed
+
+- **The editor takes `listSubmissionsForTeacher`'s rows as a prop**, threaded from
+  `app/(dashboard)/teacher/assignments/page.tsx` through `TeacherAssignmentsManager`.
+- **The rows are read from props, not copied into state.** Only edits live in state, so a field with no
+  draft entry renders the row's own value. That is what lets `router.refresh()` after a save update the
+  view — there is no props-into-state effect, which would have been the
+  `react-hooks/set-state-in-effect` pattern this repo lints against, and would have made the refresh
+  silently do nothing.
+- **`lib/teacher-submissions-view.ts`** holds the mapping and input rules, so the two projections'
+  differences are asserted without a DOM (this repo pins `environment: "node"`).
+- **`lib/teacher-submissions.ts`** now carries `contentText` and `studentEmail` — the two route-only
+  fields the editor actually renders. `term` and `academicYear` were declared in its item type but never
+  displayed, so they are gone rather than carried for nothing.
+
+#### Removed
+
+- **`GET /api/teacher/assessments/submissions`**, whose only client was the editor. It returned its own
+  projection of the same rows — kind collapsed to Quiz/Assignment, marks filtered to published-only —
+  and having two projections was the defect. The editor's behaviour is unchanged:
+  `toSubmissionEditorItem` still maps a score only when `published` is set, so the move to the richer
+  reader did not start revealing withheld marks on a grading screen.
+
+#### Fixed
+
+- **The lint baseline dropped from 4 warnings to 3**: the mount effect being removed is exactly what
+  produced the `react-hooks/set-state-in-effect` warning at
+  `components/teacher-submissions-manager.tsx:114`.
+- **A stale comment in the same component** still claimed the app themes via `prefers-color-scheme` and
+  that `dark:` never activates — the misconception behind the earlier dark-mode defect. The classes were
+  converted then; this prose was missed.
+
+Verified in the server HTML: the page used to contain "Loading submissions…" and now contains the rows.
+
 ### The two dashboard designs, ported — the last composition gap
 
 Wave 4's audits recorded one screen-level gap with no verdict: `/teacher` and `/student` were real,

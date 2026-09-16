@@ -2,109 +2,26 @@ import { NextResponse } from "next/server"
 import { requireRole } from "@/lib/authz"
 import { prisma } from "@/lib/prisma"
 import { applyManualMark } from "@/lib/grading/review-service"
-import { toAssessmentScale } from "@/lib/gradebook"
 
 async function getTeacherStaffId(userId: string) {
   const staff = await prisma.staffProfile.findUnique({ where: { userId }, select: { id: true } })
   return staff?.id ?? null
 }
 
-export async function GET() {
-  const auth = await requireRole("teacher")
-  if (!auth.authorized) return auth.response
-  const user = auth.user
-
-  const staffId = await getTeacherStaffId(user.id)
-  if (!staffId) {
-    return NextResponse.json({ message: "Teacher profile not found" }, { status: 404 })
-  }
-
-  const submissions = await prisma.submission.findMany({
-    where: {
-      assessment: {
-        offering: { teacherId: staffId },
-      },
-    },
-    select: {
-      id: true,
-      status: true,
-      contentText: true,
-      submittedAt: true,
-      gradedAt: true,
-      feedback: true,
-      student: {
-        select: {
-          id: true,
-          fullName: true,
-          registerNumber: true,
-          user: { select: { email: true } },
-        },
-      },
-      assessment: {
-        select: {
-          id: true,
-          title: true,
-          type: true,
-          dueDate: true,
-          maxMarks: true,
-          offering: {
-            select: {
-              term: true,
-              academicYear: true,
-              classRoom: { select: { name: true, section: true } },
-              course: { select: { code: true, name: true } },
-            },
-          },
-          finalGrades: {
-            where: { publishedAt: { not: null } },
-            select: { studentId: true, points: true, maxPoints: true },
-          },
-        },
-      },
-    },
-    orderBy: [{ submittedAt: "desc" }, { updatedAt: "desc" }],
-    take: 300,
-  })
-
-  return NextResponse.json({
-    submissions: submissions.map((item) => {
-      const grade = item.assessment.finalGrades.find((row) => row.studentId === item.student.id)
-      return {
-        id: item.id,
-        status: item.status,
-        contentText: item.contentText,
-        submittedAt: item.submittedAt?.toISOString() ?? null,
-        gradedAt: item.gradedAt?.toISOString() ?? null,
-        feedback: item.feedback,
-        student: {
-          id: item.student.id,
-          fullName: item.student.fullName,
-          registerNumber: item.student.registerNumber,
-          email: item.student.user.email,
-        },
-        assessment: {
-          id: item.assessment.id,
-          title: item.assessment.title,
-          type: item.assessment.type,
-          dueDate: item.assessment.dueDate.toISOString(),
-          maxMarks: item.assessment.maxMarks,
-          courseCode: item.assessment.offering.course.code,
-          courseName: item.assessment.offering.course.name,
-          className: `${item.assessment.offering.classRoom.name}${item.assessment.offering.classRoom.section ? ` ${item.assessment.offering.classRoom.section}` : ""}`,
-          term: item.assessment.offering.term,
-          academicYear: item.assessment.offering.academicYear,
-        },
-        score: grade
-          ? toAssessmentScale(
-              Number(grade.points),
-              Number(grade.maxPoints),
-              item.assessment.maxMarks,
-            )
-          : null,
-      }
-    }),
-  })
-}
+/*
+ * `GET` used to live here, returning its own projection of the submissions: the assessment kind
+ * collapsed to Quiz/Assignment, and marks filtered to published-only.
+ *
+ * It is gone because `components/teacher-submissions-manager.tsx` — its only client — now takes its
+ * rows from `listSubmissionsForTeacher` as a prop, so the page renders populated instead of fetching
+ * after paint (`docs/quality/a11y-perf-audit.md`, P2). Two divergent projections of the same rows was
+ * the problem; this is the half that lost.
+ *
+ * The editor's behaviour is unchanged: `lib/teacher-submissions-view.ts` still shows a score only
+ * when it has been released, so moving to the reader did not start revealing withheld marks. The
+ * difference is that the reader *also* carries the real assessment kind and a `published` flag, so
+ * that distinction can be surfaced deliberately later rather than by accident.
+ */
 
 export async function PUT(request: Request) {
   const auth = await requireRole("teacher")

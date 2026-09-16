@@ -27,6 +27,7 @@ function row(overrides: {
   } | null
   maxMarks?: number
   section?: string | null
+  contentText?: string | null
 }): SubmissionQueryRow {
   const grade = overrides.grade ?? null
   return {
@@ -36,7 +37,16 @@ function row(overrides: {
     gradedAt: grade ? new Date("2026-09-11T09:00:00.000Z") : null,
     feedback: grade ? "Well argued." : null,
     versionCount: 2,
-    student: { id: "stu_1", fullName: "Aarav Mehta", registerNumber: "REG-1" },
+    contentText:
+      overrides.contentText === undefined
+        ? "y = 2x + 1, because the slope is the coefficient of x."
+        : overrides.contentText,
+    student: {
+      id: "stu_1",
+      fullName: "Aarav Mehta",
+      registerNumber: "REG-1",
+      user: { email: "aarav@test.local" },
+    },
     assessment: {
       id: "asm_1",
       title: "Describing a linear model",
@@ -65,6 +75,24 @@ function row(overrides: {
 }
 
 describe("toTeacherSubmissionRow", () => {
+  it("carries the submission body and the student's email", () => {
+    // Both were added so the grading editor can be seeded from the server instead of fetching on
+    // mount (`docs/quality/a11y-perf-audit.md`, P2). They are the two route-only fields the editor
+    // actually renders; `term` and `academicYear` were declared in its item type but never shown,
+    // so the reader does not carry them.
+    const result = toTeacherSubmissionRow(row({}))
+
+    expect(result.contentText).toBe("y = 2x + 1, because the slope is the coefficient of x.")
+    expect(result.studentEmail).toBe("aarav@test.local")
+  })
+
+  it("passes an absent body through as null rather than an empty string", () => {
+    // The editor distinguishes "no text submitted" from a blank body, and invents neither.
+    const result = toTeacherSubmissionRow(row({ contentText: null }))
+
+    expect(result.contentText).toBeNull()
+  })
+
   it("passes through the real assessment kind, not a Quiz/Assignment collapse", () => {
     expect(toTeacherSubmissionRow(row({})).kind).toBe("DESCRIPTIVE")
   })

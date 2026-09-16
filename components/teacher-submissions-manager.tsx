@@ -1,11 +1,20 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useMemo, useState } from "react"
+import { useRouter } from "next/navigation"
 import { CheckCircle2, FileText, Search, Sparkles } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { formatDateTime } from "@/lib/format"
 import { ASSESSMENT_KIND_LABEL } from "@/lib/labels"
-import type { AssessmentType } from "@/lib/generated/prisma/enums"
+import type { TeacherSubmissionRow } from "@/lib/teacher-submissions"
+import {
+  feedbackDraftValue,
+  scoreDraftValue,
+  submissionBodyText,
+  toSubmissionEditorItem,
+  validateScoreInput,
+  type SubmissionEditorItem,
+} from "@/lib/teacher-submissions-view"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -17,34 +26,6 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 
-type SubmissionItem = {
-  id: string
-  status: string
-  contentText: string | null
-  submittedAt: string | null
-  gradedAt: string | null
-  feedback: string | null
-  student: {
-    id: string
-    fullName: string
-    registerNumber: string
-    email: string
-  }
-  assessment: {
-    id: string
-    title: string
-    type: AssessmentType
-    dueDate: string
-    maxMarks: number
-    courseCode: string
-    courseName: string
-    className: string
-    term: string
-    academicYear: number
-  }
-  score: number | null
-}
-
 function statusLabel(status: string) {
   if (status === "DRAFT") return "Draft"
   if (status === "SUBMITTED") return "Submitted"
@@ -54,9 +35,13 @@ function statusLabel(status: string) {
   return status
 }
 
-// The app themes via `prefers-color-scheme`, so the `.dark`-scoped Tailwind
-// `dark:` variant never activates; the explicit media variant keeps the status
-// chip readable on a dark page.
+// The status chip needs explicit shades rather than the theme's `success`/`warning`
+// tokens, which are tuned for solid fills and fail as text on their own tint — see
+// `@/components/ui/tone`. `dark:` is correct here: the app maintains a `.dark` class on
+// `<html>` (`theme-toggle.tsx`) and `globals.css` declares
+// `@custom-variant dark (&:is(.dark *))`. An earlier version of this comment claimed the
+// app themed via `prefers-color-scheme` and that `dark:` never activated, which was wrong
+// and had led these classes to follow the OS instead of the user's choice.
 function statusTone(status: string) {
   if (status === "GRADED")
     return "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"
@@ -69,10 +54,30 @@ function statusTone(status: string) {
   return "border-border bg-muted/20 text-foreground"
 }
 
-export function TeacherSubmissionsManager() {
-  const [items, setItems] = useState<SubmissionItem[]>([])
-  const [isLoading, setIsLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+/**
+ * The grading editor for a teacher's submissions.
+ *
+ * ## It takes its rows as props, rather than fetching them
+ *
+ * It used to call `GET /api/teacher/assessments/submissions` in a mount effect — the P2 finding in
+ * `docs/quality/a11y-perf-audit.md` — so the section painted "Loading submissions…" and then filled
+ * in. Its sibling `student/assessments` was converted during the Wave 1 port; this one was deferred
+ * because it renders *inside* `TeacherAssignmentsManager` rather than at a page root, so the rows
+ * have to be threaded through two components instead of arriving as one page-level payload.
+ *
+ * ## The rows are read from props, not copied into state
+ *
+ * Only **edits** live in state (`scoreDrafts`, `feedbackDrafts`); a field with no entry in a draft
+ * map renders the row's own value via `scoreDraftValue`. That is what allows `router.refresh()`
+ * after a save to update the view: refreshed props re-render the same state, so there is no
+ * props-into-state effect — the cascading-render pattern this repo lints as
+ * `react-hooks/set-state-in-effect`.
+ *
+ * The alternative, copying rows into `useState` on mount, would have needed an effect to keep them in
+ * sync, and would have made the post-save refresh silently do nothing.
+ */
+export function TeacherSubmissionsManager({ rows }: { rows: TeacherSubmissionRow[] }) {
+  const router = useRouter()
   const [message, setMessage] = useState<string | null>(null)
   const [search, setSearch] = useState("")
   const [statusFilter, setStatusFilter] = useState<"all" | "pending" | "graded">("all")
@@ -80,39 +85,7 @@ export function TeacherSubmissionsManager() {
   const [scoreDrafts, setScoreDrafts] = useState<Record<string, string>>({})
   const [feedbackDrafts, setFeedbackDrafts] = useState<Record<string, string>>({})
 
-  const load = async () => {
-    try {
-      const response = await fetch("/api/teacher/assessments/submissions", { cache: "no-store" })
-      if (!response.ok) {
-        setError("Unable to load submissions.")
-        return
-      }
-      const data = (await response.json()) as { submissions: SubmissionItem[] }
-      setItems(data.submissions)
-      setScoreDrafts(
-        Object.fromEntries(
-          data.submissions.map((row) => [row.id, row.score === null ? "" : String(row.score)]),
-        ),
-      )
-      setFeedbackDrafts(
-        Object.fromEntries(data.submissions.map((row) => [row.id, row.feedback ?? ""])),
-      )
-    } catch {
-      setError("Unable to load submissions.")
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
-  const refresh = async () => {
-    setError(null)
-    setIsLoading(true)
-    await load()
-  }
-
-  useEffect(() => {
-    void load()
-  }, [])
+  const items = useMemo(() => rows.map(toSubmissionEditorItem), [rows])
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
@@ -142,18 +115,24 @@ export function TeacherSubmissionsManager() {
     [items],
   )
 
-  const save = async (submissionId: string, maxMarks: number) => {
+  const save = async (item: SubmissionEditorItem) => {
+    const submissionId = item.id
+    const maxMarks = item.assessment.maxMarks
     setMessage(null)
     setSavingId(submissionId)
 
     try {
-      const scoreRaw = scoreDrafts[submissionId] ?? ""
-      const score = scoreRaw.trim() === "" ? null : Number(scoreRaw)
-
-      if (score !== null && (!Number.isFinite(score) || score < 0 || score > maxMarks)) {
-        setMessage(`Score must be between 0 and ${maxMarks}.`)
+      // Validation is shared with the tests (`lib/teacher-submissions-view.ts`), so the rule the
+      // button enforces is the rule that is asserted rather than a second, drifting copy.
+      const validation = validateScoreInput(
+        scoreDraftValue(item, scoreDrafts[submissionId]),
+        maxMarks,
+      )
+      if (!validation.ok) {
+        setMessage(validation.message)
         return
       }
+      const score = validation.score
 
       const response = await fetch("/api/teacher/assessments/submissions", {
         method: "PUT",
@@ -169,21 +148,16 @@ export function TeacherSubmissionsManager() {
       setMessage(data.message ?? (response.ok ? "Saved." : "Unable to save changes."))
 
       if (response.ok) {
-        await refresh()
+        // Re-runs the server component, which re-reads the submissions and passes fresh props. The
+        // drafts are left alone, so the teacher's own edit stays visible rather than being replaced
+        // by a value that has not round-tripped yet.
+        router.refresh()
       }
     } catch {
       setMessage("Unable to save changes.")
     } finally {
       setSavingId(null)
     }
-  }
-
-  if (isLoading) {
-    return <p className="py-10 text-center text-sm text-muted-foreground">Loading submissions…</p>
-  }
-
-  if (error) {
-    return <p className="py-10 text-center text-sm text-destructive">{error}</p>
   }
 
   return (
@@ -322,9 +296,7 @@ export function TeacherSubmissionsManager() {
                   <FileText className="size-3.5" />
                   Submission content
                 </p>
-                <p className="whitespace-pre-wrap">
-                  {item.contentText?.trim() || "No text submitted."}
-                </p>
+                <p className="whitespace-pre-wrap">{submissionBodyText(item)}</p>
               </div>
 
               <div className="grid gap-3 lg:grid-cols-[140px_1fr_auto]">
@@ -332,7 +304,7 @@ export function TeacherSubmissionsManager() {
                   type="number"
                   min={0}
                   max={item.assessment.maxMarks}
-                  value={scoreDrafts[item.id] ?? ""}
+                  value={scoreDraftValue(item, scoreDrafts[item.id])}
                   onChange={(event) =>
                     setScoreDrafts((prev) => ({ ...prev, [item.id]: event.target.value }))
                   }
@@ -341,7 +313,7 @@ export function TeacherSubmissionsManager() {
                   className="w-full"
                 />
                 <Input
-                  value={feedbackDrafts[item.id] ?? ""}
+                  value={feedbackDraftValue(item, feedbackDrafts[item.id])}
                   onChange={(event) =>
                     setFeedbackDrafts((prev) => ({ ...prev, [item.id]: event.target.value }))
                   }
@@ -353,7 +325,7 @@ export function TeacherSubmissionsManager() {
                 <Button
                   type="button"
                   variant="outline"
-                  onClick={() => save(item.id, item.assessment.maxMarks)}
+                  onClick={() => save(item)}
                   disabled={savingId === item.id}
                   className="w-full lg:w-auto"
                 >

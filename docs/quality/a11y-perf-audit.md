@@ -108,11 +108,21 @@ is a design decision, not a mechanical fix, so it is deferred — see "needs a h
    before, since `role` defaulted to `"teacher"`) and carries the student's register number before
    hydration.
 
-   **Still outstanding from the same finding: `TeacherSubmissionsManager`**, which keeps its own
-   client fetch (`components/teacher-submissions-manager.tsx`, the `useEffect` that calls `load`).
-   It renders _inside_ `TeacherAssignmentsManager` rather than at a page root, so seeding it means
-   threading a prop through two components rather than the page-level `initialPayload` the other
-   views took.
+   **Resolved.** `TeacherSubmissionsManager` no longer fetches: it takes `listSubmissionsForTeacher`'s
+   rows as a prop, threaded through `TeacherAssignmentsManager` from
+   `app/(dashboard)/teacher/assignments/page.tsx`. It renders _inside_ another component rather than at
+   a page root, which is why it needed a prop through two levels instead of the page-level
+   `initialPayload` the other views took — and why it was deferred while its sibling was converted.
+
+   Verified in the server HTML: the page previously contained "Loading submissions…" and now contains
+   the rows (`DEMO-0001` appears in the markup). The `react-hooks/set-state-in-effect` warning that
+   effect produced is gone too, so the lint baseline dropped from 4 warnings to 3.
+
+   Two things went with it, both recorded rather than silent: the rows are read from **props** rather
+   than copied into state, so a `router.refresh()` after a save updates the view without an effect
+   syncing props into state; and the `GET` handler on `/api/teacher/assessments/submissions` is
+   **deleted** — it was the only other projection of these rows, and having two was the defect. The
+   editor's behaviour is unchanged: a score still shows only when it has been released.
 
    **This paragraph previously also named `StudentAssessmentsView`, and that was stale.** It was
    converted during the Wave 1 port: `app/(dashboard)/student/assessments/page.tsx` server-fetches and
