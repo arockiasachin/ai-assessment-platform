@@ -130,7 +130,8 @@ export type ItemAnalysisResponse = z.infer<typeof itemAnalysisResponseSchema>
 // ---------------------------------------------------------------------------
 
 export const scoreBucketSchema = z.object({
-  grade: z.enum(["A", "B", "C", "D", "F"]),
+  // VIT's seven performance letters, from the absolute Table-6 bands.
+  grade: z.enum(["S", "A", "B", "C", "D", "E", "F"]),
   label: z.string(),
   min: z.number(),
   max: z.number(),

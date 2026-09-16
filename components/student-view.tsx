@@ -17,7 +17,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { filterAssessments, scorePct } from "@/lib/analytics"
-import { formatDate, initials, letterGrade, round } from "@/lib/gradebook"
+import { courseLetter, formatDate, initials, round } from "@/lib/gradebook"
 
 export function StudentView() {
   const {
@@ -157,7 +157,7 @@ export function StudentView() {
         <StatCard
           label="Overall average"
           value={overall === null ? "—" : `${round(overall)}%`}
-          sub={overall === null ? "No marks yet" : `Grade ${letterGrade(overall)}`}
+          sub={overall === null ? "No marks yet" : `Grade ${courseLetter(overall)}`}
           icon={TrendingUp}
           accent="primary"
         />

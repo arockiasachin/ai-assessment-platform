@@ -25,14 +25,7 @@ import {
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { useGradebook } from "@/components/gradebook-provider"
 import type { QuizGradeResponse } from "@/lib/contracts"
-import {
-  formatDate,
-  initials,
-  letterGrade,
-  quizForAssessment,
-  round,
-  type Assessment,
-} from "@/lib/gradebook"
+import { formatDate, initials, quizForAssessment, round, type Assessment } from "@/lib/gradebook"
 import { cn } from "@/lib/utils"
 
 type Stage = "select" | "taking" | "results"
@@ -333,9 +326,6 @@ export function QuizRunner() {
                   return (
                     <div className="flex items-center gap-2">
                       <Badge className="text-sm">{pct}%</Badge>
-                      <Badge variant="secondary" className="text-sm">
-                        Grade {letterGrade(pct)}
-                      </Badge>
                       <Badge variant="secondary" className="text-sm">
                         {gradeResult.score}/{gradeResult.maxScore} marks
                       </Badge>

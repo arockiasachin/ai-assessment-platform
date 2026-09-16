@@ -1,4 +1,4 @@
-import { letterGrade } from "@/lib/gradebook"
+import { ABSOLUTE_BANDS, ABSOLUTE_PASS_MARK, absoluteLetter } from "./grading-bands"
 
 /**
  * Cohort/distribution views for a quiz assessment, computed from real attempts.
@@ -16,7 +16,8 @@ export type CohortScore = {
 }
 
 export type ScoreBucket = {
-  grade: "A" | "B" | "C" | "D" | "F"
+  /** VIT's seven performance letters. `E` is the lowest passing grade. */
+  grade: "S" | "A" | "B" | "C" | "D" | "E" | "F"
   label: string
   min: number
   max: number
@@ -33,18 +34,36 @@ export type CohortDistribution = {
   buckets: ScoreBucket[]
 }
 
-export const DEFAULT_PASS_THRESHOLD = 60
+/**
+ * VIT's absolute pass mark. See `ABSOLUTE_PASS_MARK` in `./grading-bands`, re-exported
+ * here because this module's `passThreshold` used to be 60 — a number that appears in no
+ * VIT document and would have reported a class whose students all sat between 50 and 59
+ * as a 0% pass rate.
+ */
+export const DEFAULT_PASS_THRESHOLD = ABSOLUTE_PASS_MARK
 
-const BUCKET_BOUNDS = {
-  A: { min: 90, max: 100, label: "A (90-100%)" },
-  B: { min: 80, max: 89, label: "B (80-89%)" },
-  C: { min: 70, max: 79, label: "C (70-79%)" },
-  D: { min: 60, max: 69, label: "D (60-69%)" },
-  F: { min: 0, max: 59, label: "F (<60%)" },
-} as const
+/**
+ * Buckets built from VIT's absolute Table-6 bands rather than a local `A/B/C/D/F` table.
+ *
+ * Two things were wrong before and are fixed by deriving them: the boundaries (the old
+ * table had no `E` and put `D` at 60–69, where VIT puts `D` at 55–60 and `E` at 50–55)
+ * and the count of bands (five instead of seven). Deriving from the same table the course
+ * letter comes from means a histogram and a letter cannot disagree.
+ */
+function vitBuckets(): Omit<ScoreBucket, "count">[] {
+  return ABSOLUTE_BANDS.map((band) => ({
+    grade: band.letter as ScoreBucket["grade"],
+    label:
+      band.max === null
+        ? `${band.letter} (${band.min}–100%)`
+        : `${band.letter} (${band.min}–${band.max}%)`,
+    min: band.min,
+    max: band.max ?? 100,
+  }))
+}
 
 export type CohortOptions = {
-  /** A percentage at or above this counts as a pass. Defaults to 60. */
+  /** A percentage at or above this counts as a pass. Defaults to VIT's 50. */
   passThreshold?: number
 }
 
@@ -73,15 +92,16 @@ export function buildCohortDistribution(
   options: CohortOptions = {},
 ): CohortDistribution {
   const passThreshold = options.passThreshold ?? DEFAULT_PASS_THRESHOLD
-  const counts = { A: 0, B: 0, C: 0, D: 0, F: 0 }
+  const bands = vitBuckets()
+
+  const counts = new Map<string, number>(bands.map((band) => [band.grade, 0]))
   for (const score of scores) {
-    counts[letterGrade(score.percentage) as keyof typeof counts] += 1
+    const letter = absoluteLetter(score.percentage)
+    if (letter === null) continue
+    counts.set(letter, (counts.get(letter) ?? 0) + 1)
   }
-  const buckets = (["A", "B", "C", "D", "F"] as const).map((grade) => ({
-    grade,
-    ...BUCKET_BOUNDS[grade],
-    count: counts[grade],
-  }))
+
+  const buckets = bands.map((band) => ({ ...band, count: counts.get(band.grade) ?? 0 }))
   const percentages = scores.map((score) => score.percentage)
   return {
     count: scores.length,

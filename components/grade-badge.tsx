@@ -1,5 +1,5 @@
 import { cn } from "@/lib/utils"
-import { gradeBand, letterGrade, type GradeBand } from "@/lib/gradebook"
+import { courseLetter, gradeBand, type GradeBand } from "@/lib/gradebook"
 
 /**
  * Grade band chip.
@@ -21,7 +21,27 @@ const bandStyles: Record<GradeBand, string> = {
   ungraded: "bg-muted text-muted-foreground border-border",
 }
 
-export function GradeBadge({ pct, className }: { pct: number | null; className?: string }) {
+export function GradeBadge({
+  pct,
+  /**
+   * Show a VIT letter beside the percentage.
+   *
+   * **Off by default, and that default is the point.** This badge is mostly rendered on a
+   * *single assessment's* mark — a cell in the gradebook, one row on a student's
+   * assessment list — where a course letter does not apply: VIT bands describe a course
+   * grand total, not a component. Those surfaces show the percentage, which is the whole
+   * truth about a single mark.
+   *
+   * Pass `true` only where the percentage really is a course total, so the one call site
+   * that means it is visible in the diff.
+   */
+  showCourseLetter = false,
+  className,
+}: {
+  pct: number | null
+  showCourseLetter?: boolean
+  className?: string
+}) {
   const band = gradeBand(pct)
   return (
     <span
@@ -32,7 +52,7 @@ export function GradeBadge({ pct, className }: { pct: number | null; className?:
       )}
     >
       {pct === null ? "—" : `${Math.round(pct)}%`}
-      {pct !== null && <span>{letterGrade(pct)}</span>}
+      {pct !== null && showCourseLetter && <span>{courseLetter(pct)}</span>}
     </span>
   )
 }

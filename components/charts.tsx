@@ -65,13 +65,24 @@ const distConfig = {
   count: { label: "Marks", color: "var(--chart-1)" },
 } satisfies ChartConfig
 
-const distColors = [
-  "var(--chart-2)",
-  "var(--chart-1)",
-  "var(--chart-3)",
-  "var(--chart-3)",
-  "var(--chart-4)",
-]
+/**
+ * Colour per VIT band, keyed by letter rather than by array index.
+ *
+ * Keyed by letter because the order is meaningful — `S` is the best band and `F` the
+ * worst — and an index-based palette would silently recolour the whole chart if a band
+ * were ever added or removed. There are five chart variables for seven bands, so the
+ * lower-passing bands share a colour deliberately rather than one falling out of range
+ * and rendering an unfilled bar.
+ */
+const GRADE_COLORS: Record<string, string> = {
+  S: "var(--chart-2)",
+  A: "var(--chart-1)",
+  B: "var(--chart-3)",
+  C: "var(--chart-3)",
+  D: "var(--chart-4)",
+  E: "var(--chart-4)",
+  F: "var(--chart-4)",
+}
 
 export function GradeDistributionChart({ data }: { data: { grade: string; count: number }[] }) {
   return (
@@ -98,8 +109,10 @@ export function GradeDistributionChart({ data }: { data: { grade: string; count:
         />
         <ChartTooltip cursor={false} content={<ChartTooltipContent />} />
         <Bar dataKey="count" radius={[6, 6, 0, 0]} maxBarSize={64}>
-          {data.map((entry, i) => (
-            <Cell key={entry.grade} fill={distColors[i]} />
+          {data.map((entry) => (
+            // Keyed by the band letter, not the array index, so adding or removing a
+            // band cannot silently recolour the others.
+            <Cell key={entry.grade} fill={GRADE_COLORS[entry.grade] ?? "var(--chart-5)"} />
           ))}
         </Bar>
       </BarChart>

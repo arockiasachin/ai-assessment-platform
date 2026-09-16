@@ -72,7 +72,11 @@ describe("analytics service — item analysis from real attempts", () => {
     // Cohort distribution reflects the same attempts (average score 40%).
     expect(analysis.cohort.count).toBe(20)
     expect(analysis.cohort.average).toBeCloseTo(40, 6)
-    expect(analysis.cohort.passRate).toBe(25)
+    // **50, not 25.** The pass mark is VIT's 50 (`ABSOLUTE_PASS_MARK`), where it used to
+    // be 60 — a number in no VIT document. With a cohort averaging 40%, halving the bar
+    // doubles the pass rate, which is the whole reason the threshold was corrected.
+    expect(analysis.cohort.passThreshold).toBe(50)
+    expect(analysis.cohort.passRate).toBe(50)
 
     // No answer key anywhere in the payload.
     const serialized = JSON.stringify(analysis)

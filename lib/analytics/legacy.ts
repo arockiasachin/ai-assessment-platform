@@ -1,4 +1,6 @@
-import { letterGrade, markKey, type Assessment, type MarksMap, type Student } from "@/lib/gradebook"
+import { markKey, type Assessment, type MarksMap, type Student } from "@/lib/gradebook"
+
+import { ABSOLUTE_BANDS, ABSOLUTE_PASS_MARK, absoluteLetter } from "./grading-bands"
 
 /**
  * Mark-map analytics (the original `lib/analytics.ts` helpers, moved verbatim
@@ -54,14 +56,22 @@ export function classAverage(
 }
 
 export function gradeDistribution(marks: MarksMap, students: Student[], assessments: Assessment[]) {
-  const counts: Record<string, number> = { A: 0, B: 0, C: 0, D: 0, F: 0 }
+  // VIT's seven absolute bands, from the same source the cohort histogram uses, so the
+  // two distributions on the dashboards cannot disagree. This counts **component mark
+  // cells**, which is what the chart is for — the bands describe where each mark would
+  // sit, not a course grade per student.
+  const counts: Record<string, number> = Object.fromEntries(
+    ABSOLUTE_BANDS.map((band) => [band.letter, 0]),
+  )
   students.forEach((s) =>
     assessments.forEach((a) => {
       const p = scorePct(marks, s.id, a)
-      if (p !== null) counts[letterGrade(p)]++
+      if (p === null) return
+      const letter = absoluteLetter(p)
+      if (letter !== null) counts[letter]++
     }),
   )
-  return (["A", "B", "C", "D", "F"] as const).map((grade) => ({ grade, count: counts[grade] }))
+  return ABSOLUTE_BANDS.map((band) => ({ grade: band.letter, count: counts[band.letter] }))
 }
 
 export function passRate(
@@ -76,7 +86,7 @@ export function passRate(
       const p = scorePct(marks, s.id, a)
       if (p !== null) {
         total++
-        if (p >= 60) passed++
+        if (p >= ABSOLUTE_PASS_MARK) passed++
       }
     }),
   )

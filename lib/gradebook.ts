@@ -1,3 +1,5 @@
+import { absoluteLetter, ABSOLUTE_PASS_MARK } from "@/lib/analytics/grading-bands"
+
 export type AssessmentType = "Quiz" | "Assignment"
 
 export type Course = {
@@ -92,19 +94,39 @@ export function toAssessmentScale(points: number, maxPoints: number, maxMarks: n
 
 export type GradeBand = "excellent" | "good" | "pass" | "fail" | "ungraded"
 
-export function letterGrade(pct: number): string {
-  if (pct >= 90) return "A"
-  if (pct >= 80) return "B"
-  if (pct >= 70) return "C"
-  if (pct >= 60) return "D"
-  return "F"
+/**
+ * The letter for a **course grand total**, per VIT's absolute Table-6.
+ *
+ * ## The name is the warning
+ *
+ * This was called `letterGrade`, and it was used for per-assessment marks as well — where
+ * VIT bands do not apply at all. A letter is a statement about a *course*, computed from a
+ * grand total; a single assessment's mark is a percentage and nothing more. The rename
+ * makes a misuse visible at the call site rather than silent.
+ *
+ * ## Why absolute and not relative
+ *
+ * VIT runs two regimes. Relative grading is the norm for a theory course **above 10
+ * students**, and its bands are σ multiples — so the letter is not a function of the
+ * student's mark at all, but of the whole cohort's mean and σ. **A per-student function
+ * cannot produce it**, which is why this one implements Table-6 (absolute) only: it is
+ * correct for small theory classes and for every lab, project, soft-skills and NGCR course,
+ * and it is the honest fallback until a course knows its own regime — which needs a
+ * `CourseCategory` field the schema does not have.
+ *
+ * `lib/analytics/grading-bands.ts` holds both regimes; this is the absolute one, exposed
+ * here because the legacy client views need a synchronous function.
+ */
+export function courseLetter(pct: number): string {
+  return absoluteLetter(pct) ?? "F"
 }
 
 export function gradeBand(pct: number | null): GradeBand {
   if (pct === null) return "ungraded"
   if (pct >= 85) return "excellent"
   if (pct >= 70) return "good"
-  if (pct >= 60) return "pass"
+  // VIT's pass mark is 50, not 60 — see `ABSOLUTE_PASS_MARK`.
+  if (pct >= ABSOLUTE_PASS_MARK) return "pass"
   return "fail"
 }
 
