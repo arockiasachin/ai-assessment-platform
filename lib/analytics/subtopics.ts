@@ -173,3 +173,73 @@ export async function listAssessmentSubtopics(
     ),
   }
 }
+
+/**
+ * The same breakdown for **many assessments**, in two queries rather than two per assessment.
+ *
+ * The page that needs this lists every assessment a teacher owns and shows the panel for the
+ * selected one, so a per-assessment reader would be an N+1 on page load. Authorisation is the
+ * caller's: this takes ids and returns what it finds, so a route must have established that the
+ * ids belong to the caller before calling it. `listAssessmentSubtopics` above is the
+ * authz-checking variant for a single assessment.
+ */
+export async function listSubtopicBreakdowns(
+  assessmentIds: readonly string[],
+): Promise<Map<string, SubtopicBreakdown & { assessmentTitle: string }>> {
+  if (assessmentIds.length === 0) return new Map()
+
+  const [questions, grouped] = await Promise.all([
+    prisma.question.findMany({
+      where: { assessmentId: { in: [...assessmentIds] } },
+      orderBy: [{ assessmentId: "asc" }, { order: "asc" }],
+      select: {
+        id: true,
+        assessmentId: true,
+        subtopic: true,
+        points: true,
+        assessment: { select: { title: true } },
+      },
+    }),
+    // Finalised attempts only, matching every other analytics read — a sitting in progress
+    // contributes nothing.
+    prisma.quizResponse.groupBy({
+      by: ["questionId"],
+      where: {
+        question: { assessmentId: { in: [...assessmentIds] } },
+        attempt: { status: { in: ["SUBMITTED", "GRADED"] } },
+      },
+      _count: { _all: true },
+    }),
+  ])
+
+  const responsesByQuestion = new Map(grouped.map((row) => [row.questionId, row._count._all]))
+
+  const byAssessment = new Map<string, QuestionTagInput[]>()
+  const titles = new Map<string, string>()
+  for (const question of questions) {
+    titles.set(question.assessmentId, question.assessment.title)
+    const list = byAssessment.get(question.assessmentId) ?? []
+    list.push({
+      id: question.id,
+      subtopic: question.subtopic,
+      points: Number(question.points),
+      responseCount: responsesByQuestion.get(question.id) ?? 0,
+    })
+    byAssessment.set(question.assessmentId, list)
+  }
+
+  const result = new Map<string, SubtopicBreakdown & { assessmentTitle: string }>()
+  // **Every requested id gets an entry**, including one with no questions at all: an entry with
+  // zero tokens is how the caller distinguishes "this assessment has no questions" from "I did not
+  // ask about it". Omitting the empty ones looked tidier and was wrong — the page defaults to the
+  // *first* assessment, and if that one has no questions yet the panel silently fell back to its
+  // "select an assessment" state while an assessment was in fact selected.
+  for (const assessmentId of assessmentIds) {
+    const rows = byAssessment.get(assessmentId) ?? []
+    result.set(assessmentId, {
+      ...groupSubtopicTokens(rows),
+      assessmentTitle: titles.get(assessmentId) ?? "",
+    })
+  }
+  return result
+}

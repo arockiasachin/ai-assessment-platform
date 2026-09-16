@@ -5,6 +5,7 @@ import { CheckCircle2, Loader2, Plus, Save, Send, Sparkles, Trash2 } from "lucid
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { QuizSubtopicsPanel } from "@/components/quiz-subtopics-panel"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -19,6 +20,7 @@ import type {
   GeneratedQuestionResponse,
   GenerationAssessmentSummary,
 } from "@/lib/contracts/quiz-generation"
+import type { SubtopicBreakdownValue } from "@/lib/contracts/analytics"
 
 /**
  * Teacher quiz-generation workspace.
@@ -324,9 +326,12 @@ function QuestionEditor({
 export function TeacherQuizGenerator({
   initialAssessments,
   initialQuestions,
+  subtopicBreakdowns,
 }: {
   initialAssessments: GenerationAssessmentSummary[]
   initialQuestions: GeneratedQuestionResponse[]
+  /** Keyed by assessment id. Server-fetched, since the response counts need the database. */
+  subtopicBreakdowns: Record<string, SubtopicBreakdownValue>
 }) {
   const first = initialAssessments[0] ?? null
   const [questions, setQuestions] = useState(initialQuestions)
@@ -545,6 +550,10 @@ export function TeacherQuizGenerator({
           </Button>
         </CardContent>
       </Card>
+
+      {/* The topics this assessment covers. Rendered from the server-fetched breakdown, and
+          deliberately a token list rather than a mastery chart — see the panel's docblock. */}
+      <QuizSubtopicsPanel breakdown={subtopicBreakdowns[selectedId] ?? null} />
 
       {selected && (
         <Card className="border-border/70 shadow-sm">

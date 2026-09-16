@@ -377,6 +377,34 @@ export const retakeStateSchema = z.object({
 })
 export type RetakeStateValue = z.infer<typeof retakeStateSchema>
 
+/**
+ * The subtopic tokens an assessment covers.
+ *
+ * Deliberately **a token list, not a mastery chart** (decision D4): `Question.subtopic` is
+ * model-generated free text with no controlled vocabulary, so a per-topic *score* would be a number
+ * attributed to a label the last model call invented. What the data supports is "which topics does
+ * this assessment cover, and how much of it is each one".
+ */
+export const subtopicTokenSchema = z.object({
+  subtopic: z.string(),
+  questionCount: z.number().int(),
+  responseCount: z.number().int(),
+  totalMarks: z.number(),
+})
+export type SubtopicTokenValue = z.infer<typeof subtopicTokenSchema>
+
+export const subtopicBreakdownSchema = z.object({
+  assessmentTitle: z.string(),
+  tokens: z.array(subtopicTokenSchema),
+  /** Questions with no tag. Counted, never presented as a topic. */
+  untagged: z.object({
+    questionCount: z.number().int(),
+    responseCount: z.number().int(),
+  }),
+  distinctTags: z.number().int(),
+})
+export type SubtopicBreakdownValue = z.infer<typeof subtopicBreakdownSchema>
+
 export const adaptiveRetakeResponseSchema = z.object({
   success: z.literal(true),
   assessment: z.object({
