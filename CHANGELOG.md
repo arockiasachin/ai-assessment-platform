@@ -406,8 +406,11 @@ define and edit them, and a minimum-CAT gate that applied to anybody.
   on `<html>`, the pre-paint `themeInitScript` does the same, and `globals.css` declares
   `@custom-variant dark (&:is(.dark *))`. So a media query was the wrong tool: a user on a dark-OS
   machine who explicitly chose light mode still got the dark-mode text shades, and the reverse. All 21
-  now use `dark:`. Verified in the compiled CSS rather than by reading the diff: a fresh build emits
-  `:is(.dark *)` selectors for these utilities (50 of them) and no escaped media-variant class.
+  now use `dark:`. Verified twice over, because the diff alone proves nothing about which preference
+  wins: the compiled CSS emits `:is(.dark *)` selectors for these utilities (50 of them) and no
+  escaped media-variant class; and at runtime, with the OS set to **dark** and the app toggled to
+  **light**, a converted element computes to the light shade (`emerald-700`) rather than the dark one.
+  The old media query could not have produced that — it would have followed the OS.
 - **`--success` / `--warning` used as text, which fails AA.** `--success` reaches 2.76:1 and
   `--warning` 2.54:1 as small text — below even the 3:1 non-text threshold for an icon.
   `components/stat-card.tsx` painted its icon chip with the raw tokens, and `components/quiz-runner.tsx`
