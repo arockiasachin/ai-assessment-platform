@@ -73,6 +73,26 @@ const ACTIVE_OFFERING_ID = "demo-offering-active"
 const PAST_OFFERING_ID = "demo-offering-past"
 const MATERIAL_LINEAR_ID = "demo-material-linear-equations"
 const MATERIAL_GRAPHING_ID = "demo-material-graphing"
+const MATERIAL_SYLLABUS_ID = "demo-material-syllabus"
+const MATERIAL_KHAN_ID = "demo-material-khan-systems"
+const MATERIAL_VIDEO_ID = "demo-material-video-substitution"
+const MATERIAL_TRANSCRIPT_ID = "demo-material-transcript-week2"
+const MATERIAL_PRACTICE_ID = "demo-material-practice-slope"
+const MATERIAL_REVISION_2025_ID = "demo-material-revision-2025"
+/**
+ * Every material this seed owns, in one place so the summary counts cannot drift
+ * from the rows actually created. Rows here and rows below must stay in step.
+ */
+const MATERIAL_IDS = [
+  MATERIAL_LINEAR_ID,
+  MATERIAL_GRAPHING_ID,
+  MATERIAL_SYLLABUS_ID,
+  MATERIAL_KHAN_ID,
+  MATERIAL_VIDEO_ID,
+  MATERIAL_TRANSCRIPT_ID,
+  MATERIAL_PRACTICE_ID,
+  MATERIAL_REVISION_2025_ID,
+]
 const QUIZ_ASSESSMENT_ID = "demo-assessment-quiz"
 const ESSAY_ASSESSMENT_ID = "demo-assessment-essay"
 const CODE_ASSESSMENT_ID = "demo-assessment-code"
@@ -103,6 +123,12 @@ export const DEMO_IDS = {
   pastOfferingId: PAST_OFFERING_ID,
   materialLinearId: MATERIAL_LINEAR_ID,
   materialGraphingId: MATERIAL_GRAPHING_ID,
+  materialSyllabusId: MATERIAL_SYLLABUS_ID,
+  materialKhanId: MATERIAL_KHAN_ID,
+  materialVideoId: MATERIAL_VIDEO_ID,
+  materialTranscriptId: MATERIAL_TRANSCRIPT_ID,
+  materialPracticeId: MATERIAL_PRACTICE_ID,
+  materialRevision2025Id: MATERIAL_REVISION_2025_ID,
   quizAssessmentId: QUIZ_ASSESSMENT_ID,
   essayAssessmentId: ESSAY_ASSESSMENT_ID,
   codeAssessmentId: CODE_ASSESSMENT_ID,
@@ -195,7 +221,7 @@ async function deleteDemoData(): Promise<void> {
     },
   })
   await prisma.material.deleteMany({
-    where: { id: { in: [MATERIAL_LINEAR_ID, MATERIAL_GRAPHING_ID] } },
+    where: { id: { in: MATERIAL_IDS } },
   })
   await prisma.courseOffering.deleteMany({
     where: { id: { in: [ACTIVE_OFFERING_ID, PAST_OFFERING_ID] } },
@@ -332,11 +358,29 @@ async function createCourseAndOfferings() {
     },
   })
 
+  /**
+   * Students 1–3 are enrolled in **both** offerings; students 4–5 in the active
+   * offering **only**.
+   *
+   * The asymmetry is deliberate and load-bearing. The 2025 revision handout belongs
+   * to the past offering, so it must appear for `demo.student1` and must not appear
+   * for `demo.student4`. With every student in both offerings the two resources
+   * pages would look identical and a broken scope filter would be invisible — which
+   * is exactly the failure mode the Wave 1 seed bugs had.
+   *
+   * Ratings are unaffected: `lib/course-ratings.ts` reads rating rows rather than
+   * enrolments, and the three students who rate the past offering
+   * (`demo.student1`–`3`) are all still enrolled in it.
+   */
   await prisma.enrollment.createMany({
-    data: STUDENT_PROFILE_IDS.flatMap((studentId) => [
-      { studentId, offeringId: ACTIVE_OFFERING_ID, status: "active" },
-      { studentId, offeringId: PAST_OFFERING_ID, status: "active" },
-    ]),
+    data: STUDENT_PROFILE_IDS.flatMap((studentId, index) =>
+      index < 3
+        ? [
+            { studentId, offeringId: ACTIVE_OFFERING_ID, status: "active" },
+            { studentId, offeringId: PAST_OFFERING_ID, status: "active" },
+          ]
+        : [{ studentId, offeringId: ACTIVE_OFFERING_ID, status: "active" }],
+    ),
   })
 }
 
@@ -380,14 +424,118 @@ async function createMaterials(provider: ReturnType<typeof createMockProvider>) 
     },
   })
 
-  await indexMaterial(linear.id, {
-    provider,
-    chunkOptions: { maxChars: 260, overlapChars: 40 },
+  /**
+   * Course-wide in the active course: `offeringId: null`, so it is reached by the
+   * reader's second tier rather than by an enrolment. Linked, not stored, and
+   * deliberately **not** indexed — this is the "Not searchable yet" row.
+   */
+  await prisma.material.create({
+    data: {
+      id: MATERIAL_SYLLABUS_ID,
+      courseId: COURSE_ID,
+      offeringId: null,
+      createdById: TEACHER_STAFF_ID,
+      title: "Course syllabus and assessment plan",
+      kind: "DOCUMENT",
+      sourceUrl: "https://example.edu/demo/algebra-syllabus.pdf",
+      mimeType: "application/pdf",
+    },
   })
-  await indexMaterial(graphing.id, {
-    provider,
-    chunkOptions: { maxChars: 260, overlapChars: 40 },
+
+  /**
+   * The `LINK` kind: a resource that lives elsewhere and has no file of ours. Also
+   * course-wide, so the second tier has two rows and is not a one-off.
+   */
+  await prisma.material.create({
+    data: {
+      id: MATERIAL_KHAN_ID,
+      courseId: COURSE_ID,
+      offeringId: null,
+      createdById: TEACHER_STAFF_ID,
+      title: "Khan Academy — systems of equations",
+      kind: "LINK",
+      sourceUrl: "https://www.khanacademy.org/math/algebra/systems-of-eq-and-ineq",
+    },
   })
+
+  const video = await prisma.material.create({
+    data: {
+      id: MATERIAL_VIDEO_ID,
+      courseId: COURSE_ID,
+      offeringId: ACTIVE_OFFERING_ID,
+      createdById: TEACHER_STAFF_ID,
+      title: "Solving systems by substitution",
+      kind: "VIDEO",
+      sourceUrl: "https://example.edu/demo/algebra-substitution.mp4",
+      mimeType: "video/mp4",
+      contentText: [
+        "Substitution solves a system by expressing one variable in terms of the other, then replacing it in the second equation so that only one variable remains.",
+        "Choose the equation in which a variable already has coefficient one, because isolating it introduces no fractions.",
+        "After substituting, solve the single-variable equation that results, then back-substitute to find the other variable.",
+        "The method is exact for any linear system, but it is fastest when a coefficient is already one; elimination is usually quicker otherwise.",
+      ].join("\n\n"),
+    },
+  })
+
+  const transcript = await prisma.material.create({
+    data: {
+      id: MATERIAL_TRANSCRIPT_ID,
+      courseId: COURSE_ID,
+      offeringId: ACTIVE_OFFERING_ID,
+      createdById: TEACHER_STAFF_ID,
+      title: "Lecture transcript — week 2",
+      kind: "TRANSCRIPT",
+      mimeType: "text/plain",
+      contentText: [
+        "In this lecture we graph a line by plotting the y-intercept and then stepping along the slope to a second point.",
+        "We then read the x-intercept off the graph, which is the value of x where y equals zero, and check it against the algebra.",
+        "Finally we translate a word problem into a linear model by identifying a constant starting value and a constant rate of change.",
+      ].join("\n\n"),
+    },
+  })
+
+  await prisma.material.create({
+    data: {
+      id: MATERIAL_PRACTICE_ID,
+      courseId: COURSE_ID,
+      offeringId: ACTIVE_OFFERING_ID,
+      createdById: TEACHER_STAFF_ID,
+      title: "Practice set — slope and intercepts",
+      kind: "DOCUMENT",
+      sourceUrl: "https://example.edu/demo/algebra-practice-set.pdf",
+      mimeType: "application/pdf",
+    },
+  })
+
+  /**
+   * Attached to the **past** offering. It exists to make cross-offering isolation
+   * demonstrable: `demo.student4` and `demo.student5` are enrolled in the active
+   * offering only, so this row must be absent from their resources page while
+   * remaining present for `demo.student1`–`3`. See the enrolment note below.
+   */
+  await prisma.material.create({
+    data: {
+      id: MATERIAL_REVISION_2025_ID,
+      courseId: COURSE_ID,
+      offeringId: PAST_OFFERING_ID,
+      createdById: TEACHER_STAFF_ID,
+      title: "Revision handout (2025)",
+      kind: "DOCUMENT",
+      mimeType: "text/plain",
+    },
+  })
+
+  /**
+   * Indexed the real way, through `indexMaterial`, because "indexed" and
+   * "unindexed" are states the pages render differently and a hand-set flag would
+   * demo a state the pipeline cannot actually produce. The rows above that are not
+   * listed here have no chunks, and that is their point.
+   */
+  const chunkOptions = { maxChars: 260, overlapChars: 40 }
+  await indexMaterial(linear.id, { provider, chunkOptions })
+  await indexMaterial(graphing.id, { provider, chunkOptions })
+  await indexMaterial(video.id, { provider, chunkOptions })
+  await indexMaterial(transcript.id, { provider, chunkOptions })
 }
 
 async function createAssessments() {
@@ -959,9 +1107,9 @@ async function countSummary(): Promise<DemoSeedSummary> {
     courseRatings,
     ltiRegistrations,
   ] = await Promise.all([
-    prisma.material.count({ where: { id: { in: [MATERIAL_LINEAR_ID, MATERIAL_GRAPHING_ID] } } }),
+    prisma.material.count({ where: { id: { in: MATERIAL_IDS } } }),
     prisma.materialChunk.count({
-      where: { materialId: { in: [MATERIAL_LINEAR_ID, MATERIAL_GRAPHING_ID] } },
+      where: { materialId: { in: MATERIAL_IDS } },
     }),
     prisma.question.count({ where: { assessmentId: QUIZ_ASSESSMENT_ID } }),
     prisma.question.count({
