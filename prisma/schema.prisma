@@ -212,6 +212,18 @@ model Assessment {
   // Per-assessment quiz attempt cap. Null means "fall back to the
   // QUIZ_MAX_ATTEMPTS override, then the 3-attempt default".
   maxAttempts   Int?
+  // When this assessment became visible to students. Null means released to
+  // nobody, so it is absent from a student's calendar and planner while staying
+  // visible to its teacher.
+  //
+  // This is "this assessment is visible", which is **not** either of the two
+  // nearby publish concepts, and it is deliberately not called `publishedAt` so a
+  // future reader cannot wire the wrong one:
+  //   - `CourseOffering.resultsPublishedAt` is the *retention anchor* and starts
+  //     the purge clock, for a whole cohort at once.
+  //   - `Grade.publishedAt` is per-*student*: whether one mark has been released.
+  // Additive and nullable, so no backfill and no data migration are needed.
+  releasedAt    DateTime?
   createdAt     DateTime          @default(now())
   updatedAt     DateTime          @updatedAt
   offering      CourseOffering    @relation(fields: [offeringId], references: [id], onDelete: Cascade)

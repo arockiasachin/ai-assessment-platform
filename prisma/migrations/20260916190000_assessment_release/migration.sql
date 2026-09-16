@@ -1,0 +1,29 @@
+-- Assessment release: the instant an assessment becomes visible to students.
+--
+-- Adds the column the release concept needs and nothing else. Additive and
+-- nullable, so no backfill and no data migration: an existing row means "not
+-- released", which is the correct reading for every row that predates this.
+--
+-- Deliberately not called `publishedAt`. Three different publish-ish facts exist
+-- in this schema and confusing them is how a retention clock gets wired to the
+-- wrong column:
+--   - "Assessment.releasedAt" (this)  = this assessment is visible to students
+--   - "CourseOffering.resultsPublishedAt" = the retention anchor; starts the purge
+--     clock for a whole cohort
+--   - "Grade.publishedAt"            = one student's mark has been released
+--
+-- No index is added. The readers that will filter on release are scoped by
+-- `offeringId` first (already indexed as `[offeringId, dueDate]`), and a column
+-- added speculatively for queries that do not exist yet is a migration bought with
+-- nothing. The honest trigger for one is an observed slow plan.
+--
+-- Generated with:
+--   prisma migrate diff \
+--     --from-schema <prisma/schema.prisma at af76948> \
+--     --to-schema prisma/schema.prisma \
+--     --script
+--
+-- Applied with `prisma migrate deploy` (never `migrate dev`, never `db push`).
+
+-- AlterTable
+ALTER TABLE "Assessment" ADD COLUMN     "releasedAt" TIMESTAMP(3);

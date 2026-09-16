@@ -108,4 +108,43 @@ describe("demo seed — shape and legibility", () => {
       expect(activeOnly.length).toBeGreaterThan(0)
     })
   })
+
+  describe("assessment release", () => {
+    it("has both a released assessment and an unreleased one", async () => {
+      // The two branches of assessment visibility. With every assessment released
+      // the branches render identically, so a broken visibility filter would demo
+      // as working -- and the teacher's view would have nothing to distinguish.
+      const released = await db.assessment.count({ where: { releasedAt: { not: null } } })
+      const unreleased = await db.assessment.count({ where: { releasedAt: null } })
+
+      expect(released).toBeGreaterThan(0)
+      expect(unreleased).toBeGreaterThan(0)
+    })
+
+    it("does not set releasedAt from CourseOffering.resultsPublishedAt", async () => {
+      // The two are different facts with different granularity, and the naming
+      // exists to keep them apart. Assert the seed does not conflate them: the
+      // release instant is per assessment, so the four do not share one value.
+      const rows = await db.assessment.findMany({
+        where: { releasedAt: { not: null } },
+        select: { releasedAt: true },
+      })
+      const distinct = new Set(rows.map((row) => row.releasedAt?.toISOString()))
+
+      expect(rows.length).toBeGreaterThan(1)
+      expect(distinct.size).toBe(rows.length)
+    })
+
+    it("releases each assessment before its due date", async () => {
+      // A release after the deadline would be a different, and wrong, story.
+      const rows = await db.assessment.findMany({
+        where: { releasedAt: { not: null } },
+        select: { dueDate: true, releasedAt: true },
+      })
+
+      for (const row of rows) {
+        expect(row.releasedAt!.getTime()).toBeLessThan(row.dueDate.getTime())
+      }
+    })
+  })
 })

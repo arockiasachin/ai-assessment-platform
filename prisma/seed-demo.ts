@@ -539,6 +539,21 @@ async function createMaterials(provider: ReturnType<typeof createMockProvider>) 
 }
 
 async function createAssessments() {
+  /**
+   * `releasedAt` is seeded explicitly, and **one assessment is deliberately left
+   * unreleased**. Both branches have to be reachable from the demo data:
+   *
+   * - released -> the assessment is visible to students on their calendar;
+   * - unreleased -> it must be absent for a student while still visible to its
+   *   teacher, which is the only way to tell a working visibility filter from one
+   *   that never filters anything.
+   *
+   * With every assessment released, the two branches render identically and a
+   * broken filter demos as working — the same failure mode as the Wave 1 seed bugs.
+   *
+   * The releases are set a fortnight before each due date, which is the realistic
+   * shape: a teacher opens the assessment, then the deadline approaches.
+   */
   const assessmentRows = [
     {
       id: QUIZ_ASSESSMENT_ID,
@@ -547,6 +562,7 @@ async function createAssessments() {
       maxMarks: 20,
       dueDate: new Date("2026-11-30T08:00:00.000Z"),
       maxAttempts: 5,
+      releasedAt: new Date("2026-11-16T08:00:00.000Z") as Date | null,
     },
     {
       id: ESSAY_ASSESSMENT_ID,
@@ -555,6 +571,7 @@ async function createAssessments() {
       maxMarks: 30,
       dueDate: new Date("2026-12-04T08:00:00.000Z"),
       maxAttempts: null,
+      releasedAt: new Date("2026-11-20T08:00:00.000Z") as Date | null,
     },
     {
       id: CODE_ASSESSMENT_ID,
@@ -563,6 +580,7 @@ async function createAssessments() {
       maxMarks: 10,
       dueDate: new Date("2026-12-08T08:00:00.000Z"),
       maxAttempts: 3,
+      releasedAt: new Date("2026-11-24T08:00:00.000Z") as Date | null,
     },
     {
       id: GROUP_ASSESSMENT_ID,
@@ -571,6 +589,9 @@ async function createAssessments() {
       maxMarks: 20,
       dueDate: new Date("2026-12-11T08:00:00.000Z"),
       maxAttempts: 1,
+      // The unreleased one. Its calendar event still exists and its teacher still
+      // sees it; a student must not.
+      releasedAt: null,
     },
   ]
 
@@ -586,6 +607,7 @@ async function createAssessments() {
         dueDate: assessment.dueDate,
         maxMarks: assessment.maxMarks,
         maxAttempts: assessment.maxAttempts,
+        releasedAt: assessment.releasedAt,
         createdById: TEACHER_STAFF_ID,
       },
     })
