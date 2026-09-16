@@ -1,53 +1,39 @@
+import type { Metadata } from "next"
 import Link from "next/link"
 import { redirect } from "next/navigation"
 
 import { RoleGuard } from "@/components/role-guard"
-import { RolePageShell } from "@/components/role-page-shell"
+import { AppShell, PageHeader } from "@/components/shell"
+import { TeacherObservabilityView } from "@/components/teacher-observability-view"
 import { listTeacherOfferingsForAnalytics } from "@/lib/analytics/service"
 import { getSessionUser } from "@/lib/auth"
-import {
-  getRecentGradeActivityForTeacher,
-  type GradeActivityItem,
-} from "@/lib/observability/audit-view"
-
-/**
- * Teacher grade-activity view.
- *
- * A read-only rendering of the `AuditLog` rows behind the grade pipeline for
- * one owned offering, so a teacher can see what the AI and their colleagues did
- * (and when) without opening each submission. Data comes from the same scoped
- * helper the API route uses, so the page cannot show another teacher's rows.
- */
+import { getRecentGradeActivityForTeacher } from "@/lib/observability/audit-view"
+import { listGradingDecisionsForTeacher } from "@/lib/observability/grading-decisions"
+import { initialsFromEmail, roleLabelFromRole } from "@/lib/user-identity"
 
 export const dynamic = "force-dynamic"
 
-const ACTION_LABELS: Record<string, string> = {
-  "grade_review.created": "Review opened",
-  "grade_review.reopened": "Review reopened",
-  "grade_review.accept": "AI suggestion accepted",
-  "grade_review.override": "AI suggestion overridden",
-  "grade_review.reject": "AI suggestion rejected",
-  "grade_review.flag": "Flagged for review",
-  "ai_suggestion.recorded": "AI suggestion recorded",
-  "grade.ai_draft_created": "Draft grade created",
-  "grade.ai_draft_updated": "Draft grade updated",
-  "grade.published": "Grade published",
-}
+export const metadata: Metadata = { title: "Activity log" }
 
-function actionLabel(action: string): string {
-  return ACTION_LABELS[action] ?? action
-}
-
-/** Render the scalar fields of an audit summary; never nested objects. */
-function summaryText(item: GradeActivityItem): string | null {
-  if (!item.summary || typeof item.summary !== "object" || Array.isArray(item.summary)) return null
-  const parts = Object.entries(item.summary as Record<string, unknown>)
-    .filter(([, value]) => value === null || typeof value !== "object")
-    .slice(0, 4)
-    .map(([key, value]) => `${key}: ${String(value)}`)
-  return parts.length > 0 ? parts.join(" · ") : null
-}
-
+/**
+ * Activity log.
+ *
+ * The audit trail behind the grade pipeline for one owned offering, plus the marks
+ * teachers changed rather than accepted. Both readers scope to the caller's own
+ * offering, so the page cannot show another teacher's rows.
+ *
+ * The route stays `/teacher/observability` (and the nav links here) while the page is
+ * titled "Activity log", which is what the nav already calls it — the mismatch between
+ * the path and the label is deliberate and documented in `nav-config.ts`.
+ *
+ * This is a presentation port. The read path already existed; what changed is that it
+ * now renders through the shared shell and primitives instead of the older
+ * `RolePageShell`, the activity list names its actors, and the grading-decisions table
+ * is new. Three behaviours were deliberately **not** carried over from the mockup:
+ * an "Export log" button with no write path, a date-range filter over an already
+ * truncated window, and `toLocaleString()` in render (an implicit-locale hydration
+ * hazard — dates now go through `formatDateTime`).
+ */
 export default async function TeacherObservabilityPage({
   searchParams,
 }: {
@@ -61,32 +47,51 @@ export default async function TeacherObservabilityPage({
   const offerings = await listTeacherOfferingsForAnalytics(user)
   const selected = offerings.find((offering) => offering.id === requested) ?? offerings[0] ?? null
 
-  const activity = selected
-    ? await getRecentGradeActivityForTeacher(user, { offeringId: selected.id, limit: 25 })
-    : null
+  const [activity, decisions] = selected
+    ? await Promise.all([
+        getRecentGradeActivityForTeacher(user, { offeringId: selected.id, limit: 25 }),
+        listGradingDecisionsForTeacher(user, selected.id),
+      ])
+    : [null, null]
 
   return (
     <RoleGuard role="teacher">
-      <RolePageShell
+      <AppShell
+        scope="app"
         role="teacher"
-        title="Grade activity"
-        description="Recent grade-pipeline activity — AI suggestions, review decisions, and published grades — for one of your offerings. Read-only."
+        user={{
+          name: user.email,
+          email: user.email,
+          initials: initialsFromEmail(user.email),
+          roleLabel: roleLabelFromRole(user.role),
+        }}
       >
+        <PageHeader
+          eyebrow={selected ? `${selected.courseCode} · audit trail` : "Audit trail"}
+          title="Activity log"
+          description="Recent grade-pipeline activity — AI suggestions, review decisions, and published grades — plus every mark a teacher changed. Read-only."
+        />
+
         {offerings.length === 0 ? (
-          <p className="rounded-xl border border-border/70 bg-card px-4 py-6 text-sm text-muted-foreground">
-            You have no offerings yet.
+          <p className="rounded-xl border border-border bg-card px-4 py-6 text-sm text-muted-foreground">
+            You have no offerings yet, so there is no activity to show.
           </p>
         ) : (
-          <div className="space-y-4">
-            <div className="flex flex-wrap gap-2">
+          <div className="space-y-6">
+            {/* The offering selector is kept from the previous page: the readers are
+                per-offering, so without it a teacher with two offerings could only
+                ever see the first. It is a real control, not a mockup affordance. */}
+            <nav aria-label="Offering" className="flex flex-wrap gap-2">
               {offerings.map((offering) => {
                 const isActive = offering.id === selected?.id
                 return (
                   <Link
                     key={offering.id}
                     href={`/teacher/observability?offeringId=${offering.id}`}
+                    aria-current={isActive ? "page" : undefined}
                     className={[
                       "rounded-lg border px-3 py-1.5 text-xs transition-colors",
+                      "focus-visible:ring-3 focus-visible:ring-ring/50",
                       isActive
                         ? "border-primary/40 bg-primary/10 text-primary"
                         : "border-border bg-background hover:bg-muted",
@@ -96,43 +101,21 @@ export default async function TeacherObservabilityPage({
                   </Link>
                 )
               })}
-            </div>
+            </nav>
 
-            {activity && activity.items.length === 0 ? (
-              <p className="rounded-xl border border-border/70 bg-card px-4 py-6 text-sm text-muted-foreground">
-                No grade-pipeline activity yet for this offering.
-              </p>
-            ) : (
-              <ol className="space-y-2">
-                {activity?.items.map((item) => {
-                  const detail = summaryText(item)
-                  return (
-                    <li
-                      key={item.id}
-                      className="rounded-xl border border-border/70 bg-card px-4 py-3 text-sm"
-                    >
-                      <div className="flex flex-wrap items-center justify-between gap-2">
-                        <span className="font-medium">{actionLabel(item.action)}</span>
-                        <span className="text-xs text-muted-foreground">
-                          {new Date(item.createdAt).toLocaleString()}
-                        </span>
-                      </div>
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        {item.entityLabel} · {item.actorRole ?? "system"}
-                      </p>
-                      {detail && <p className="mt-1 text-xs">{detail}</p>}
-                    </li>
-                  )
-                })}
-              </ol>
-            )}
-
-            {activity?.truncated && (
-              <p className="text-xs text-muted-foreground">Showing the most recent 25 events.</p>
-            )}
+            {activity && decisions ? (
+              <>
+                <TeacherObservabilityView activity={activity.items} decisions={decisions.items} />
+                {activity.truncated && (
+                  <p className="text-xs text-muted-foreground">
+                    Showing the most recent 25 activity entries.
+                  </p>
+                )}
+              </>
+            ) : null}
           </div>
         )}
-      </RolePageShell>
+      </AppShell>
     </RoleGuard>
   )
 }

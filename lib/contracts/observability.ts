@@ -20,6 +20,13 @@ export const gradeActivityItemSchema = z.object({
   assessmentId: z.string().nullable(),
   actorId: z.string().nullable(),
   actorRole: z.string().nullable(),
+  /**
+   * The actor's display name, or null when it cannot be resolved.
+   *
+   * A lookup rather than a stored fact — `AuditLog` keeps only an id and a role so
+   * it survives user deletion — so a deleted actor is legitimately null.
+   */
+  actorName: z.string().nullable(),
   createdAt: z.string(),
   summary: z.unknown(),
 })
