@@ -169,6 +169,34 @@ adding/removing a layout, kill and restart `npm run dev` before trusting a brows
 `curl` against the running server is the fastest confirmation — for an app-scope page,
 `grep -c 'id="app-main"'` on the response should be `1`.
 
+## Seed a development database
+
+There are three seed entry points, and one command a developer normally wants:
+
+| Command                       | What it does                                                                                                                                  |
+| ----------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| `npm run prisma:seed:all`     | **The default.** Runs the demo seed, then the courses seed, in that fixed order. Safe to re-run whenever you want a known-good dataset.       |
+| `npm run prisma:seed:demo`    | Only `prisma/seed-demo.ts`: the Phase 4 "Algebra Foundations" course that drives the whole product spine.                                     |
+| `npm run prisma:seed:courses` | Only `prisma/seed-courses.ts`: the four M.Tech CSE (BDA) courses `MCSE501L/P` and `MCSE502L/P`.                                               |
+| `npm run prisma:seed`         | `prisma db seed` → `prisma/seed.ts`, the legacy full-faculty fixture. It resets the **whole** database and is deliberately not part of `all`. |
+
+Both the demo and courses seeds are **independently re-runnable and idempotent**: each deletes the
+rows it owns before recreating them, so a second run replaces rather than duplicates and raises no
+constraint error. They also **coexist** in one database — the demo seed's teardown is scoped to its
+own ids (plus two title-scoped orphan sweeps: `Due: …` deadline events left behind by earlier runs,
+and `AUDIT-…` probe events left behind by the audit harness), and the courses seed's teardown is
+scoped to its `courses-` ids, so re-running either one alone leaves the other's rows untouched.
+Both orphan sweeps are scoped by title deliberately rather than by "all three links are null",
+because that shape is shared with the two real institution-wide holidays. `AUDIT-…` is a reserved
+probe namespace: do not title a real event with it. `tests/seed-coexistence.test.ts` is the
+executable proof of coexistence, and `tests/seed-probe-teardown.test.ts` pins the probe sweep and
+the survival of both holidays across it.
+
+`prisma:seed:all` fixes the order (demo, then courses) so the resulting state is deterministic.
+Because both teardowns are id-scoped, either order is safe; this is simply the order the pair was
+developed and documented in. Run it from a clean shell — each seed loads `.env` itself, so no
+exported `DATABASE_URL` is required.
+
 ## Commit conventions
 
 Conventional Commits, imperative mood, lowercase type. The scopes observed in this history:

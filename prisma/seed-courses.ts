@@ -1558,7 +1558,10 @@ async function createCodeTasks(): Promise<void> {
         runtimeMs: 168,
         startedAt: new Date(runFinishedAt.getTime() - 2000),
         finishedAt: runFinishedAt,
-        coverage: 100,
+        // A 0..1 fraction, not a percentage: `computeCoverage` returns
+        // `executed / total` and both code-task pages multiply by 100 before
+        // formatting. All three test cases ran, so this is 1 (i.e. 100%).
+        coverage: 1,
         resultsJson: toRunEvidenceJson({
           results: createdTestCases.map((testCase) => ({
             testCaseId: testCase.id,

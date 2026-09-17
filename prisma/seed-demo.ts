@@ -1,3 +1,9 @@
+// `tsx` does not load `.env` itself, so the seed must — the same first import
+// `prisma/seed.ts` and `prisma/seed-courses.ts` carry. Without it
+// `npm run prisma:seed:demo` throws `DATABASE_URL is not set` in a shell that
+// has not exported the variable, while `prisma:seed:courses` works.
+import "dotenv/config"
+
 import { resolve } from "node:path"
 import { fileURLToPath } from "node:url"
 
@@ -153,6 +159,28 @@ const CALENDAR_EVENT_IDS = [
   "demo-event-lecture-slope-recap",
   "demo-event-revision-session",
 ]
+
+/**
+ * Title prefixes reserved for the audit harness (`scripts/audit/`), so its probe
+ * events can be swept without touching a real one.
+ *
+ * The harness creates assessments titled `AUDIT-…` while driving the running app.
+ * `createAssessment` (`lib/gradebook-db.ts`) copies the assessment's title onto its
+ * calendar event, and **all three** of `CalendarEvent`'s links are `onDelete:
+ * SetNull` — so deleting the probe's assessment, or the offering it hung off,
+ * strips the links and leaves an unscoped row. `lib/calendar.ts` reads an unscoped
+ * row as institution-wide, so an audit run left 28 of these visible on every
+ * student's `/student/events`, one of them literally titled "AUDIT-A DOUBLE
+ * SUBMIT".
+ *
+ * The predicate is this explicit list of reserved prefixes, deliberately **not**
+ * "delete every unscoped event". The two are indistinguishable by links alone:
+ * this seed's "Mid-term break" and `seed-courses.ts`'s "Mid-semester break" are
+ * both deliberate unscoped holidays, and an earlier unscoped sweep deleted the
+ * courses one. A title in this namespace is the harness's, not a person's; a new
+ * probe family adds its prefix here rather than widening the predicate.
+ */
+export const AUDIT_PROBE_TITLE_PREFIXES = ["AUDIT-"] as const
 
 const STUDENT_NAMES = [
   { fullName: "Demo Student One", registerNumber: "DEMO-0001" },
@@ -327,22 +355,29 @@ async function deleteDemoData(): Promise<void> {
   // they point at. Their three links are all `onDelete: SetNull`, so deleting a
   // parent does not delete the event — it strips one link and leaves the row, and a
   // row with no links at all is exactly what an intentionally institution-wide
-  // event looks like. The second clause cleans up rows earlier runs already
+  // event looks like. The `Due: ` clause cleans up rows earlier runs already
   // orphaned, which the calendar reader would otherwise show to every student as a
   // duplicated `Due: …` with no course and no location.
   //
-  // **The second clause is scoped by title, not by "all three links are null".** The
-  // unscoped form also matched any deliberately institution-wide event, which was
-  // safe only while this seed was the sole producer of one — and `seed-courses.ts`
-  // is a second, so an unscoped sweep deleted its mid-semester holiday. Scoping to
-  // the deadline shape also narrows it to the shape worth removing: an orphaned
-  // holiday still reads as a holiday, whereas a course-less `Due: …` reads as a
-  // deadline for a course that does not exist.
+  // **Every orphan clause is scoped by title, not by "all three links are null".**
+  // The unscoped form also matched any deliberately institution-wide event, which
+  // was safe only while this seed was the sole producer of one — and
+  // `seed-courses.ts` is a second, so an unscoped sweep deleted its mid-semester
+  // holiday. Scoping to the deadline shape also narrows it to the shape worth
+  // removing: an orphaned holiday still reads as a holiday, whereas a course-less
+  // `Due: …` reads as a deadline for a course that does not exist.
+  //
+  // The third clause applies the same rule to the audit harness's probes: an
+  // unscoped event whose title carries a prefix from `AUDIT_PROBE_TITLE_PREFIXES`
+  // is residue no seed created. The prefix is what keeps that clause away from the
+  // two real unscoped holidays; see the constant for why this is deliberately not
+  // "delete every orphan".
   //
   // What this no longer catches: a pre-stable-id orphan of a *non-deadline* event
-  // (a lecture or a holiday) from a long-lived development database. Those are
-  // harmless — they render as what they are — and a fresh seed clears them anyway,
-  // so the trade is deliberate rather than overlooked.
+  // (a lecture or a holiday) from a long-lived development database, or an orphan
+  // whose title falls outside both title scopes. Those are harmless — they render
+  // as what they are — and a fresh seed clears them anyway, so the trade is
+  // deliberate rather than overlooked.
   //
   // This seed recreates its own unscoped event (the mid-term break) below.
   await prisma.calendarEvent.deleteMany({
@@ -354,6 +389,12 @@ async function deleteDemoData(): Promise<void> {
           classId: null,
           assessmentId: null,
           title: { startsWith: "Due: " },
+        },
+        {
+          offeringId: null,
+          classId: null,
+          assessmentId: null,
+          OR: AUDIT_PROBE_TITLE_PREFIXES.map((prefix) => ({ title: { startsWith: prefix } })),
         },
       ],
     },
@@ -1199,7 +1240,10 @@ async function createCodeTask() {
       runtimeMs: 142,
       startedAt: new Date("2026-11-25T10:02:20.000Z"),
       finishedAt: runFinishedAt,
-      coverage: 100,
+      // A 0..1 fraction, not a percentage: `computeCoverage` returns
+      // `executed / total` and both code-task pages multiply by 100 before
+      // formatting. All three test cases ran, so this is 1 (i.e. 100%).
+      coverage: 1,
       resultsJson: toRunEvidenceJson({
         results: createdTestCases.map((testCase) => ({
           testCaseId: testCase.id,

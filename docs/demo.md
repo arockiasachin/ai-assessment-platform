@@ -14,8 +14,14 @@ called out: every Phase 2 pod had route/service tests, but nothing had ever been
 continuous flow. The demo also closes the seed-coverage gap — the old `prisma/seed.ts` left
 seventeen models with **zero** rows.
 
-Run it with the `prisma:seed:demo` npm script. It is **deterministic** (fixed ids, mock provider) and
-**idempotent** (a second run replaces the demo graph instead of duplicating or crashing).
+Run it with `npm run prisma:seed:demo` — or `npm run prisma:seed:all` to seed this course and the
+M.Tech courses seed together. It is **deterministic** (fixed ids, mock provider) and **idempotent**
+(a second run replaces the demo graph instead of duplicating or crashing), and it coexists with
+`prisma/seed-courses.ts` in one database. Its teardown also sweeps two title-scoped shapes of
+orphaned calendar event — `Due: …` deadlines and the audit harness's reserved `AUDIT-…` probes — so
+neither seed run can leave an unscoped event that `lib/calendar.ts` would show to every student.
+Which command to run for what is documented in
+[Seed a development database](./development-workflow.md#seed-a-development-database).
 
 ## What the demo creates
 
