@@ -404,6 +404,15 @@ git**, so it must be committed whenever the run changes it. An earlier instructi
 committed copy stale against the `.md` files it is derived from. Both are true: never edit it
 by hand, and always commit what the command produces.
 
+**Amended for multi-worker waves.** Once two or more workers run concurrently, that rule
+inverts: three writers regenerating and staging one derived file is a conflict source, and the
+last writer would silently discard the others' counts. So parallel workers are told to run the
+command (it validates their `.md` edits) but **leave the aggregate unstaged**, and the
+coordinator commits it once per wave. Single-worker chunks still commit their own.
+
+The general rule, which is what actually matters: **one writer per derived artefact per
+wave**, whether that writer is a worker or the coordinator.
+
 ### 8.4 The scratchpad
 
 Two things must be captured as they are learned rather than reconstructed later:
