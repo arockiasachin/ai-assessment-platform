@@ -66,6 +66,9 @@ async function withCodeFat(options: { catPercent: number; fatDue?: Date }) {
   const studentId = fixture.student.studentProfile!.id
   const staffId = fixture.teacher.staffProfile!.id
 
+  // Released: `fat` is submitted through `submitCodeForStudent`, which now scopes on release. The
+  // fixture supplies the gate, not the guard, so the assessment must be a normal released one.
+  const RELEASED_AT = new Date("2026-01-01T00:00:00.000Z")
   const cat = await prisma.assessment.create({
     data: {
       title: "CAT quiz",
@@ -76,6 +79,7 @@ async function withCodeFat(options: { catPercent: number; fatDue?: Date }) {
       courseId: fixture.course.id,
       classId: fixture.classroom.id,
       createdById: staffId,
+      releasedAt: RELEASED_AT,
     },
   })
   await prisma.grade.create({
@@ -100,6 +104,7 @@ async function withCodeFat(options: { catPercent: number; fatDue?: Date }) {
       courseId: fixture.course.id,
       classId: fixture.classroom.id,
       createdById: staffId,
+      releasedAt: RELEASED_AT,
     },
   })
   const codeTask = await prisma.codeTask.create({

@@ -17,6 +17,7 @@ import {
 import type { QuizAnswer } from "@/lib/contracts/quiz"
 import type { Grade, GradeReview } from "@/lib/generated/prisma/client"
 import { selectAdaptiveRetakeQuestions } from "@/lib/analytics/retake"
+import { releasedAssessmentWhere } from "@/lib/assessment-visibility"
 import { finalizedAttemptWhere, GRADED, isCounted, isGraded, PRACTICE } from "./kinds"
 import { findResumableAttempt } from "./resumable"
 import { decideRetake, resolveSittingCap } from "./retake-policy"
@@ -302,6 +303,10 @@ export async function listStudentQuizzes(user: AuthUser): Promise<StudentQuizSum
   const assessments = await prisma.assessment.findMany({
     where: {
       type: "QUIZ",
+      // Release governs visibility of the list too (SN-5). An unreleased quiz shown here is the
+      // same defect as the unreleased assessment the assessment list used to show: the predicate
+      // is imported, not retyped, so the two lists cannot drift.
+      ...releasedAssessmentWhere(),
       offering: { enrollments: { some: { studentId, status: "active" } } },
     },
     orderBy: [{ dueDate: "asc" }, { createdAt: "desc" }],
@@ -617,8 +622,18 @@ export async function startQuizAttempt(user: AuthUser, input: unknown): Promise<
   const request = quizAttemptStartRequestSchema.parse(input)
   const studentId = await resolveStudentProfileId(user)
 
-  const assessment = await prisma.assessment.findUnique({
-    where: { id: request.assessmentId },
+  /*
+   * Release governs *use*, not only visibility (SN-5).
+   *
+   * The quiz list now hides an unreleased quiz, but hiding it there only closes the UI flow: a
+   * student who knows the id could still start a sitting. Folding the predicate into the lookup
+   * makes an unreleased quiz indistinguishable from a nonexistent one, which is why the refusal
+   * stays the existing 404 "Assessment not found." rather than a 403 that would confirm the quiz
+   * exists — the same convention `lib/assessment-release.ts` states and the submission route
+   * follows.
+   */
+  const assessment = await prisma.assessment.findFirst({
+    where: { id: request.assessmentId, ...releasedAssessmentWhere() },
     select: {
       id: true,
       type: true,
@@ -1170,8 +1185,11 @@ export async function startPracticeAttempt(
   const request = quizAttemptStartRequestSchema.parse(input)
   const studentId = await resolveStudentProfileId(user)
 
-  const assessment = await prisma.assessment.findUnique({
-    where: { id: request.assessmentId },
+  // Release governs use here too (SN-5): practising a hidden quiz returns the questions, which
+  // is the paper itself. The predicate is folded into the lookup so an unreleased quiz is
+  // reported exactly as a nonexistent one (404).
+  const assessment = await prisma.assessment.findFirst({
+    where: { id: request.assessmentId, ...releasedAssessmentWhere() },
     select: {
       id: true,
       type: true,

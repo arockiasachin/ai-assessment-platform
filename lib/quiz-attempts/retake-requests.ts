@@ -1,5 +1,6 @@
 import "server-only"
 
+import { releasedAssessmentWhere } from "@/lib/assessment-visibility"
 import { writeAuditLog } from "@/lib/grading/audit"
 import { prisma } from "@/lib/prisma"
 import type { AuthUser } from "@/lib/session"
@@ -98,8 +99,11 @@ export async function requestRetake(
 ): Promise<RetakeRequestView> {
   const studentId = await resolveStudentProfileId(user)
 
-  const assessment = await prisma.assessment.findUnique({
-    where: { id: assessmentId },
+  // Release governs use (SN-5). Filing a retake request against an assessment the student cannot
+  // see is the same defect as submitting to one, so the predicate is folded into the lookup and
+  // an unreleased assessment is refused exactly as a nonexistent one.
+  const assessment = await prisma.assessment.findFirst({
+    where: { id: assessmentId, ...releasedAssessmentWhere() },
     select: {
       id: true,
       retakePolicy: true,

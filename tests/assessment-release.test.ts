@@ -31,6 +31,15 @@ beforeAll(async () => {
   await truncateAll()
   f = await createSpineFixture(prisma)
 
+  // The shared spine fixture is released by default, because the student write paths now scope on
+  // release and an unreleased fixture would refuse them (SN-5). This file's subject *is* the
+  // release action, so its assessment has to start on the unreleased side of the rule — the
+  // precondition is restored here, and every assertion below is untouched.
+  await prisma.assessment.update({
+    where: { id: f.assessment.id },
+    data: { releasedAt: null },
+  })
+
   teacher = { id: f.teacher.id, email: f.teacher.email, role: "teacher" }
 
   // A second teacher with a staff profile who owns nothing here.

@@ -63,6 +63,10 @@ async function withCatWork(
   const studentId = fixture.student.studentProfile!.id
   const staffId = fixture.teacher.staffProfile!.id
 
+  // Released: both feed student write paths (`startQuizAttempt`/`startPracticeAttempt`), which now
+  // scope on release. The gate is the subject of these tests, so the fixture must not also trip the
+  // release guard — that would make every refusal a 404 for the wrong reason.
+  const RELEASED_AT = new Date("2026-01-01T00:00:00.000Z")
   const cat = await prisma.assessment.create({
     data: {
       title: "CAT quiz",
@@ -73,6 +77,7 @@ async function withCatWork(
       courseId: fixture.course.id,
       classId: fixture.classroom.id,
       createdById: staffId,
+      releasedAt: RELEASED_AT,
     },
   })
   const fat = await prisma.assessment.create({
@@ -85,6 +90,7 @@ async function withCatWork(
       courseId: fixture.course.id,
       classId: fixture.classroom.id,
       createdById: staffId,
+      releasedAt: RELEASED_AT,
     },
   })
 

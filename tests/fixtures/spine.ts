@@ -78,6 +78,12 @@ export async function createSpineFixture(prisma: PrismaClient) {
       dueDate: new Date("2026-10-01T08:00:00.000Z"),
       maxMarks: 20,
       createdById: teacher.staffProfile!.id,
+      // Released, deliberately. This fixture is used by the student write paths
+      // (`startQuizAttempt`, `startPracticeAttempt`, the submission route), and those paths now
+      // scope on release. Leaving it unreleased encoded the SN-5 bug and would have refused every
+      // one of them; the release fact belongs in the setup, so the assertions stay untouched.
+      // Tests that need the unreleased branch create their own assessment with `releasedAt: null`.
+      releasedAt: new Date("2026-01-01T00:00:00.000Z"),
     },
   })
 

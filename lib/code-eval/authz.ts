@@ -1,3 +1,4 @@
+import { releasedAssessmentWhere } from "@/lib/assessment-visibility"
 import { prisma } from "@/lib/prisma"
 import type { AuthUser } from "@/lib/session"
 
@@ -126,8 +127,12 @@ export async function loadEnrolledCodeTask(
   assessmentId: string,
 ): Promise<EnrolledCodeTask> {
   const studentId = await resolveStudentProfileId(user)
-  const assessment = await prisma.assessment.findUnique({
-    where: { id: assessmentId },
+  // Release governs use, not only visibility (SN-5). This is the single student-side loader for a
+  // code assessment — the submission pipeline and the run/task reads all come through it — so the
+  // predicate is folded into the lookup and an unreleased assessment is reported exactly as a
+  // nonexistent one (404), never as a 403 that would confirm it exists.
+  const assessment = await prisma.assessment.findFirst({
+    where: { id: assessmentId, ...releasedAssessmentWhere() },
     select: {
       id: true,
       title: true,

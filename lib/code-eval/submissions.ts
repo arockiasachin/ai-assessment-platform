@@ -1,3 +1,4 @@
+import { releasedAssessmentWhere } from "@/lib/assessment-visibility"
 import {
   codeSubmissionRequestSchema,
   type StudentCodeTask,
@@ -68,6 +69,9 @@ export async function listStudentCodeTasks(user: AuthUser): Promise<StudentCodeT
     where: {
       type: "CODE",
       codeTask: { isNot: null },
+      // Release governs visibility of the list too (SN-5). An unreleased code task shown here is
+      // the same defect as the unreleased assessment the assessment list used to show.
+      ...releasedAssessmentWhere(),
       offering: { enrollments: { some: { studentId, status: "active" } } },
     },
     select: {

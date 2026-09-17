@@ -53,6 +53,8 @@ function fakeExecutor(counter: { calls: number }, delayMs: number): SandboxExecu
 
 async function createCodeFixture(maxSubmissions: number) {
   const fixture = await createSpineFixture(prisma)
+  // Released: the race is about the submission cap, not the release guard, and
+  // `submitCodeForStudent` now refuses an unreleased assessment with a 404 before the cap applies.
   const assessment = await prisma.assessment.create({
     data: {
       offeringId: fixture.offering.id,
@@ -63,6 +65,7 @@ async function createCodeFixture(maxSubmissions: number) {
       dueDate: new Date("2030-01-01T00:00:00.000Z"),
       maxMarks: 10,
       createdById: fixture.teacher.staffProfile!.id,
+      releasedAt: new Date("2026-01-01T00:00:00.000Z"),
     },
   })
   const codeTask = await prisma.codeTask.create({

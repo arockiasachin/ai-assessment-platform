@@ -30,6 +30,8 @@ describe("student code task contract", () => {
   it("carries the assessment's maxMarks and the task's sandbox limits", async () => {
     const fixture = await createSpineFixture(prisma)
 
+    // Released: `listStudentCodeTasks` now scopes on release, so an unreleased task would be
+    // absent from the list this contract test reads.
     const assessment = await prisma.assessment.create({
       data: {
         offeringId: fixture.offering.id,
@@ -40,6 +42,7 @@ describe("student code task contract", () => {
         dueDate: new Date("2030-01-01T00:00:00.000Z"),
         maxMarks: 25,
         createdById: fixture.teacher.staffProfile!.id,
+        releasedAt: new Date("2026-01-01T00:00:00.000Z"),
       },
     })
 

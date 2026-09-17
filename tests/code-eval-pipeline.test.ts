@@ -83,6 +83,9 @@ async function createCodeFixture(options: { maxSubmissions?: number; dueDate?: D
   const fixture = await createSpineFixture(prisma)
   const dueDate = options.dueDate ?? new Date("2030-01-01T00:00:00.000Z")
 
+  // Released: this is the assessment students submit to via `submitCodeForStudent` and read via
+  // `listStudentCodeTasks`/`listStudentRuns`, all of which now scope on release. Leaving it
+  // unreleased encoded the SN-5 bug in the fixture.
   const assessment = await prisma.assessment.create({
     data: {
       offeringId: fixture.offering.id,
@@ -93,6 +96,7 @@ async function createCodeFixture(options: { maxSubmissions?: number; dueDate?: D
       dueDate,
       maxMarks: 10,
       createdById: fixture.teacher.staffProfile!.id,
+      releasedAt: new Date("2026-01-01T00:00:00.000Z"),
     },
   })
 
