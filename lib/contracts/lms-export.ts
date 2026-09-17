@@ -117,13 +117,24 @@ export const studentFinalGradeSchema = z.object({
   fullName: z.string(),
   registerNumber: z.string(),
   percentage: z.number().nullable(),
-  /** Sum of the weights of categories that had at least one usable mark. */
+  /**
+   * The share of the configured weight that has actually been marked.
+   *
+   * Prorated **within** each category: if a category's assessments carry relative
+   * weights 1:1:1:1:1 and only one has a published mark, it contributes one fifth
+   * of the category weight, not all of it. So one mark out of five no longer
+   * presents a student as fully graded.
+   */
   completedWeight: z.number(),
   totalWeight: z.number(),
   /**
-   * True when at least one configured category had no usable published mark and
-   * was therefore excluded. The final percentage is renormalised over the
-   * completed weight, so an ungraded category neither helps nor harms.
+   * True whenever `completedWeight < totalWeight` — i.e. some configured weight has
+   * no published mark behind it, including the empty-config case.
+   *
+   * The percentage is renormalised over the *completed* weight, so an ungraded
+   * assessment neither helps nor harms the number. That is why this flag matters:
+   * the percentage alone cannot tell a consumer whether it is final, and
+   * `incomplete: false` is the only thing that says a grade will not later move.
    */
   incomplete: z.boolean(),
   categories: z.array(finalGradeCategoryBreakdownSchema),
