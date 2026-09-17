@@ -413,6 +413,28 @@ coordinator commits it once per wave. Single-worker chunks still commit their ow
 The general rule, which is what actually matters: **one writer per derived artefact per
 wave**, whether that writer is a worker or the coordinator.
 
+### 8.3.3 Parallel workers need a private test database
+
+The same wave surfaced the same failure twice: the shared `assessment_test` database was
+contended, and two workers saw `table public.User does not exist` and duplicate-key errors
+from concurrent `truncateAll` runs. Both diagnosed it correctly and proved their work on a
+private database instead — but each spent time discovering a problem that is structural, not
+accidental.
+
+**It is structural.** `tests/global-setup.ts` drops and recreates the `public` schema before
+the suite runs, so two suites against one database destroy each other's fixtures mid-run. No
+amount of retrying fixes that; the two runs must not share a database.
+
+**So the standing instruction for concurrent workers is: point `TEST_DATABASE_URL` at your own
+database** (e.g. `assessment_<chunk>_test`), create it before the run, and drop it afterwards.
+The harness already accepts the URL from the environment, so this needs no code change — only
+that it be part of the brief rather than rediscovered.
+
+Worth considering later, not now: the harness could allocate a per-run database from the
+`TEST_DATABASE_URL` name automatically, which would make the safe thing the default. Until
+then it is a brief-level instruction, because a wrong guess here costs a worker a test cycle
+and produces failures that look like real bugs in someone else's code.
+
 ### 8.4 The scratchpad
 
 Two things must be captured as they are learned rather than reconstructed later:
