@@ -318,6 +318,14 @@ export async function getGradebookPayloadForSessionUser(
             include: {
               course: true,
               assessments: {
+                // Release governs visibility, and this is the *projection* half of that rule.
+                // Filtering here, not in the renderer, is the point: this payload is embedded
+                // in the RSC script payload of every `(dashboard)` route, so an assessment
+                // filtered out of the visible table but present here is still readable in the
+                // page source. The events page hides an unreleased assessment's row correctly;
+                // without this filter its id, title, type, date, marks and class were still in
+                // the payload — the SN-29 leak.
+                where: { releasedAt: { not: null } },
                 include: {
                   course: true,
                   questions: {
@@ -397,6 +405,11 @@ export async function getGradebookPayloadForSessionUser(
         where: {
           offeringId: { in: offeringIds },
           isUpcoming: true,
+          // Same release rule as the assessments filter above, applied to events: an event
+          // hanging off an unreleased assessment is not a student-facing fact. Without this the
+          // due event was the other half of the SN-29 leak — the assessment row was filtered
+          // out, but its calendar event still travelled in the payload.
+          OR: [{ assessmentId: null }, { assessment: { is: { releasedAt: { not: null } } } }],
         },
         include: {
           assessment: {

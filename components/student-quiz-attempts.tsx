@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { CheckCheck, ClipboardCheck, History, Loader2, Play, Send } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
@@ -24,9 +24,22 @@ import type {
  * appears in `attempt.results` after a successful submit. The attempt cap and
  * deadline are enforced server-side; this component only reflects what the
  * server reports.
+ *
+ * Answers are **autosaved** to the server while the sitting is in progress, so a
+ * refresh or a reopen restores them instead of blanking the quiz. The draft rows
+ * are the same `QuizResponse` rows the submitted attempt will use; the server
+ * replaces them with scored rows at submit.
  */
 
-type Props = { initialQuizzes: StudentQuizSummary[] }
+type Props = {
+  initialQuizzes: StudentQuizSummary[]
+  /**
+   * A specific attempt to open on load. The `/student/quizzes/[attemptId]` route passes this so
+   * a practice sitting — which is deliberately absent from graded history — is reachable after
+   * it is started, rather than 404ing (SN-1/SN-28).
+   */
+  initialAttempt?: QuizAttemptView | null
+}
 
 async function call<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await fetch(url, {
@@ -39,6 +52,48 @@ async function call<T>(url: string, init?: RequestInit): Promise<T> {
   }
   return body as T
 }
+
+type AnswerMaps = {
+  answers: Record<string, number | null>
+  textAnswers: Record<string, string>
+}
+
+function isTextQuestionType(question: QuizAttemptView["questions"][number]): boolean {
+  return question.type === "SHORT_ANSWER" || question.type === "ESSAY"
+}
+
+/** The local answer maps, seeded with a null for every question and every saved draft applied. */
+function hydrateAnswers(attempt: QuizAttemptView | null): AnswerMaps {
+  const answers: Record<string, number | null> = {}
+  const textAnswers: Record<string, string> = {}
+  for (const question of attempt?.questions ?? []) answers[question.id] = null
+  for (const draft of attempt?.draftAnswers ?? []) {
+    if (draft.answerText !== null) textAnswers[draft.questionId] = draft.answerText
+    else answers[draft.questionId] = draft.selectedIndex
+  }
+  return { answers, textAnswers }
+}
+
+/** The autosave payload: one entry per question, mirroring the submit shape. */
+function buildDraftPayload(
+  view: QuizAttemptView,
+  answers: Record<string, number | null>,
+  textAnswers: Record<string, string>,
+) {
+  return {
+    answers: view.questions.map((question) => {
+      if (isTextQuestionType(question)) {
+        const text = (textAnswers[question.id] ?? "").trim()
+        return text.length > 0
+          ? { questionId: question.id, selectedIndex: null, answerText: text }
+          : { questionId: question.id, selectedIndex: null }
+      }
+      return { questionId: question.id, selectedIndex: answers[question.id] ?? null }
+    }),
+  }
+}
+
+const AUTOSAVE_DELAY_MS = 700
 
 /**
  * Attempt status → the shared status vocabulary.
@@ -59,22 +114,107 @@ function attemptStatus(status: string) {
   return ATTEMPT_STATUS[status] ?? { key: "pending" as StatusKey, label: status }
 }
 
-export function StudentQuizAttempts({ initialQuizzes }: Props) {
+export function StudentQuizAttempts({ initialQuizzes, initialAttempt = null }: Props) {
   const [quizzes, setQuizzes] = useState(initialQuizzes)
-  const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [selectedId, setSelectedId] = useState<string | null>(initialAttempt?.assessmentId ?? null)
   const [attempts, setAttempts] = useState<QuizAttemptSummary[]>([])
-  const [view, setView] = useState<QuizAttemptView | null>(null)
-  const [answers, setAnswers] = useState<Record<string, number | null>>({})
-  const [textAnswers, setTextAnswers] = useState<Record<string, string>>({})
+  const [view, setView] = useState<QuizAttemptView | null>(initialAttempt)
+  const [answers, setAnswers] = useState<Record<string, number | null>>(
+    () => hydrateAnswers(initialAttempt).answers,
+  )
+  const [textAnswers, setTextAnswers] = useState<Record<string, string>>(
+    () => hydrateAnswers(initialAttempt).textAnswers,
+  )
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle")
+  // Set while hydrating from the server so the autosave effect does not immediately write back
+  // the payload it just read.
+  const skipNextSave = useRef(true)
+  const answersRef = useRef(answers)
+  const textAnswersRef = useRef(textAnswers)
 
   const selected = quizzes.find((quiz) => quiz.assessmentId === selectedId) ?? null
 
-  function isTextQuestion(question: QuizAttemptView["questions"][number]): boolean {
-    return question.type === "SHORT_ANSWER" || question.type === "ESSAY"
-  }
+  useEffect(() => {
+    answersRef.current = answers
+  }, [answers])
+  useEffect(() => {
+    textAnswersRef.current = textAnswers
+  }, [textAnswers])
+
+  const applyAttempt = useCallback((attempt: QuizAttemptView) => {
+    const hydrated = hydrateAnswers(attempt)
+    skipNextSave.current = true
+    setView(attempt)
+    setAnswers(hydrated.answers)
+    setTextAnswers(hydrated.textAnswers)
+    setSaveState(attempt.status === "IN_PROGRESS" ? "saved" : "idle")
+  }, [])
+
+  const saveDraft = useCallback(
+    async (attemptId: string, payload: ReturnType<typeof buildDraftPayload>) => {
+      setSaveState("saving")
+      try {
+        await call(`/api/student/quiz-attempts/${encodeURIComponent(attemptId)}/draft`, {
+          method: "PUT",
+          body: JSON.stringify(payload),
+        })
+        setSaveState("saved")
+      } catch {
+        // Autosave must never interrupt the sitting; the next change retries, and the explicit
+        // Submit still persists everything. The indicator says the draft is unsaved.
+        setSaveState("error")
+      }
+    },
+    [],
+  )
+
+  /*
+   * Debounced autosave. Keyed on the answer maps and the open view; the hydration guard skips
+   * the write-back immediately after a load. This is what makes a refresh survive: the server
+   * holds the answers as they are typed, not only at Submit.
+   */
+  useEffect(() => {
+    if (!view || view.status !== "IN_PROGRESS") return
+    if (skipNextSave.current) {
+      skipNextSave.current = false
+      return
+    }
+    const payload = buildDraftPayload(view, answers, textAnswers)
+    const handle = setTimeout(() => void saveDraft(view.id, payload), AUTOSAVE_DELAY_MS)
+    return () => clearTimeout(handle)
+  }, [view, answers, textAnswers, saveDraft])
+
+  /*
+   * Flush on unload. The debounce can be pending when a student refreshes or closes the tab, so
+   * a `keepalive` request is issued on `pagehide` rather than losing the last keystrokes. It is
+   * best-effort by design: the server treats a draft as something that can arrive twice.
+   */
+  useEffect(() => {
+    if (!view || view.status !== "IN_PROGRESS") return
+    const flush = () => {
+      void fetch(`/api/student/quiz-attempts/${encodeURIComponent(view.id)}/draft`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(buildDraftPayload(view, answersRef.current, textAnswersRef.current)),
+        keepalive: true,
+      }).catch(() => {})
+    }
+    window.addEventListener("pagehide", flush)
+    return () => window.removeEventListener("pagehide", flush)
+  }, [view])
+
+  // Load the attempt history for a deep-linked attempt once the page is interactive.
+  useEffect(() => {
+    if (!initialAttempt) return
+    const handle = setTimeout(() => {
+      void refreshAttempts(initialAttempt.assessmentId).catch(() => {})
+    }, 0)
+    return () => clearTimeout(handle)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialAttempt?.assessmentId])
 
   async function refreshQuizzes() {
     const body = await call<{ success: true; quizzes: StudentQuizSummary[] }>(
@@ -117,9 +257,7 @@ export function StudentQuizAttempts({ initialQuizzes }: Props) {
         "/api/student/quiz-attempts",
         { method: "POST", body: JSON.stringify({ assessmentId: selected.assessmentId }) },
       )
-      setView(body.attempt)
-      setAnswers(Object.fromEntries(body.attempt.questions.map((question) => [question.id, null])))
-      setTextAnswers({})
+      applyAttempt(body.attempt)
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Request failed.")
     } finally {
@@ -135,9 +273,8 @@ export function StudentQuizAttempts({ initialQuizzes }: Props) {
       const body = await call<{ success: true; attempt: QuizAttemptView }>(
         `/api/student/quiz-attempts/${encodeURIComponent(attemptId)}`,
       )
-      setView(body.attempt)
-      setAnswers(Object.fromEntries(body.attempt.questions.map((question) => [question.id, null])))
-      setTextAnswers({})
+      applyAttempt(body.attempt)
+      setSelectedId(body.attempt.assessmentId)
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Request failed.")
     } finally {
@@ -153,7 +290,7 @@ export function StudentQuizAttempts({ initialQuizzes }: Props) {
     try {
       const payload = {
         answers: view.questions.map((question) => {
-          if (isTextQuestion(question)) {
+          if (isTextQuestionType(question)) {
             const text = (textAnswers[question.id] ?? "").trim()
             return text.length > 0
               ? { questionId: question.id, selectedIndex: null, answerText: text }
@@ -166,9 +303,8 @@ export function StudentQuizAttempts({ initialQuizzes }: Props) {
         `/api/student/quiz-attempts/${encodeURIComponent(view.id)}/submit`,
         { method: "POST", body: JSON.stringify(payload) },
       )
-      setView(body.attempt)
+      applyAttempt(body.attempt)
       setMessage(body.message ?? "Quiz submitted.")
-      setTextAnswers({})
       await refreshAttempts(view.assessmentId)
       await refreshQuizzes()
     } catch (caught) {
@@ -338,7 +474,7 @@ export function StudentQuizAttempts({ initialQuizzes }: Props) {
             {view.questions.map((question) => {
               const result = resultByQuestion.get(question.id)
               const chosen = answers[question.id] ?? null
-              if (isTextQuestion(question)) {
+              if (isTextQuestionType(question)) {
                 return (
                   <div key={question.id} className="rounded-lg border border-border p-3">
                     <p className="text-sm font-medium">{question.prompt}</p>
@@ -419,7 +555,7 @@ export function StudentQuizAttempts({ initialQuizzes }: Props) {
             })}
 
             {view.status === "IN_PROGRESS" && (
-              <div>
+              <div className="flex flex-wrap items-center gap-3">
                 <Button disabled={busy} onClick={() => void submit()}>
                   {busy ? (
                     <Loader2 className="size-4 animate-spin" aria-hidden="true" />
@@ -428,6 +564,17 @@ export function StudentQuizAttempts({ initialQuizzes }: Props) {
                   )}
                   <span className="ml-1">Submit quiz</span>
                 </Button>
+                {/* Autosave status. The student's answers are persisted as they type, so the
+                    indicator is the honest answer to "will a refresh lose this?". */}
+                <span role="status" aria-live="polite" className="text-xs text-muted-foreground">
+                  {saveState === "saving"
+                    ? "Saving answers…"
+                    : saveState === "saved"
+                      ? "Answers saved"
+                      : saveState === "error"
+                        ? "Could not save — keep typing and it will retry"
+                        : ""}
+                </span>
               </div>
             )}
           </div>

@@ -44,6 +44,27 @@ export const quizAttemptSubmitRequestSchema = z.object({
 })
 export type QuizAttemptSubmitRequest = z.infer<typeof quizAttemptSubmitRequestSchema>
 
+/**
+ * The autosave contract.
+ *
+ * The same per-answer shape as submit — one entry per question the client is holding, with
+ * `selectedIndex: null` and no `answerText` for an unanswered one — but a partial set is
+ * allowed because a draft is written while the sitting is still being answered. An empty set is
+ * valid and clears every saved draft.
+ */
+export const quizAttemptDraftRequestSchema = z.object({
+  answers: z.array(quizAnswerSchema),
+})
+export type QuizAttemptDraftRequest = z.infer<typeof quizAttemptDraftRequestSchema>
+
+/** One saved in-progress answer, echoed back so a reopened attempt can restore it. */
+export const quizAttemptDraftAnswerSchema = z.object({
+  questionId: z.string(),
+  selectedIndex: z.number().int().nullable(),
+  answerText: z.string().nullable(),
+})
+export type QuizAttemptDraftAnswer = z.infer<typeof quizAttemptDraftAnswerSchema>
+
 export const quizAttemptStatusSchema = z.enum([
   "IN_PROGRESS",
   "SUBMITTED",
@@ -108,6 +129,12 @@ export const quizAttemptViewSchema = quizAttemptSummarySchema.extend({
    * (correctness, the student's answer, the correct answer, the explanation).
    */
   results: z.array(quizQuestionResultSchema).nullable(),
+  /**
+   * The student's own autosaved answers while the attempt is in progress, so a
+   * reopen or refresh restores them. Empty for a submitted attempt: `results` is
+   * then the disclosure. This carries no correctness and no answer key.
+   */
+  draftAnswers: z.array(quizAttemptDraftAnswerSchema),
 })
 export type QuizAttemptView = z.infer<typeof quizAttemptViewSchema>
 

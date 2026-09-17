@@ -4,6 +4,7 @@ import {
   type TestRunResponse,
 } from "@/lib/contracts/code-eval"
 import type { Prisma } from "@/lib/generated/prisma/client"
+import type { SubmissionStatus } from "@/lib/generated/prisma/enums"
 import { writeAuditLog } from "@/lib/grading/audit"
 import { prisma } from "@/lib/prisma"
 import type { AuthUser } from "@/lib/session"
@@ -11,7 +12,7 @@ import type { AuthUser } from "@/lib/session"
 import { loadEnrolledCodeTask, resolveStudentProfileId, type EnrolledCodeTask } from "./authz"
 import { evaluateFatGateForStudent } from "@/lib/grading/offering-config-service"
 
-import { CodeEvalError } from "./errors"
+import { CodeEvalError, SandboxUnavailableError } from "./errors"
 import { executeSandbox, type SandboxExecutor } from "./executor"
 import type { HarnessTestSpec } from "./harness"
 import { evaluateSubmissionEligibility } from "./limits"
@@ -177,6 +178,50 @@ export async function listStudentRuns(
 }
 
 /**
+ * A committed submission reservation: the `TestRun` that will hold the evidence, the
+ * `Submission` row it is attached to, and the submission's state **before** this request
+ * touched it. The pre-state is what makes the reservation reversible: an unavailable sandbox
+ * must not leave a consumed slot or an overwritten draft behind.
+ */
+type SubmissionReservation = {
+  runId: string
+  submissionId: string
+  previousSubmission: {
+    id: string
+    status: SubmissionStatus
+    contentText: string | null
+    submittedAt: Date | null
+  } | null
+}
+
+/**
+ * Undo a reservation when the sandbox could not run.
+ *
+ * The slot is counted by the number of `TestRun` rows, so deleting the reserved run is what
+ * returns the student's attempt. The submission is restored to exactly what it was: updated
+ * back to its previous values if it existed, deleted if this request created it. Without this,
+ * a Docker outage would silently consume a graded attempt and overwrite the student's previous
+ * submission with code that never executed — the SN-27 defect.
+ */
+async function releaseReservation(reservation: SubmissionReservation): Promise<void> {
+  await prisma.$transaction(async (tx) => {
+    await tx.testRun.deleteMany({ where: { id: reservation.runId } })
+    if (reservation.previousSubmission) {
+      await tx.submission.update({
+        where: { id: reservation.previousSubmission.id },
+        data: {
+          status: reservation.previousSubmission.status,
+          contentText: reservation.previousSubmission.contentText,
+          submittedAt: reservation.previousSubmission.submittedAt,
+        },
+      })
+    } else {
+      await tx.submission.deleteMany({ where: { id: reservation.submissionId } })
+    }
+  })
+}
+
+/**
  * Run one submission in the sandbox and persist the evidence. All limits are
  * enforced server-side from the database rows, never from the request body.
  */
@@ -246,7 +291,7 @@ export async function submitCodeForStudent(
           studentId: enrolled.studentId,
         },
       },
-      select: { id: true, status: true },
+      select: { id: true, status: true, contentText: true, submittedAt: true },
     })
     if (existingSubmission?.status === "GRADED") {
       throw new CodeEvalError(409, "This submission has already been graded.")
@@ -288,7 +333,7 @@ export async function submitCodeForStudent(
       select: { id: true },
     })
 
-    return { runId: run.id }
+    return { runId: run.id, submissionId: submission.id, previousSubmission: existingSubmission }
   })
 
   const outcome = await executor({
@@ -298,6 +343,20 @@ export async function submitCodeForStudent(
     timeLimitMs: enrolled.timeLimitMs,
     memoryLimitMb: enrolled.memoryLimitMb,
   })
+
+  /*
+   * The sandbox could not run. Report it as unavailable (503) and give the student their slot
+   * back, rather than persisting a `FAILED` run and returning `success: true` for code that
+   * never executed. The classification is `outcome.kind`, set by the executor where the
+   * condition is actually known — no string matching on the message.
+   */
+  if (outcome.kind === "unavailable") {
+    await releaseReservation(reservation)
+    throw new SandboxUnavailableError(
+      outcome.message ??
+        "The code sandbox is unavailable right now, so your submission was not recorded. Try again shortly.",
+    )
+  }
 
   const harnessResults = parseHarnessOutput(outcome.stdout)
   const resultTestCases = testCaseRows.map((testCase) => ({

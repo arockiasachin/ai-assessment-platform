@@ -15,12 +15,14 @@ export const metadata: Metadata = { title: "Quizzes" }
 /**
  * Quizzes.
  *
- * The attempt flow is the write path — it starts a sitting, saves answers and
- * submits — so it is kept as it is and the shell and chrome are ported around it.
- * The mockup's sitting card also shows a countdown, per-question flags and a
- * practice/graded distinction; none of those are servable (`docs/plans/wave-1.md`
- * §D4: `QuizAttempt` has no `kind`, `expiresAt` is never written, and no flag
- * column exists), so they are omitted rather than faked.
+ * The attempt flow is the write path — it starts a sitting, autosaves answers while it is in
+ * progress, and submits — so it is kept as it is and the shell and chrome are ported around it.
+ *
+ * `QuizAttempt.kind` exists and practice is live: the retake surface starts a practice sitting
+ * through `/api/student/quiz-attempts/practice`, and `/student/quizzes/[attemptId]` serves it.
+ * The mockup's sitting card also shows a countdown, per-question flags and a practice/graded
+ * distinction; `expiresAt` is never written and no flag column exists, so those are omitted
+ * rather than faked.
  */
 export default async function StudentQuizzesPage() {
   const user = await getSessionUser()

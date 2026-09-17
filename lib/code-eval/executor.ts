@@ -34,9 +34,16 @@ export type SandboxRunRequest = {
   memoryLimitMb: number
 }
 
-export type SandboxRunKind = "completed" | "timeout" | "memory" | "error"
+export type SandboxRunKind = "completed" | "timeout" | "memory" | "error" | "unavailable"
 
 export type SandboxRunOutcome = {
+  /**
+   * `unavailable` is distinct from `error` on purpose: it means the sandbox itself could not
+   * run (no Docker daemon, no pinned image), not that the student's code failed. The two must
+   * not be collapsed — collapsing them is exactly how an unavailable sandbox was persisted as
+   * a `FAILED` run and reported to the student as `success: true` (SN-27), consuming a graded
+   * attempt for work that never executed.
+   */
   kind: SandboxRunKind
   exitCode: number | null
   stdout: string
@@ -207,7 +214,7 @@ export const executeSandbox: SandboxExecutor = async (request) => {
   const availability = await isDockerAvailable()
   if (!availability.available) {
     return {
-      kind: "error",
+      kind: "unavailable",
       exitCode: null,
       stdout: "",
       stderr: "",
@@ -222,7 +229,7 @@ export const executeSandbox: SandboxExecutor = async (request) => {
   const runtime = resolveSandboxRuntime(request.language, "")
   if (!(await imageAvailable(runtime.image))) {
     return {
-      kind: "error",
+      kind: "unavailable",
       exitCode: null,
       stdout: "",
       stderr: "",

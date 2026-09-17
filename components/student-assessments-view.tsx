@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { useMemo, useState } from "react"
+import { useMemo, useRef, useState } from "react"
 import {
   BookOpenCheck,
   CalendarClock,
@@ -26,6 +26,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { formatDateTime } from "@/lib/format"
+import { reconcileDrafts } from "@/lib/student-drafts"
 import type { AssessmentType } from "@/lib/generated/prisma/enums"
 import { ASSESSMENT_KIND_LABEL } from "@/lib/labels"
 import type { StudentAssessmentItem, StudentAssessmentsPayload } from "@/lib/student-assessments"
@@ -100,6 +101,12 @@ export function StudentAssessmentsView({
       initialPayload.assessments.map((item) => [item.id, item.submissionContent ?? ""]),
     ),
   )
+  /*
+   * Ids whose textarea the student has edited since the last successful save. A refetch adopts
+   * server values for every *other* card and keeps these, so saving card B cannot wipe unsaved
+   * text in card A (SN-3). See `lib/student-drafts.ts` for the rule.
+   */
+  const dirtyDrafts = useRef<Set<string>>(new Set())
   const [savingSubmissionId, setSavingSubmissionId] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -113,8 +120,17 @@ export function StudentAssessmentsView({
       }
       const data = (await response.json()) as StudentAssessmentsPayload
       setPayload(data)
-      setSubmissionDrafts(
-        Object.fromEntries(data.assessments.map((item) => [item.id, item.submissionContent ?? ""])),
+      // Adopt the server's snapshot for every card the student has not edited, and keep the
+      // local text for the ones they have. Replacing the map wholesale here is what lost
+      // unsaved work in another card (SN-3).
+      setSubmissionDrafts((previous) =>
+        reconcileDrafts(
+          Object.fromEntries(
+            data.assessments.map((item) => [item.id, item.submissionContent ?? ""]),
+          ),
+          previous,
+          dirtyDrafts.current,
+        ),
       )
     } catch {
       setError("Unable to load assessments right now.")
@@ -187,7 +203,10 @@ export function StudentAssessmentsView({
     }
   }, [allAssessments])
 
-  if (isLoading) {
+  // Only the first load may replace the page with a loading state. A background refresh after a
+  // save must not unmount the cards: doing so dropped focus and, with the draft map replacement,
+  // was half of the SN-3 data loss.
+  if (isLoading && !payload) {
     return <p className="py-10 text-center text-sm text-muted-foreground">Loading assessments…</p>
   }
 
@@ -223,6 +242,9 @@ export function StudentAssessmentsView({
       }
 
       setMessage(data.message ?? "Submission updated.")
+      // This card is saved now, so the refetch adopts the server's value for it; every other
+      // card's unsaved edits stay protected by the dirty set.
+      dirtyDrafts.current.delete(assessmentId)
       await refresh()
     } catch {
       setError("Unable to submit assignment.")
@@ -457,12 +479,13 @@ export function StudentAssessmentsView({
                         <div className="w-full space-y-2">
                           <textarea
                             value={submissionDrafts[assessment.id] ?? ""}
-                            onChange={(event) =>
+                            onChange={(event) => {
+                              dirtyDrafts.current.add(assessment.id)
                               setSubmissionDrafts((prev) => ({
                                 ...prev,
                                 [assessment.id]: event.target.value,
                               }))
-                            }
+                            }}
                             aria-label={`Submission for ${assessment.title}`}
                             placeholder="Write your assignment submission details..."
                             className="min-h-24 w-full rounded-md border border-border bg-background px-3 py-2 text-sm"

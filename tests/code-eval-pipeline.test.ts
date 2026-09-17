@@ -64,6 +64,21 @@ function passingExecutor(): SandboxExecutor {
   }
 }
 
+/** The executor's real "Docker is down" outcome, injected so no daemon is needed. */
+function unavailableExecutor(): SandboxExecutor {
+  return async () => ({
+    kind: "unavailable",
+    exitCode: null,
+    stdout: "",
+    stderr: "",
+    wallClockMs: 0,
+    timedOut: false,
+    memoryExceeded: false,
+    outputLimitExceeded: false,
+    message: "Sandbox unavailable: The docker daemon is not reachable.",
+  })
+}
+
 async function createCodeFixture(options: { maxSubmissions?: number; dueDate?: Date } = {}) {
   const fixture = await createSpineFixture(prisma)
   const dueDate = options.dueDate ?? new Date("2030-01-01T00:00:00.000Z")
@@ -437,5 +452,68 @@ describe("code evaluation pipeline", () => {
     await expect(listSimilarityForTeacher(owner, assessment.id)).rejects.toMatchObject({
       status: 403,
     })
+  })
+
+  it("reports an unavailable sandbox as 503 and does not consume the attempt (SN-27)", async () => {
+    const { fixture, assessment, codeTask } = await createCodeFixture({ maxSubmissions: 1 })
+    const student = studentSession(fixture.student)
+
+    await expect(
+      submitCodeForStudent(
+        student,
+        { assessmentId: assessment.id, sourceCode: PASSING_SOURCE },
+        { executor: unavailableExecutor() },
+      ),
+    ).rejects.toMatchObject({ status: 503 })
+
+    // Nothing was persisted, so no slot was burned and no FAILED run misrepresents the outage.
+    expect(await prisma.testRun.count({ where: { codeTaskId: codeTask.id } })).toBe(0)
+    expect(await prisma.submission.count({ where: { assessmentId: assessment.id } })).toBe(0)
+    const before = await listStudentCodeTasks(student)
+    expect(before.find((task) => task.assessmentId === assessment.id)?.submissionsUsed).toBe(0)
+
+    // The slot really is intact: a later working submission is the student's first.
+    const run = await submitCodeForStudent(
+      student,
+      { assessmentId: assessment.id, sourceCode: PASSING_SOURCE },
+      { executor: passingExecutor() },
+    )
+    expect(run.status).toBe("PASSED")
+    const after = await listStudentCodeTasks(student)
+    expect(after.find((task) => task.assessmentId === assessment.id)?.submissionsUsed).toBe(1)
+  })
+
+  it("restores a pre-existing submission when the sandbox is unavailable (SN-27)", async () => {
+    const { fixture, assessment, codeTask } = await createCodeFixture({ maxSubmissions: 3 })
+    const student = studentSession(fixture.student)
+    await prisma.submission.create({
+      data: {
+        assessmentId: assessment.id,
+        studentId: fixture.student.studentProfile!.id,
+        status: "DRAFT",
+        contentText: "my saved draft",
+      },
+    })
+
+    await expect(
+      submitCodeForStudent(
+        student,
+        { assessmentId: assessment.id, sourceCode: "raise RuntimeError('boom')" },
+        { executor: unavailableExecutor() },
+      ),
+    ).rejects.toMatchObject({ status: 503 })
+
+    // The draft is not overwritten by code that never ran, and no run row was left behind.
+    const submission = await prisma.submission.findUniqueOrThrow({
+      where: {
+        assessmentId_studentId: {
+          assessmentId: assessment.id,
+          studentId: fixture.student.studentProfile!.id,
+        },
+      },
+    })
+    expect(submission.status).toBe("DRAFT")
+    expect(submission.contentText).toBe("my saved draft")
+    expect(await prisma.testRun.count({ where: { codeTaskId: codeTask.id } })).toBe(0)
   })
 })

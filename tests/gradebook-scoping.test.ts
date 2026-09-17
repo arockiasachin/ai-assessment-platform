@@ -30,6 +30,15 @@ describe("gradebook payload object-level authorization", () => {
       data: { studentId: ownId, offeringId: fixture.offering.id, status: "active" },
     })
 
+    // Release is the visibility gate for the student gradebook payload (SN-29), and the spine
+    // fixture's assessment defaults to `releasedAt: null`. A mark a student is meant to see
+    // belongs to a released assessment, so the fixture is released here; the assertions below
+    // are unchanged.
+    await prisma.assessment.update({
+      where: { id: fixture.assessment.id },
+      data: { releasedAt: new Date("2026-01-01T00:00:00.000Z") },
+    })
+
     const classmate = await prisma.user.create({
       data: {
         email: "classmate@spine.test",

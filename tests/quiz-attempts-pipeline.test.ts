@@ -12,6 +12,7 @@ import {
   getTeacherAttempt,
   latestFailedQuestionIds,
   listTeacherAttempts,
+  saveQuizAttemptDraft,
   startQuizAttempt,
   submitQuizAttempt,
 } from "@/lib/quiz-attempts"
@@ -509,5 +510,99 @@ describe("quiz attempts", () => {
     const entry = retakable.find((assessment) => assessment.id === fixture.assessment.id)
     expect(entry?.failedCount).toBe(1)
     expect(entry?.unansweredCount).toBe(1)
+  })
+
+  it("autosaves in-progress answers and restores them on reopen (SL-1)", async () => {
+    const { fixture, questions, studentUser } = await seedQuiz({ questionCount: 2 })
+    const view = await startQuizAttempt(studentUser, { assessmentId: fixture.assessment.id })
+    // A fresh sitting has no drafts.
+    expect(view.draftAnswers).toEqual([])
+
+    await saveQuizAttemptDraft(studentUser, view.id, {
+      answers: [
+        { questionId: questions[0].id, selectedIndex: 2 },
+        { questionId: questions[1].id, selectedIndex: null },
+      ],
+    })
+
+    // The reopen path reads the saved answers back rather than resetting them to null.
+    const reopened = await getStudentAttempt(studentUser, view.id)
+    expect(reopened.status).toBe("IN_PROGRESS")
+    expect(reopened.draftAnswers).toEqual([
+      { questionId: questions[0].id, selectedIndex: 2, answerText: null },
+    ])
+
+    // A draft is not scored and publishes nothing.
+    const responses = await prisma.quizResponse.findMany({ where: { attemptId: view.id } })
+    expect(responses).toHaveLength(1)
+    expect(responses[0].isCorrect).toBeNull()
+    expect(responses[0].pointsAwarded).toBeNull()
+    expect(await prisma.grade.count()).toBe(0)
+    expect(await prisma.aIGradeSuggestion.count()).toBe(0)
+  })
+
+  it("replaces autosaved drafts with scored responses at submit (SL-1)", async () => {
+    const { fixture, questions, studentUser } = await seedQuiz({ questionCount: 2 })
+    const view = await startQuizAttempt(studentUser, { assessmentId: fixture.assessment.id })
+    await saveQuizAttemptDraft(studentUser, view.id, {
+      answers: [
+        { questionId: questions[0].id, selectedIndex: 1 },
+        { questionId: questions[1].id, selectedIndex: 1 },
+      ],
+    })
+
+    const submitted = await submitQuizAttempt(studentUser, view.id, {
+      answers: [
+        { questionId: questions[0].id, selectedIndex: 0 },
+        { questionId: questions[1].id, selectedIndex: 1 },
+      ],
+    })
+    expect(submitted.status).toBe("SUBMITTED")
+    expect(submitted.draftAnswers).toEqual([])
+
+    // Exactly the scored rows, not the draft plus the scored rows.
+    const responses = await prisma.quizResponse.findMany({
+      where: { attemptId: view.id },
+      orderBy: { question: { order: "asc" } },
+    })
+    expect(responses).toHaveLength(2)
+    expect(responses[0].isCorrect).toBe(true)
+    expect(responses[1].isCorrect).toBe(false)
+
+    // A submitted attempt refuses further autosaves.
+    await expect(saveQuizAttemptDraft(studentUser, view.id, { answers: [] })).rejects.toMatchObject(
+      { status: 409 },
+    )
+  })
+
+  it("starts a graded sitting even when a practice sitting is in progress (SN-2)", async () => {
+    const { fixture, studentId, studentUser } = await seedQuiz({ questionCount: 1 })
+
+    // The state the audit's harness created: an in-progress PRACTICE sitting. Before the kind
+    // scope existed, starting the graded quiz resumed this and submitting it recorded nothing.
+    const practice = await prisma.quizAttempt.create({
+      data: {
+        assessmentId: fixture.assessment.id,
+        studentId,
+        attemptNumber: 1,
+        status: "IN_PROGRESS",
+        kind: "PRACTICE",
+      },
+    })
+
+    const graded = await startQuizAttempt(studentUser, { assessmentId: fixture.assessment.id })
+    expect(graded.id).not.toBe(practice.id)
+
+    const stored = await prisma.quizAttempt.findUniqueOrThrow({
+      where: { id: graded.id },
+      select: { kind: true, status: true },
+    })
+    expect(stored.kind).toBe("GRADED")
+    expect(stored.status).toBe("IN_PROGRESS")
+
+    // The practice sitting is untouched.
+    const untouched = await prisma.quizAttempt.findUniqueOrThrow({ where: { id: practice.id } })
+    expect(untouched.status).toBe("IN_PROGRESS")
+    expect(untouched.kind).toBe("PRACTICE")
   })
 })

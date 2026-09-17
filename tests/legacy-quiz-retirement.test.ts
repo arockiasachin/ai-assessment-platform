@@ -108,6 +108,13 @@ async function importAndEnroll(options: { enroll: boolean }) {
     importBody(fixture.offering.id),
     teacherSession(fixture.teacher),
   )
+  // The gradebook payload's student projection enforces release (SN-29), and the import path
+  // creates the assessment unreleased. An imported quiz is meant to be delivered, so the setup
+  // releases it; the assertions are unchanged.
+  await prisma.assessment.update({
+    where: { id: created.id },
+    data: { releasedAt: new Date("2026-01-01T00:00:00.000Z") },
+  })
   return { fixture, studentId, created }
 }
 

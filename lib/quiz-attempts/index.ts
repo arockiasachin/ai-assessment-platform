@@ -1,6 +1,7 @@
 export * from "./errors"
 export * from "./eligibility"
 export * from "./kinds"
+export * from "./resumable"
 export * from "./retake-policy"
 export * from "./retake-state"
 export * from "./retake-requests"

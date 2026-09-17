@@ -10,20 +10,15 @@ import {
   QUIZ_ATTEMPT_CRITERION_LABEL,
   QUIZ_AUTO_SCORER_MODEL,
   QUIZ_SCORING_PROMPT_VERSION,
+  quizAttemptDraftRequestSchema,
   quizAttemptStartRequestSchema,
   quizAttemptSubmitRequestSchema,
 } from "@/lib/contracts/quiz-attempts"
 import type { QuizAnswer } from "@/lib/contracts/quiz"
 import type { Grade, GradeReview } from "@/lib/generated/prisma/client"
 import { selectAdaptiveRetakeQuestions } from "@/lib/analytics/retake"
-import {
-  finalizedAttemptWhere,
-  GRADED,
-  inProgressAttemptWhere,
-  isCounted,
-  isGraded,
-  PRACTICE,
-} from "./kinds"
+import { finalizedAttemptWhere, GRADED, isCounted, isGraded, PRACTICE } from "./kinds"
+import { findResumableAttempt } from "./resumable"
 import { decideRetake, resolveSittingCap } from "./retake-policy"
 import { recordAiSuggestion, writeAuditLog } from "@/lib/grading"
 import { QuizGenerationError } from "@/lib/quiz-generation/errors"
@@ -41,6 +36,7 @@ import type { AuthUser } from "@/lib/session"
 import { loadOwnedAssessment, resolveStudentProfileId } from "./authz"
 import { evaluateFatGateForStudent } from "@/lib/grading/offering-config-service"
 
+import { assertAnswerShapes } from "./answers"
 import { QuizAttemptError, QuizNotDeliverableError } from "./errors"
 import { evaluateAttemptEligibility, isLateSubmission, resolveMaxAttempts } from "./eligibility"
 import { quizDeliveryStatus } from "./metadata"
@@ -256,6 +252,45 @@ function buildResults(
   })
 }
 
+/**
+ * The student's own in-progress answers, read back from the autosave rows.
+ *
+ * Only answered questions are included. Choice answers are stored as a selected option id, so
+ * they are mapped back to their index; free-text answers are read directly. Nothing here can
+ * disclose an answer key — the option text is already in the question payload, and no
+ * correctness value is read.
+ */
+function buildDraftAnswers(
+  questions: readonly QuestionWithOptions[],
+  responses: readonly {
+    questionId: string
+    selectedOptionIds: unknown
+    answerText: string | null
+  }[],
+) {
+  const responseByQuestion = new Map(responses.map((response) => [response.questionId, response]))
+  const drafts: Array<{
+    questionId: string
+    selectedIndex: number | null
+    answerText: string | null
+  }> = []
+  for (const question of questions) {
+    const response = responseByQuestion.get(question.id)
+    if (!response) continue
+    const answerText = response.answerText
+    if (answerText !== null && answerText.trim().length > 0) {
+      drafts.push({ questionId: question.id, selectedIndex: null, answerText })
+      continue
+    }
+    const selectedOptionId = readOptionIds(response.selectedOptionIds)[0] ?? null
+    if (!selectedOptionId) continue
+    const selectedIndex = question.options.findIndex((option) => option.id === selectedOptionId)
+    if (selectedIndex < 0) continue
+    drafts.push({ questionId: question.id, selectedIndex, answerText: null })
+  }
+  return drafts
+}
+
 // ---------------------------------------------------------------------------
 // Student reads
 // ---------------------------------------------------------------------------
@@ -416,7 +451,80 @@ export async function getStudentAttempt(
     settings,
     questions: questions.map(serializeStudentQuestion),
     results: submitted ? buildResults(questions, responses, attempt.assessment.maxMarks) : null,
+    // The autosaved answers, so reopening or refreshing an in-progress sitting restores what the
+    // student has typed instead of blanking it. Answered questions only, and only while the
+    // attempt is in progress: after submission `results` is the disclosure and this is empty.
+    draftAnswers: submitted ? [] : buildDraftAnswers(questions, responses),
   }
+}
+
+/**
+ * Autosave the in-progress answers of one of the student's own sittings.
+ *
+ * Before this there was no save path at all: the client held every answer in `useState`, the
+ * server saw nothing until Submit, and a refresh or a reopen blanked the sitting (SL-1). The
+ * answers now live in `QuizResponse` — the same rows the submitted attempt will use — so the
+ * draft has a server-side home rather than a second parallel store. They carry no correctness
+ * and no score; `submitQuizAttempt` deletes them and writes the scored rows in one transaction.
+ *
+ * A question the student has cleared is deleted, so "unanswered" is the absence of a row, which
+ * is exactly how the submitted attempt represents it too.
+ */
+export async function saveQuizAttemptDraft(
+  user: AuthUser,
+  attemptId: string,
+  input: unknown,
+): Promise<{ savedAt: string }> {
+  const request = quizAttemptDraftRequestSchema.parse(input)
+  const { attempt } = await loadOwnedAttempt(user, attemptId)
+  if (attempt.status !== "IN_PROGRESS") {
+    throw new QuizAttemptError(409, "This attempt has already been submitted.")
+  }
+
+  const questions = await prisma.question.findMany({
+    where: { assessmentId: attempt.assessmentId },
+    orderBy: { order: "asc" },
+    include: { options: { orderBy: { order: "asc" } } },
+  })
+  assertAnswerShapes(questions, request.answers)
+  const questionById = new Map(questions.map((question) => [question.id, question]))
+
+  await prisma.$transaction(async (tx) => {
+    for (const answer of request.answers) {
+      const question = questionById.get(answer.questionId)!
+      const isText = isTextQuestionType(question.type)
+      const text = isText ? (answer.answerText?.trim() ?? "") : ""
+      const answered = isText ? text.length > 0 : answer.selectedIndex !== null
+      if (!answered) {
+        await tx.quizResponse.deleteMany({
+          where: { attemptId, questionId: answer.questionId },
+        })
+        continue
+      }
+      const selectedOptionId =
+        !isText && answer.selectedIndex !== null
+          ? (question.options[answer.selectedIndex]?.id ?? null)
+          : null
+      await tx.quizResponse.upsert({
+        where: { attemptId_questionId: { attemptId, questionId: answer.questionId } },
+        create: {
+          attemptId,
+          questionId: answer.questionId,
+          selectedOptionIds: selectedOptionId ? [selectedOptionId] : [],
+          answerText: isText ? text : null,
+        },
+        update: {
+          selectedOptionIds: selectedOptionId ? [selectedOptionId] : [],
+          answerText: isText ? text : null,
+          isCorrect: null,
+          pointsAwarded: null,
+          rationale: null,
+        },
+      })
+    }
+  })
+
+  return { savedAt: new Date().toISOString() }
 }
 
 export async function listStudentAttempts(
@@ -539,12 +647,10 @@ export async function startQuizAttempt(user: AuthUser, input: unknown): Promise<
   }
   assertDeliverable(assessment.questions)
 
-  // Resume an in-progress attempt rather than burning a new one on a refresh.
-  const inProgress = await prisma.quizAttempt.findFirst({
-    where: { assessmentId: assessment.id, studentId, status: "IN_PROGRESS" },
-    orderBy: { attemptNumber: "desc" },
-    select: { id: true },
-  })
+  // Resume an in-progress attempt rather than burning a new one on a refresh. Kind-scoped
+  // through `findResumableAttempt`, which requires the kind, so a graded start cannot resume
+  // a practice sitting.
+  const inProgress = await findResumableAttempt(assessment.id, studentId, GRADED)
   if (inProgress) return getStudentAttempt(user, inProgress.id)
 
   /*
@@ -576,12 +682,9 @@ export async function startQuizAttempt(user: AuthUser, input: unknown): Promise<
   const created = await prisma.$transaction(async (tx) => {
     await tx.$queryRaw`SELECT "id" FROM "Assessment" WHERE "id" = ${assessment.id} FOR UPDATE`
 
-    // Kind-scoped: a graded start must not resume an in-progress *practice* sitting.
-    const existing = await tx.quizAttempt.findFirst({
-      where: inProgressAttemptWhere(assessment.id, studentId),
-      orderBy: { attemptNumber: "desc" },
-      select: { id: true },
-    })
+    // Kind-scoped: a graded start must not resume an in-progress *practice* sitting. The
+    // scope is structural — `findResumableAttempt` cannot be called without the kind.
+    const existing = await findResumableAttempt(assessment.id, studentId, GRADED, tx)
     if (existing) return { id: existing.id }
 
     const attempts = await tx.quizAttempt.findMany({
@@ -679,7 +782,6 @@ export async function submitQuizAttempt(
   const rows = await prisma.quizAttempt.findUniqueOrThrow({
     where: { id: attemptId },
     select: {
-      responses: { select: { id: true } },
       assessment: {
         select: {
           id: true,
@@ -699,9 +801,6 @@ export async function submitQuizAttempt(
       },
     },
   })
-  if (rows.responses.length > 0) {
-    throw new QuizAttemptError(409, "This attempt already has recorded answers.")
-  }
   if (rows.assessment.type !== "QUIZ") {
     throw new QuizAttemptError(409, "This assessment is not a quiz.")
   }
@@ -710,58 +809,7 @@ export async function submitQuizAttempt(
   }
   const questions = rows.assessment.questions
   assertDeliverable(questions)
-
-  const questionById = new Map(questions.map((question) => [question.id, question]))
-  const seenAnswers = new Set<string>()
-  for (const answer of request.answers) {
-    if (seenAnswers.has(answer.questionId)) {
-      throw new QuizAttemptError(400, `Duplicate answer for question ${answer.questionId}.`)
-    }
-    seenAnswers.add(answer.questionId)
-    const question = questionById.get(answer.questionId)
-    if (!question) {
-      throw new QuizAttemptError(400, `Answer references unknown question ${answer.questionId}.`)
-    }
-    const isText = isTextQuestionType(question.type)
-    const hasText = answer.answerText !== undefined
-    const hasChoice = answer.selectedIndex !== null
-    if (hasText && hasChoice) {
-      throw new QuizAttemptError(
-        400,
-        `Question ${question.id} accepts either a selected option or a text answer, not both.`,
-      )
-    }
-    if (isText) {
-      if (hasChoice) {
-        throw new QuizAttemptError(
-          400,
-          `Question ${question.id} is a free-text question and does not accept a selected option.`,
-        )
-      }
-      if (hasText && answer.answerText!.length === 0) {
-        throw new QuizAttemptError(
-          400,
-          `The text answer for question ${question.id} cannot be empty.`,
-        )
-      }
-    } else {
-      if (hasText) {
-        throw new QuizAttemptError(
-          400,
-          `Question ${question.id} is multiple choice and does not accept a text answer.`,
-        )
-      }
-      if (
-        hasChoice &&
-        (answer.selectedIndex! < 0 || answer.selectedIndex! >= question.options.length)
-      ) {
-        throw new QuizAttemptError(
-          400,
-          `Selected option is out of range for question ${question.id}.`,
-        )
-      }
-    }
-  }
+  assertAnswerShapes(questions, request.answers)
 
   const answerByQuestion = new Map(request.answers.map((answer) => [answer.questionId, answer]))
   const threshold = resolveTextSimilarityThreshold()
@@ -864,6 +912,10 @@ export async function submitQuizAttempt(
     if (updated.count === 0) {
       throw new QuizAttemptError(409, "This attempt has already been submitted.")
     }
+    // Replace any autosaved drafts with the scored responses. The status guard above is the
+    // double-submit protection; the draft rows are this student's own in-progress answers and
+    // must not be mistaken for a second submission.
+    await tx.quizResponse.deleteMany({ where: { attemptId } })
     const created = await tx.quizResponse.createManyAndReturn({
       data: responseRows,
       select: { id: true, questionId: true },
@@ -1144,11 +1196,7 @@ export async function startPracticeAttempt(
   }
   assertDeliverable(assessment.questions)
 
-  const existing = await prisma.quizAttempt.findFirst({
-    where: inProgressAttemptWhere(assessment.id, studentId, PRACTICE),
-    orderBy: { attemptNumber: "desc" },
-    select: { id: true },
-  })
+  const existing = await findResumableAttempt(assessment.id, studentId, PRACTICE)
   if (existing) return getStudentAttempt(user, existing.id)
 
   const pastDeadline = new Date().getTime() > assessment.dueDate.getTime()
