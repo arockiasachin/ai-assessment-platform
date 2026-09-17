@@ -24,7 +24,10 @@
     "audit:langchain:selftest": "npx --yes tsx scripts/audit/selftest.ts",
     "audit:dashboard": "npx --yes tsx scripts/audit-dashboard/run.ts",
     "audit:dashboard:serve": "npx --yes tsx scripts/audit-dashboard/server.ts",
-    "audit:dashboard:selftest": "npx --yes tsx scripts/audit-dashboard/selftest.ts"
+    "audit:dashboard:selftest": "npx --yes tsx scripts/audit-dashboard/selftest.ts",
+    "audit:sync": "npx --yes tsx scripts/audit-sync/run.ts",
+    "audit:sync:dry": "npx --yes tsx scripts/audit-sync/run.ts --dry-run",
+    "audit:import": "npx --yes tsx ../support-desk/scripts/import-audit-findings.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.5.0",

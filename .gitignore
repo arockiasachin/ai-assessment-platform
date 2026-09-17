@@ -52,3 +52,7 @@ CLAUDE.md
 .windsurf/
 skills-lock.json
 .cursor/
+
+# Audit ⇄ support-desk sync state. Derived, and a conflict here is never worth
+# resolving by hand, so it is deliberately not committed.
+docs/audit/.sync-state.json
