@@ -106,6 +106,8 @@ export type ReviewQueueFilter = {
   /** Defaults to the two states that actually need a human. */
   status?: GradeReviewStatusValue | "all"
   assessmentId?: string
+  /** Narrow to one student; set by a row action that names a specific review. */
+  studentId?: string
 }
 
 export async function listReviewQueueForTeacher(
@@ -125,6 +127,7 @@ export async function listReviewQueueForTeacher(
           ...(filter.assessmentId ? [{ id: filter.assessmentId }] : []),
         ],
       },
+      ...(filter.studentId ? { studentId: filter.studentId } : {}),
       ...(statuses ? { status: { in: statuses } } : {}),
     },
     include: reviewInclude,

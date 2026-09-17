@@ -21,11 +21,13 @@ export const metadata: Metadata = { title: "Offerings" }
  * `docs/plans/wave-1.md` §D1. This is the first page in the real app with **no
  * mockup counterpart**; its nav item carries `appOnly: true`.
  *
- * Why this page still matters even though it is undesigned: "Publish results"
- * sets `CourseOffering.resultsPublishedAt`, which the schema calls the retention
- * anchor — the only action that starts the purge clock, and one that cannot be
- * undone. Removing it to make room for a roster would have left the retention
- * policy with no trigger in the UI.
+ * Why this page still matters even though it is undesigned: the retention-clock
+ * control sets `CourseOffering.resultsPublishedAt`, which the schema calls the
+ * retention anchor — the only action that starts the purge clock, and one that
+ * cannot be undone. It does not release marks to students (those are published from
+ * the review queue or the marks grid), which is why it is labelled "Start retention
+ * clock" rather than "Publish results" (TN-68). Removing it to make room for a
+ * roster would have left the retention policy with no trigger in the UI.
  *
  * `TeacherClassesManager` is a client component that fetches `/api/teacher/offerings`
  * on mount. That is the pre-existing fetch-on-mount finding
@@ -51,7 +53,7 @@ export default async function TeacherOfferingsPage() {
         <PageHeader
           eyebrow="Teaching"
           title="Offerings"
-          description="Enrollment limits, registration windows, and results publication. Publishing results starts the retention clock for the whole cohort, and cannot be undone."
+          description="Enrollment limits, registration windows, and the retention clock. Starting the clock records the results-publication date for the whole cohort, begins the 15-day retention window, and cannot be undone. It does not release marks — those are published per student from the review queue or the marks grid."
         />
         <TeacherClassesManager />
       </AppShell>

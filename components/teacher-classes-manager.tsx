@@ -55,9 +55,9 @@ export function TeacherClassesManager() {
   const [message, setMessage] = useState<string | null>(null)
   const [savingId, setSavingId] = useState<string | null>(null)
   const [publishingId, setPublishingId] = useState<string | null>(null)
-  // The offering whose one-way "Publish results" is awaiting confirmation. Publishing
-  // starts the 15-day retention clock and cannot be undone, so the button opens this
-  // rather than posting from `onClick` (TN-5).
+  // The offering whose one-way retention-clock start is awaiting confirmation. It
+  // starts the 15-day retention clock, does not release marks to students, and cannot
+  // be undone, so the button opens this rather than posting from `onClick` (TN-5, TN-68).
   const [publishTarget, setPublishTarget] = useState<OfferingRow | null>(null)
   const [search, setSearch] = useState("")
   const [drafts, setDrafts] = useState<
@@ -177,13 +177,16 @@ export function TeacherClassesManager() {
         method: "POST",
       })
       const data = (await response.json()) as { success?: boolean; message?: string }
-      setMessage(data.message ?? (response.ok ? "Results published" : "Unable to publish results"))
+      setMessage(
+        data.message ??
+          (response.ok ? "Retention clock started." : "Unable to start the retention clock."),
+      )
       if (response.ok) {
         await refresh()
       }
       return response.ok
     } catch {
-      setMessage("Unable to publish results.")
+      setMessage("Unable to start the retention clock.")
       return false
     } finally {
       setPublishingId(null)
@@ -422,7 +425,7 @@ export function TeacherClassesManager() {
                 <div className="flex flex-wrap items-center gap-2">
                   {row.resultsPublishedAt ? (
                     <Badge variant="outline" className="border-emerald-500/40 text-emerald-700">
-                      Results published {row.resultsPublishedAt.slice(0, 10)}
+                      Retention clock started {row.resultsPublishedAt.slice(0, 10)}
                     </Badge>
                   ) : (
                     <Button
@@ -432,7 +435,7 @@ export function TeacherClassesManager() {
                       disabled={publishingId === row.id}
                     >
                       <Send className="size-4" />
-                      Publish results
+                      Start retention clock
                     </Button>
                   )}
                   <Button
@@ -488,7 +491,7 @@ export function TeacherClassesManager() {
               onClick={() => void confirmPublish()}
             >
               {publishingId !== null ? <Loader2 className="animate-spin" /> : <Send />}
-              Publish results
+              Start retention clock
             </Button>
           </DialogFooter>
         </DialogContent>

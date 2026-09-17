@@ -8,6 +8,8 @@ import { z } from "zod"
 export const gradeActivityQuerySchema = z.object({
   offeringId: z.string().trim().min(1, "offeringId is required."),
   limit: z.coerce.number().int().min(1).max(100).default(25),
+  /** Rows to skip. The page reader (TN-17) pages the log rather than truncating it. */
+  offset: z.coerce.number().int().min(0).default(0),
 })
 export type GradeActivityQueryInput = z.infer<typeof gradeActivityQuerySchema>
 
@@ -37,6 +39,8 @@ export const gradeActivityResponseSchema = z.object({
   offeringId: z.string(),
   items: z.array(gradeActivityItemSchema),
   truncated: z.boolean(),
+  /** Every matching row in scope, so a page never reads as the total (TN-17). */
+  total: z.number().int().nonnegative(),
 })
 export type GradeActivityResponse = z.infer<typeof gradeActivityResponseSchema>
 

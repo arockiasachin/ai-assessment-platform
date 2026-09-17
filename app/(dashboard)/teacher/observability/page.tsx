@@ -34,6 +34,8 @@ export const metadata: Metadata = { title: "Activity log" }
  * truncated window, and `toLocaleString()` in render (an implicit-locale hydration
  * hazard — dates now go through `formatDateTime`).
  */
+const ACTIVITY_PAGE_SIZE = 25
+
 export default async function TeacherObservabilityPage({
   searchParams,
 }: {
@@ -44,15 +46,32 @@ export default async function TeacherObservabilityPage({
 
   const params = await searchParams
   const requested = typeof params.offeringId === "string" ? params.offeringId : null
+  // A non-numeric, zero or negative page falls back to the first page rather
+  // than erroring: the param is a view detail, not a resource identifier.
+  const requestedPage = Number.parseInt(typeof params.page === "string" ? params.page : "1", 10)
+  const page = Number.isFinite(requestedPage) && requestedPage > 0 ? requestedPage : 1
   const offerings = await listTeacherOfferingsForAnalytics(user)
   const selected = offerings.find((offering) => offering.id === requested) ?? offerings[0] ?? null
 
   const [activity, decisions] = selected
     ? await Promise.all([
-        getRecentGradeActivityForTeacher(user, { offeringId: selected.id, limit: 25 }),
+        getRecentGradeActivityForTeacher(user, {
+          offeringId: selected.id,
+          limit: ACTIVITY_PAGE_SIZE,
+          offset: (page - 1) * ACTIVITY_PAGE_SIZE,
+        }),
         listGradingDecisionsForTeacher(user, selected.id),
       ])
     : [null, null]
+
+  const pageCount = activity ? Math.max(1, Math.ceil(activity.total / ACTIVITY_PAGE_SIZE)) : 1
+  const pageHref = (target: number): string => {
+    const query = new URLSearchParams()
+    if (selected) query.set("offeringId", selected.id)
+    if (target > 1) query.set("page", String(target))
+    const search = query.toString()
+    return search ? `/teacher/observability?${search}` : "/teacher/observability"
+  }
 
   return (
     <RoleGuard role="teacher">
@@ -105,11 +124,49 @@ export default async function TeacherObservabilityPage({
 
             {activity && decisions ? (
               <>
-                <TeacherObservabilityView activity={activity.items} decisions={decisions.items} />
-                {activity.truncated && (
-                  <p className="text-xs text-muted-foreground">
-                    Showing the most recent 25 activity entries.
-                  </p>
+                <TeacherObservabilityView
+                  activity={activity.items}
+                  decisions={decisions.items}
+                  total={activity.total}
+                  page={page}
+                  pageSize={ACTIVITY_PAGE_SIZE}
+                />
+                {pageCount > 1 && (
+                  <nav
+                    aria-label="Activity pages"
+                    className="flex flex-wrap items-center justify-between gap-3"
+                  >
+                    <p className="text-xs text-muted-foreground">
+                      Page {page} of {pageCount} · {activity.total} activity{" "}
+                      {activity.total === 1 ? "entry" : "entries"} in this offering.
+                    </p>
+                    <div className="flex items-center gap-2">
+                      {page > 1 ? (
+                        <Link
+                          href={pageHref(page - 1)}
+                          className="rounded-lg border border-border bg-background px-3 py-1.5 text-xs hover:bg-muted"
+                        >
+                          Previous
+                        </Link>
+                      ) : (
+                        <span className="rounded-lg border border-border/50 px-3 py-1.5 text-xs text-muted-foreground">
+                          Previous
+                        </span>
+                      )}
+                      {page < pageCount ? (
+                        <Link
+                          href={pageHref(page + 1)}
+                          className="rounded-lg border border-border bg-background px-3 py-1.5 text-xs hover:bg-muted"
+                        >
+                          Next
+                        </Link>
+                      ) : (
+                        <span className="rounded-lg border border-border/50 px-3 py-1.5 text-xs text-muted-foreground">
+                          Next
+                        </span>
+                      )}
+                    </div>
+                  </nav>
                 )}
               </>
             ) : null}

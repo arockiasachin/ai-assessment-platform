@@ -5,6 +5,12 @@ import type { AuthUser } from "@/lib/session"
 /**
  * Results publication — the retention anchor.
  *
+ * This records the offering's results-publication date; it does **not** release
+ * marks to students. Student-visible marks are `Grade.publishedAt`, written only
+ * by the human review decision and the marks grid. The distinction is the point
+ * of TN-68: the control this serves used to be labelled as though it published
+ * to students when all it ever did was stamp this anchor.
+ *
  * Publishing an offering's results is the explicit teacher action that starts
  * the retention clock. The timestamp is set exactly once and never moved:
  * re-publishing an already-published offering is reported as

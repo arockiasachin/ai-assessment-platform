@@ -66,15 +66,18 @@ describe("GET /api/teacher/observability/grade-activity", () => {
       offeringId: "o1",
       items: [],
       truncated: false,
+      total: 0,
     })
 
     const response = await call("?offeringId=o1")
     expect(response.status).toBe(200)
     const body = (await response.json()) as { success: boolean; offeringId: string }
-    expect(body).toEqual({ success: true, offeringId: "o1", items: [], truncated: false })
+    expect(body).toEqual({ success: true, offeringId: "o1", items: [], truncated: false, total: 0 })
     expect(mocks.getRecentGradeActivityForTeacher).toHaveBeenCalledWith(
       { id: "teacher-1", email: "teacher@test.local", role: "teacher" },
-      { offeringId: "o1", limit: 25 },
+      // `offset` defaults to 0 in `gradeActivityQuerySchema`, so the page reader can
+      // page the log (TN-17) without every caller having to pass it.
+      { offeringId: "o1", limit: 25, offset: 0 },
     )
   })
 

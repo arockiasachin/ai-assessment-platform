@@ -9,8 +9,10 @@ import { ObservabilityError } from "@/lib/observability/errors"
 import { withApiRoute } from "@/lib/observability/http"
 
 /**
- * `GET /api/teacher/observability/grade-activity?offeringId=&limit=` — recent
- * grade-pipeline `AuditLog` activity for one offering the teacher owns.
+ * `GET /api/teacher/observability/grade-activity?offeringId=&limit=&offset=` — recent
+ * grade-pipeline `AuditLog` activity for one offering the teacher owns. `offset`
+ * pages the log; the response's `total` is the whole matching set so a page never
+ * reads as the total.
  *
  * Read-only and teacher-scoped: `requireRole("teacher")` is the role gate and
  * the service verifies offering ownership before it reads any audit row, so a

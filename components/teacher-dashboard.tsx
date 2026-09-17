@@ -283,7 +283,10 @@ export function TeacherDashboard({
           getRowId={(row) => `${row.assessment.id}:${row.student.id}`}
           rowActions={(row) => (
             <Link
-              href="/teacher/reviews"
+              href={{
+                pathname: "/teacher/reviews",
+                query: { assessmentId: row.assessment.id, studentId: row.student.id },
+              }}
               className={buttonVariants({ variant: "ghost", size: "sm" })}
               aria-label={`Review ${row.assessment.title} for ${row.student.fullName}`}
             >

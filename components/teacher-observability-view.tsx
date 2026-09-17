@@ -103,9 +103,16 @@ function summaryText(item: GradeActivityItem): string | null {
 export function TeacherObservabilityView({
   activity,
   decisions,
+  total,
+  page,
+  pageSize,
 }: {
   activity: GradeActivityItem[]
   decisions: GradingDecisionItem[]
+  /** Every matching activity row, so the count is never the page (TN-17). */
+  total: number
+  page: number
+  pageSize: number
 }) {
   const [search, setSearch] = useState("")
   const [action, setAction] = useState("all")
@@ -239,13 +246,13 @@ export function TeacherObservabilityView({
           },
         ]}
         resultCount={filtered.length}
-        resultNoun="entry"
-        resultNounPlural="entries"
+        resultNoun="entry shown"
+        resultNounPlural="entries shown"
       />
 
       <SectionCard
         title="Activity"
-        description="The audit trail for this offering, newest first. Entries written by an automated worker are labelled so they are not read as staff decisions."
+        description={`The audit trail for this offering, newest first — ${total} ${total === 1 ? "entry" : "entries"} in total, page ${page} of ${Math.max(1, Math.ceil(total / pageSize))}. Entries written by an automated worker are labelled so they are not read as staff decisions.`}
         action={<History className="size-4 text-muted-foreground" aria-hidden="true" />}
       >
         {timelineItems.length === 0 ? (

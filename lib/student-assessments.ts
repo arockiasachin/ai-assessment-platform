@@ -14,6 +14,26 @@ export type AssessmentKind = AssessmentType
 export type SubmissionState =
   "not_submitted" | "draft" | "submitted" | "resubmitted" | "graded" | "late"
 
+/**
+ * Minimum number of **released** marks before an assessment's class average is
+ * disclosed to a student.
+ *
+ * A class average is an aggregate, but it is invertible in a small cohort: with
+ * exactly two released marks and one of them the student's own, the other is
+ * `2 × average − own`. With three or more released marks no single classmate's
+ * mark can be isolated from the average, so three is the smallest cohort that
+ * keeps the disclosure anonymous.
+ *
+ * This is deliberately the **same value** as `MIN_RATERS_FOR_DISCLOSURE` in
+ * `lib/groups/student-service.ts` and for the same combinatorial reason — below
+ * three contributors one other person can be reconstructed — but it is a
+ * separate constant because it guards a different aggregate. Sharing one
+ * constant would mean a future change to the peer-evaluation rule silently moved
+ * the grade-disclosure rule with it, and those are different decisions even when
+ * they agree today.
+ */
+export const MIN_COHORT_FOR_CLASS_AVERAGE = 3
+
 export type StudentAssessmentItem = {
   id: string
   title: string
@@ -40,7 +60,22 @@ export type StudentAssessmentItem = {
   hasMark: boolean
   /** Whether that mark has been released, so `score` is populated. */
   published: boolean
+  /** The cohort average, or `null` when there is no average to show. */
   classAveragePercentage: number | null
+  /**
+   * Whether the average exists but is withheld because fewer than
+   * `classAverageMinimumCohort` marks have been released.
+   *
+   * Distinct from `classAveragePercentage === null`, which is also "no average
+   * yet". Without this flag the UI cannot tell "nobody has been marked" from
+   * "the cohort is too small to disclose", and would show an em dash for both —
+   * which reads as a bug rather than a confidentiality rule.
+   */
+  classAverageWithheld: boolean
+  /** Released marks counted into the average (the cohort size). */
+  classAverageCohortSize: number
+  /** The minimum cohort at or above which the average is shown. */
+  classAverageMinimumCohort: number
   quizQuestionCount: number
   submissionState: SubmissionState
   submittedAt: string | null
@@ -219,7 +254,7 @@ export async function listStudentAssessments(
           ? (Number(publishedGrade.points) / Number(publishedGrade.maxPoints)) * 100
           : null
 
-      const classPercentages = assessment.finalGrades
+      const classPercentageValues = assessment.finalGrades
         .filter((grade) => grade.publishedAt != null)
         .map((grade) =>
           Number(grade.maxPoints) > 0
@@ -228,9 +263,16 @@ export async function listStudentAssessments(
         )
         .filter((value) => Number.isFinite(value))
 
+      // The average is withheld below `MIN_COHORT_FOR_CLASS_AVERAGE` because a
+      // two-mark average is invertible (see the constant). The cohort is the
+      // count of released marks, not enrollments: an unreleased mark is not a
+      // fact a student may use, and must not move the number either.
+      const classAverageCohortSize = classPercentageValues.length
+      const classAverageWithheld =
+        classAverageCohortSize > 0 && classAverageCohortSize < MIN_COHORT_FOR_CLASS_AVERAGE
       const classAveragePercentage =
-        classPercentages.length > 0
-          ? classPercentages.reduce((sum, value) => sum + value, 0) / classPercentages.length
+        classAverageCohortSize >= MIN_COHORT_FOR_CLASS_AVERAGE
+          ? classPercentageValues.reduce((sum, value) => sum + value, 0) / classAverageCohortSize
           : null
 
       const submission = assessment.submissions[0] ?? null
@@ -278,6 +320,9 @@ export async function listStudentAssessments(
         hasMark: ownGrade !== undefined,
         published: publishedGrade !== null,
         classAveragePercentage,
+        classAverageWithheld,
+        classAverageCohortSize,
+        classAverageMinimumCohort: MIN_COHORT_FOR_CLASS_AVERAGE,
         quizQuestionCount,
         submissionState,
         submittedAt: submittedAt?.toISOString() ?? null,

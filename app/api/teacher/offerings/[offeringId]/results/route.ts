@@ -5,14 +5,16 @@ import { requireRole } from "@/lib/authz"
 import { publishOfferingResults } from "@/lib/retention/results-publication"
 
 /**
- * Publish an offering's results.
+ * Start an offering's retention clock.
  *
  * `POST /api/teacher/offerings/[offeringId]/results`
  *
- * The explicit teacher action that starts the 15-day retention clock. Guarded by
- * `requireRole("teacher")` and object-level ownership (checked in the service),
- * so a teacher can only publish results for an offering they own. Idempotent:
- * publishing twice leaves the original timestamp untouched.
+ * The explicit teacher action that records the results-publication date and starts
+ * the 15-day retention clock. It does **not** release marks to students: a mark
+ * becomes visible when its own `Grade.publishedAt` is set from the review queue or
+ * the marks grid. Guarded by `requireRole("teacher")` and object-level ownership
+ * (checked in the service), so a teacher can only start the clock for an offering
+ * they own. Idempotent: a repeat call leaves the original timestamp untouched.
  */
 export async function POST(
   _request: Request,
@@ -39,7 +41,7 @@ export async function POST(
     alreadyPublished: result.kind === "already-published",
     message:
       result.kind === "already-published"
-        ? "Results were already published; the original publication date is unchanged."
-        : "Results published. Student work is retained for 15 days from now.",
+        ? "The retention clock was already started; the original results-publication date is unchanged."
+        : "Results publication recorded and the 15-day retention clock started. Marks are released to students separately, from the review queue or the marks grid.",
   })
 }

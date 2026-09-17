@@ -6,7 +6,6 @@ import {
   BookOpenCheck,
   CalendarClock,
   ClipboardList,
-  Eye,
   FileCheck2,
   Filter,
   Search,
@@ -458,10 +457,19 @@ export function StudentAssessmentsView({
                       <div className="rounded-lg border border-border/70 bg-background px-3 py-2">
                         <p className="text-xs text-muted-foreground">Class average</p>
                         <p className="mt-1 font-medium">
-                          {assessment.classAveragePercentage === null
-                            ? "—"
-                            : `${round(assessment.classAveragePercentage)}%`}
+                          {assessment.classAverageWithheld
+                            ? "Withheld"
+                            : assessment.classAveragePercentage === null
+                              ? "—"
+                              : `${round(assessment.classAveragePercentage)}%`}
                         </p>
+                        {assessment.classAverageWithheld && (
+                          <p className="mt-1 text-xs text-muted-foreground">
+                            Shown only once at least {assessment.classAverageMinimumCohort} released
+                            marks exist, so a classmate&apos;s mark cannot be derived.{" "}
+                            {assessment.classAverageCohortSize} so far.
+                          </p>
+                        )}
                       </div>
                       <div className="rounded-lg border border-border/70 bg-background px-3 py-2">
                         <p className="text-xs text-muted-foreground">Quiz questions</p>
@@ -562,10 +570,6 @@ export function StudentAssessmentsView({
                           </div>
                         </div>
                       ) : null}
-                      <Button size="sm" variant="outline" disabled>
-                        <Eye className="size-4" />
-                        Detailed rubric soon
-                      </Button>
                     </div>
                   </div>
                 )}

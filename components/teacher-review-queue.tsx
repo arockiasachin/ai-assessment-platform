@@ -1,8 +1,9 @@
 "use client"
 
 import { useState } from "react"
-import { useRouter } from "next/navigation"
-import { Check, Flag, RefreshCw, SlidersHorizontal, Sparkles, X } from "lucide-react"
+import Link from "next/link"
+import { usePathname, useRouter, useSearchParams } from "next/navigation"
+import { Check, Flag, RefreshCw, RotateCcw, SlidersHorizontal, Sparkles, X } from "lucide-react"
 
 import { TeacherQuizAttemptEvidence } from "@/components/teacher-quiz-attempt-evidence"
 import { TeacherRubricDetail } from "@/components/teacher-rubric-detail"
@@ -29,6 +30,7 @@ type Decision =
   | { action: "accept" }
   | { action: "reject"; reason?: string }
   | { action: "flag"; notes?: string }
+  | { action: "reopen" }
   | { action: "override"; points: number; reason: string }
 
 // The app themes via `prefers-color-scheme`, so the `.dark`-scoped Tailwind
@@ -43,11 +45,22 @@ function confidenceTone(confidence: number): string {
 export function TeacherReviewQueue({
   items,
   candidates,
+  activeStatus,
+  filteredToStudent,
+  filteredToAssessment,
 }: {
   items: ReviewQueueItem[]
   candidates: EvaluationCandidate[]
+  /** The `status` searchParam, or `"default"` when the two needs-a-human states are shown. */
+  activeStatus: string
+  /** The `studentId` searchParam, set when a dashboard row linked to one item. */
+  filteredToStudent: string | null
+  /** The `assessmentId` searchParam, set alongside a student link or by a filter. */
+  filteredToAssessment: string | null
 }) {
   const router = useRouter()
+  const pathname = usePathname()
+  const searchParams = useSearchParams()
   const [message, setMessage] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [busyKey, setBusyKey] = useState<string | null>(null)
@@ -60,6 +73,44 @@ export function TeacherReviewQueue({
   function pairKey(item: ReviewQueueItem): string {
     return `${item.assessment.id}:${item.student.id}`
   }
+
+  /**
+   * The status views the API has always supported, now reachable (TN-63).
+   * `default` is the server's default of PENDING + NEEDS_REVIEW, so it omits the
+   * parameter rather than naming one status. `all` is the history view that makes
+   * decided rows — and therefore the reopen action — reachable.
+   */
+  const statusFilters: { key: string; label: string }[] = [
+    { key: "default", label: "Needs a decision" },
+    { key: "PENDING", label: REVIEW_STATE_LABEL.PENDING },
+    { key: "NEEDS_REVIEW", label: REVIEW_STATE_LABEL.NEEDS_REVIEW },
+    { key: "REJECTED", label: REVIEW_STATE_LABEL.REJECTED },
+    { key: "AUTO_ACCEPTED", label: REVIEW_STATE_LABEL.AUTO_ACCEPTED },
+    { key: "OVERRIDDEN", label: REVIEW_STATE_LABEL.OVERRIDDEN },
+    { key: "all", label: "All history" },
+  ]
+  const activeFilterLabel =
+    statusFilters.find((filter) => filter.key === activeStatus)?.label ?? "Reviews"
+
+  /** Change one search param, preserving the others (the student/assessment filter). */
+  function hrefForStatus(status: string): string {
+    const next = new URLSearchParams(searchParams.toString())
+    if (status === "default") next.delete("status")
+    else next.set("status", status)
+    const query = next.toString()
+    return query ? `${pathname}?${query}` : pathname
+  }
+
+  /** Drop params, preserving the rest. */
+  function hrefWithout(...remove: string[]): string {
+    const next = new URLSearchParams(searchParams.toString())
+    for (const key of remove) next.delete(key)
+    const query = next.toString()
+    return query ? `${pathname}?${query}` : pathname
+  }
+
+  const hasNarrowingFilter = filteredToStudent !== null || filteredToAssessment !== null
+  const clearFiltersHref = hrefWithout("studentId", "assessmentId")
 
   async function postJson(url: string, body: unknown, key: string, successMessage: string) {
     setBusyKey(key)
@@ -95,7 +146,9 @@ export function TeacherReviewQueue({
         ? "Suggestion rejected. Nothing was published."
         : decision.action === "flag"
           ? "Flagged for closer review."
-          : "Decision recorded.",
+          : decision.action === "reopen"
+            ? "Suggestion reopened and returned to Pending."
+            : "Decision recorded.",
     )
   }
 
@@ -143,6 +196,46 @@ export function TeacherReviewQueue({
           className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive"
         >
           {error}
+        </div>
+      )}
+
+      {/*
+        The status filter (TN-63). Before this, decided rows vanished and there was no
+        way to see or reopen them; the API supported `status` and the `reopen` action
+        but nothing called either. Links rather than client state so the view is
+        shareable and survives a refresh.
+      */}
+      <nav aria-label="Filter by review status" className="flex flex-wrap gap-2">
+        {statusFilters.map((filter) => {
+          const isActive = activeStatus === filter.key
+          return (
+            <Link
+              key={filter.key}
+              href={hrefForStatus(filter.key)}
+              aria-current={isActive ? "page" : undefined}
+              className={[
+                "rounded-lg border px-3 py-1.5 text-xs transition-colors",
+                "focus-visible:ring-3 focus-visible:ring-ring/50",
+                isActive
+                  ? "border-primary/40 bg-primary/10 text-primary"
+                  : "border-border bg-background hover:bg-muted",
+              ].join(" ")}
+            >
+              {filter.label}
+            </Link>
+          )
+        })}
+      </nav>
+
+      {hasNarrowingFilter && (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-primary/30 bg-primary/5 px-3 py-2 text-sm">
+          <p>Showing the queue narrowed to the item the link named.</p>
+          <Link
+            href={clearFiltersHref}
+            className="text-xs font-medium text-primary underline-offset-4 hover:underline"
+          >
+            Clear filter
+          </Link>
         </div>
       )}
 
@@ -228,11 +321,15 @@ export function TeacherReviewQueue({
       </Card>
 
       <div className="space-y-4">
-        <h2 className="text-sm font-semibold tracking-tight">Needs review ({items.length})</h2>
+        <h2 className="text-sm font-semibold tracking-tight">
+          {activeStatus === "default" ? "Needs review" : activeFilterLabel} ({items.length})
+        </h2>
         {items.length === 0 && (
           <Card className="border-border/70 shadow-sm">
             <CardContent className="py-10 text-center text-sm text-muted-foreground">
-              Nothing is waiting for review.
+              {activeStatus === "default"
+                ? "Nothing is waiting for review."
+                : `No rows match ${activeFilterLabel}. Use the status tabs above to widen the view.`}
             </CardContent>
           </Card>
         )}
@@ -354,52 +451,92 @@ export function TeacherReviewQueue({
                 ))}
 
                 <div className="flex flex-wrap items-center gap-2">
-                  <Button
-                    type="button"
-                    size="sm"
-                    onClick={() => approve(item)}
-                    disabled={busy || item.suggestions.length === 0}
-                  >
-                    <Check />
-                    Accept
-                  </Button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    onClick={() => setOverrideOpen((prev) => ({ ...prev, [key]: !prev[key] }))}
-                    disabled={busy}
-                  >
-                    <SlidersHorizontal />
-                    Override
-                  </Button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    onClick={() =>
-                      decide(item, { action: "flag", notes: flagNotes[key]?.trim() || undefined })
-                    }
-                    disabled={busy}
-                  >
-                    <Flag />
-                    Flag
-                  </Button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="destructive"
-                    onClick={() =>
-                      decide(item, {
-                        action: "reject",
-                        reason: rejectReason[key]?.trim() || undefined,
-                      })
-                    }
-                    disabled={busy}
-                  >
-                    <X />
-                    Reject
-                  </Button>
+                  {item.review.status === "REJECTED" ? (
+                    <>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={() => decide(item, { action: "reopen" })}
+                        disabled={busy}
+                      >
+                        <RotateCcw />
+                        Reopen
+                      </Button>
+                      <p className="text-xs text-muted-foreground">
+                        Reopening returns this suggestion to Pending so it can be decided again.
+                      </p>
+                    </>
+                  ) : item.review.status === "AUTO_ACCEPTED" ||
+                    item.review.status === "OVERRIDDEN" ? (
+                    <>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={() => setOverrideOpen((prev) => ({ ...prev, [key]: !prev[key] }))}
+                        disabled={busy}
+                      >
+                        <SlidersHorizontal />
+                        Override
+                      </Button>
+                      <p className="text-xs text-muted-foreground">
+                        This grade is published. An override is the only recorded change.
+                      </p>
+                    </>
+                  ) : (
+                    <>
+                      <Button
+                        type="button"
+                        size="sm"
+                        onClick={() => approve(item)}
+                        disabled={busy || item.suggestions.length === 0}
+                      >
+                        <Check />
+                        Accept
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={() => setOverrideOpen((prev) => ({ ...prev, [key]: !prev[key] }))}
+                        disabled={busy}
+                      >
+                        <SlidersHorizontal />
+                        Override
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={() =>
+                          decide(item, {
+                            action: "flag",
+                            notes: flagNotes[key]?.trim() || undefined,
+                          })
+                        }
+                        disabled={busy}
+                      >
+                        <Flag />
+                        Flag
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="destructive"
+                        onClick={() =>
+                          decide(item, {
+                            action: "reject",
+                            reason: rejectReason[key]?.trim() || undefined,
+                          })
+                        }
+                        disabled={busy}
+                      >
+                        <X />
+                        Reject
+                      </Button>
+                    </>
+                  )}
                 </div>
 
                 <div className="grid gap-3 sm:grid-cols-2">

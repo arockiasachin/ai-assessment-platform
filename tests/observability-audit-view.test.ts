@@ -148,4 +148,34 @@ describe("teacher grade-activity view", () => {
     expect(activity.items).toHaveLength(2)
     expect(activity.truncated).toBe(true)
   })
+
+  it("pages the log and reports the total, so a page is not read as the whole log (TN-17)", async () => {
+    const f = await createSpineFixture(prisma)
+    const studentId = f.student.studentProfile!.id
+    for (const label of ["Argument", "Evidence", "Clarity", "Structure", "Style"]) {
+      await recordAiSuggestion(suggestion(f.assessment.id, studentId, { criterionLabel: label }))
+    }
+
+    const first = await getRecentGradeActivityForTeacher(
+      { id: f.teacher.id },
+      { offeringId: f.offering.id, limit: 2 },
+    )
+    const second = await getRecentGradeActivityForTeacher(
+      { id: f.teacher.id },
+      { offeringId: f.offering.id, limit: 2, offset: 2 },
+    )
+
+    expect(first.items).toHaveLength(2)
+    expect(first.truncated).toBe(true)
+    expect(second.items).toHaveLength(2)
+
+    // The total is the whole matching set, not the page size, and it is stable
+    // across pages — that is what lets the header say "page 1 of N".
+    expect(first.total).toBeGreaterThan(4)
+    expect(second.total).toBe(first.total)
+
+    // Pages do not overlap.
+    const firstPageIds = new Set(first.items.map((item) => item.id))
+    expect(second.items.every((item) => !firstPageIds.has(item.id))).toBe(true)
+  })
 })

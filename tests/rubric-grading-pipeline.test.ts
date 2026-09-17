@@ -614,4 +614,68 @@ describe("rubric grading pipeline", () => {
       }),
     ).rejects.toMatchObject({ status: 409 })
   })
+
+  it("narrows the queue to the student a row action named (TN-13)", async () => {
+    const { f, assessment, submission, teacherUser } = await seedAssessment()
+    const otherStudentId = await createEnrolledStudent(f.offering.id, "REG-RUBRIC-QUEUE-2")
+    const otherSubmission = await prisma.submission.create({
+      data: {
+        assessmentId: assessment.id,
+        studentId: otherStudentId,
+        status: "SUBMITTED",
+        submittedAt: new Date(),
+        contentText: SUBMISSION_TEXT,
+      },
+    })
+
+    await evaluateSubmissionForTeacher(teacherUser, submission.id, {
+      provider: fakeProvider([argumentEval(), evidenceEval()]),
+    })
+    await evaluateSubmissionForTeacher(teacherUser, otherSubmission.id, {
+      provider: fakeProvider([argumentEval(), evidenceEval()]),
+    })
+
+    expect(await listReviewQueueForTeacher(teacherUser)).toHaveLength(2)
+
+    const narrowed = await listReviewQueueForTeacher(teacherUser, { studentId: otherStudentId })
+    expect(narrowed).toHaveLength(1)
+    expect(narrowed[0].student.id).toBe(otherStudentId)
+    expect(narrowed[0].assessment.id).toBe(assessment.id)
+  })
+
+  it("makes decided reviews reachable by status and reopens a rejected one (TN-63)", async () => {
+    const { assessment, submission, teacherUser, studentId } = await seedAssessment()
+    await evaluateSubmissionForTeacher(teacherUser, submission.id, {
+      provider: fakeProvider([argumentEval(), evidenceEval()]),
+    })
+
+    // Rejecting takes the row out of the default needs-a-human queue...
+    await submitReviewDecision({
+      assessmentId: assessment.id,
+      studentId,
+      reviewer: { id: teacherUser.id, role: "teacher" },
+      decision: { action: "reject", reason: "Evidence does not support the score." },
+    })
+    expect(await listReviewQueueForTeacher(teacherUser)).toHaveLength(0)
+
+    // ...and the status filter is what brings it back, which is what makes the
+    // reopen action reachable at all.
+    const rejected = await listReviewQueueForTeacher(teacherUser, { status: "REJECTED" })
+    expect(rejected).toHaveLength(1)
+    expect(rejected[0].review.status).toBe("REJECTED")
+
+    const history = await listReviewQueueForTeacher(teacherUser, { status: "all" })
+    expect(history.map((item) => item.review.status)).toContain("REJECTED")
+
+    await submitReviewDecision({
+      assessmentId: assessment.id,
+      studentId,
+      reviewer: { id: teacherUser.id, role: "teacher" },
+      decision: { action: "reopen" },
+    })
+
+    const reopened = await listReviewQueueForTeacher(teacherUser)
+    expect(reopened).toHaveLength(1)
+    expect(reopened[0].review.status).toBe("PENDING")
+  })
 })

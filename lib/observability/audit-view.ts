@@ -21,6 +21,8 @@ export const GRADE_PIPELINE_ENTITY_TYPES = ["AIGradeSuggestion", "Grade", "Grade
 export type GradeActivityQuery = {
   offeringId: string
   limit: number
+  /** Rows to skip, for paging. Absent means the first page. */
+  offset?: number
 }
 
 export type GradeActivityItem = {
@@ -48,7 +50,14 @@ export type GradeActivityItem = {
 export type GradeActivity = {
   offeringId: string
   items: GradeActivityItem[]
+  /** Whether rows exist past this page. */
   truncated: boolean
+  /**
+   * Every matching row in the offering's scope. Exposed so the caller can say
+   * "page 1 of 3" rather than rendering the page size as a total — the defect
+   * TN-17 filed: a 25-row cap whose header read as the whole log.
+   */
+  total: number
 }
 
 const ENTITY_LABELS: Record<string, string> = {
@@ -145,7 +154,7 @@ export async function getRecentGradeActivityForTeacher(
   const { offeringId, assessmentIds } = await resolveOwnedOffering(authUser.id, query.offeringId)
 
   if (assessmentIds.length === 0) {
-    return { offeringId, items: [], truncated: false }
+    return { offeringId, items: [], truncated: false, total: 0 }
   }
 
   const [suggestions, grades, reviews] = await Promise.all([
@@ -176,17 +185,26 @@ export async function getRecentGradeActivityForTeacher(
   register("GradeReview", reviews)
 
   if (entityIds.length === 0) {
-    return { offeringId, items: [], truncated: false }
+    return { offeringId, items: [], truncated: false, total: 0 }
   }
 
-  const rows = await prisma.auditLog.findMany({
-    where: {
-      entityType: { in: [...GRADE_PIPELINE_ENTITY_TYPES] },
-      entityId: { in: entityIds },
-    },
-    orderBy: { createdAt: "desc" },
-    take: query.limit + 1,
-  })
+  const where = {
+    entityType: { in: [...GRADE_PIPELINE_ENTITY_TYPES] },
+    entityId: { in: entityIds },
+  }
+  const offset = query.offset ?? 0
+  // The count and the page are read in one round trip. `total` is the whole
+  // matching set, not `offset + items.length`, so the page can render an honest
+  // "N of M" rather than presenting the cap as the total (TN-17).
+  const [total, rows] = await Promise.all([
+    prisma.auditLog.count({ where }),
+    prisma.auditLog.findMany({
+      where,
+      orderBy: { createdAt: "desc" },
+      skip: offset,
+      take: query.limit + 1,
+    }),
+  ])
 
   const truncated = rows.length > query.limit
   const items = await attachActorNames(
@@ -205,5 +223,5 @@ export async function getRecentGradeActivityForTeacher(
     })),
   )
 
-  return { offeringId, items, truncated }
+  return { offeringId, items, truncated, total }
 }
