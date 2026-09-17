@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-09-17T21:46:58.663Z",
+  "generatedAt": "2026-09-17T21:51:26.328Z",
   "source": {
     "convention": "docs/audit/README.md",
     "files": [
@@ -1002,9 +1002,10 @@
           "severity": "major",
           "category": "dead-control",
           "title": "Submissions queue's only per-row action, \"Open\", links every row to the same /teacher/assignments page and loses which submission was clicked",
-          "evidence": "GET /teacher/submissions as demo.teacher@school.edu returned 200 with real rows (GET /api/teacher/reviews returns 3 PENDING items for the same teacher). The row action in components/teacher-submissions-table.tsx:261-268 is <Link href=\"/teacher/assignments\" ...> — a literal path with no row.id, row.assessmentId or student interpolated — while its aria-label is `Open ${row.studentName}'s submission for ${row.assessmentTitle} in assignments`. The page copy and SectionCard description confirm this queue is read-only and that grading must happen on /teacher/assignments. Why it matters: A teacher clicking \"Open\" on a specific student's submission is dropped on the generic assignments list with no indication which submission they meant, so the queue's one action cannot be used to reach the grading editor for the row that was clicked; screen-reader users are told a specific submission is being opened when it is not. Re-verified 2026-09-17 against the re-seeded database: still reproduces.",
+          "evidence": "GET /teacher/submissions as demo.teacher@school.edu returned 200 with real rows (GET /api/teacher/reviews returns 3 PENDING items for the same teacher). The row action in components/teacher-submissions-table.tsx:261-268 is <Link href=\"/teacher/assignments\" ...> — a literal path with no row.id, row.assessmentId or student interpolated — while its aria-label is `Open ${row.studentName}'s submission for ${row.assessmentTitle} in assignments`. The page copy and SectionCard description confirm this queue is read-only and that grading must happen on /teacher/assignments. Why it matters: A teacher clicking \"Open\" on a specific student's submission is dropped on the generic assignments list with no indication which submission they meant, so the queue's one action cannot be used to reach the grading editor for the row that was clicked; screen-reader users are told a specific submission is being opened when it is not. Re-verified 2026-09-17 against the re-seeded database: still reproduces. Marked fixed at the same time as TN-38: the native group filed the identical defect (dead-control at this file), and cluster 2b fixed it in 35f07fd by giving the per-row Open action a real anchor (#submission-<id>) with a matching id on the editor card. The two rows were not paired automatically because this row's location carries a leading route as well as the file, so the comparison key did not normalise to the same value — a gap in the comparison, not a second bug.",
           "location": "/teacher/submissions, components/teacher-submissions-table.tsx:261",
-          "status": "open"
+          "status": "fixed",
+          "dupOf": "TN-38"
         },
         {
           "id": "TL-3",
@@ -1079,8 +1080,8 @@
         "confidentiality-leak": 0
       },
       "byStatus": {
-        "open": 6,
-        "fixed": 0,
+        "open": 5,
+        "fixed": 1,
         "wontfix": 0
       },
       "byAgent": {
@@ -2792,9 +2793,10 @@
           "severity": "major",
           "category": "dead-control",
           "title": "Submissions queue's only per-row action, \"Open\", links every row to the same /teacher/assignments page and loses which submission was clicked",
-          "evidence": "GET /teacher/submissions as demo.teacher@school.edu returned 200 with real rows (GET /api/teacher/reviews returns 3 PENDING items for the same teacher). The row action in components/teacher-submissions-table.tsx:261-268 is <Link href=\"/teacher/assignments\" ...> — a literal path with no row.id, row.assessmentId or student interpolated — while its aria-label is `Open ${row.studentName}'s submission for ${row.assessmentTitle} in assignments`. The page copy and SectionCard description confirm this queue is read-only and that grading must happen on /teacher/assignments. Why it matters: A teacher clicking \"Open\" on a specific student's submission is dropped on the generic assignments list with no indication which submission they meant, so the queue's one action cannot be used to reach the grading editor for the row that was clicked; screen-reader users are told a specific submission is being opened when it is not. Re-verified 2026-09-17 against the re-seeded database: still reproduces.",
+          "evidence": "GET /teacher/submissions as demo.teacher@school.edu returned 200 with real rows (GET /api/teacher/reviews returns 3 PENDING items for the same teacher). The row action in components/teacher-submissions-table.tsx:261-268 is <Link href=\"/teacher/assignments\" ...> — a literal path with no row.id, row.assessmentId or student interpolated — while its aria-label is `Open ${row.studentName}'s submission for ${row.assessmentTitle} in assignments`. The page copy and SectionCard description confirm this queue is read-only and that grading must happen on /teacher/assignments. Why it matters: A teacher clicking \"Open\" on a specific student's submission is dropped on the generic assignments list with no indication which submission they meant, so the queue's one action cannot be used to reach the grading editor for the row that was clicked; screen-reader users are told a specific submission is being opened when it is not. Re-verified 2026-09-17 against the re-seeded database: still reproduces. Marked fixed at the same time as TN-38: the native group filed the identical defect (dead-control at this file), and cluster 2b fixed it in 35f07fd by giving the per-row Open action a real anchor (#submission-<id>) with a matching id on the editor card. The two rows were not paired automatically because this row's location carries a leading route as well as the file, so the comparison key did not normalise to the same value — a gap in the comparison, not a second bug.",
           "location": "/teacher/submissions, components/teacher-submissions-table.tsx:261",
-          "status": "open"
+          "status": "fixed",
+          "dupOf": "TN-38"
         },
         {
           "id": "TL-3",
@@ -3583,8 +3585,8 @@
       "minor": 61
     },
     "byStatus": {
-      "open": 104,
-      "fixed": 25,
+      "open": 103,
+      "fixed": 26,
       "wontfix": 0
     },
     "byCategory": {
