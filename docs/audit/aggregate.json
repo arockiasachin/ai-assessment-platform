@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-09-17T21:24:56.544Z",
+  "generatedAt": "2026-09-17T21:34:29.010Z",
   "source": {
     "convention": "docs/audit/README.md",
     "files": [
@@ -446,9 +446,9 @@
           "severity": "major",
           "category": "inconsistency",
           "title": "\"Hidden from students\" is false: unreleased assessments and their published marks are visible",
-          "evidence": "Linear models group project has releasedAt NULL and the planner labels it Hidden from students, yet demo.student1 sees it in GET /api/student/assessments with hasMark:true, published:true, score:16 because lib/student-assessments.ts:96-140 has no releasedAt filter. Re-verified 2026-09-17 against the re-seeded database: still reproduces.",
+          "evidence": "Linear models group project has releasedAt NULL and the planner labels it Hidden from students, yet demo.student1 sees it in GET /api/student/assessments with hasMark:true, published:true, score:16 because lib/student-assessments.ts:96-140 has no releasedAt filter. Re-verified 2026-09-17 against the re-seeded database: still reproduces. Fixed 2026-09-18: same release filter as SN-5 — the student reader now scopes assessments to `releasedAt != null`, so the planner's \"Hidden from students\" label is true on the student side. Verified against the running app: demo-assessment-group-project is absent from demo.student1's /student/assessments and dashboard, leaving 4 assessments.",
           "location": "lib/student-assessments.ts:96-140",
-          "status": "open"
+          "status": "fixed"
         },
         {
           "id": "TN-34",
@@ -953,8 +953,8 @@
         "confidentiality-leak": 1
       },
       "byStatus": {
-        "open": 65,
-        "fixed": 5,
+        "open": 64,
+        "fixed": 6,
         "wontfix": 0
       },
       "byAgent": {
@@ -1146,9 +1146,9 @@
           "severity": "major",
           "category": "fabricated-number",
           "title": "hasMark is always true: every assessment says Mark not released even when nothing was marked",
-          "evidence": "ownGrade is undefined and undefined !== null, so hasMark is true for every row; demo.student5 has 0 grades and 0 submissions yet /api/student/assessments returns hasMark:true for all items and /student prints Mark not released. Re-verified 2026-09-17 against the re-seeded database: still reproduces.",
+          "evidence": "ownGrade is undefined and undefined !== null, so hasMark is true for every row; demo.student5 has 0 grades and 0 submissions yet /api/student/assessments returns hasMark:true for all items and /student prints Mark not released. Re-verified 2026-09-17 against the re-seeded database: still reproduces. Fixed 2026-09-18: the reader now tests `ownGrade !== undefined` (lib/student-assessments.ts), because `finalGrades.find` yields `undefined`, not `null`, when no row exists. Verified against the running app: GET /api/student/assessments as demo.student5 returns hasMark:false for all four visible assessments and /student renders 0 \"Mark not released\" pills, while demo.student1's unreleased essay mark still returns hasMark:true, published:false.",
           "location": "lib/student-assessments.ts:146",
-          "status": "open"
+          "status": "fixed"
         },
         {
           "id": "SN-5",
@@ -1159,9 +1159,9 @@
           "severity": "major",
           "category": "inconsistency",
           "title": "An unreleased assessment is visible and submittable on the student side",
-          "evidence": "demo-assessment-group-project has releasedAt NULL yet appears on demo.student1's /student/assessments and dashboard Due next, while /student/events correctly hides it because lib/student-assessments.ts:96-101 has no release filter. Re-verified 2026-09-17 against the re-seeded database: still reproduces.",
+          "evidence": "demo-assessment-group-project has releasedAt NULL yet appears on demo.student1's /student/assessments and dashboard Due next, while /student/events correctly hides it because lib/student-assessments.ts:96-101 has no release filter. Re-verified 2026-09-17 against the re-seeded database: still reproduces. Fixed 2026-09-18: the reader now scopes `prisma.assessment.findMany` with `releasedAt: { not: null }` (lib/student-assessments.ts), the same predicate shape as the SN-29 fix in the student branch of `lib/gradebook-db.ts` and the calendar filter in `lib/calendar.ts`. Verified against the running app: GET /api/student/assessments and GET /student/assessments as demo.student1 no longer list demo-assessment-group-project (4 assessments, not 5), and /student renders it nowhere, matching the already-correct /student/events.",
           "location": "lib/student-assessments.ts:96-101",
-          "status": "open"
+          "status": "fixed"
         },
         {
           "id": "SN-6",
@@ -1512,9 +1512,9 @@
           "severity": "major",
           "category": "inconsistency",
           "title": "/student/assessments says Not submitted for quizzes the student actually submitted",
-          "evidence": "For demo-assessment-quiz the payload shows score:20, percentage:100, published:true but submissionState:\"not_submitted\" and submittedAt:null, because quiz attempts write QuizAttempt and QuizResponse while lib/student-assessments.ts:211 derives state from Submission only. Re-verified 2026-09-17 against the re-seeded database: still reproduces.",
+          "evidence": "For demo-assessment-quiz the payload shows score:20, percentage:100, published:true but submissionState:\"not_submitted\" and submittedAt:null, because quiz attempts write QuizAttempt and QuizResponse while lib/student-assessments.ts:211 derives state from Submission only. Re-verified 2026-09-17 against the re-seeded database: still reproduces. Fixed 2026-09-18: the reader now derives the state from the student's graded `QuizAttempt` rows when there is no `Submission` row (lib/student-assessments.ts), counting only `kind: GRADED` and treating a finished sitting as submitted/graded, an `IN_PROGRESS` sitting as draft, and a `PRACTICE` sitting as no submission at all. Verified against the running app: GET /api/student/assessments as demo.student1 now returns submissionState:graded and submittedAt:2026-09-17T15:51:17.038Z for demo-assessment-quiz (score 20) instead of not_submitted/null.",
           "location": "lib/student-assessments.ts:211",
-          "status": "open"
+          "status": "fixed"
         },
         {
           "id": "SN-33",
@@ -1772,8 +1772,8 @@
         "confidentiality-leak": 3
       },
       "byStatus": {
-        "open": 42,
-        "fixed": 8,
+        "open": 39,
+        "fixed": 11,
         "wontfix": 0
       },
       "byAgent": {
@@ -2296,9 +2296,9 @@
           "severity": "major",
           "category": "inconsistency",
           "title": "\"Hidden from students\" is false: unreleased assessments and their published marks are visible",
-          "evidence": "Linear models group project has releasedAt NULL and the planner labels it Hidden from students, yet demo.student1 sees it in GET /api/student/assessments with hasMark:true, published:true, score:16 because lib/student-assessments.ts:96-140 has no releasedAt filter. Re-verified 2026-09-17 against the re-seeded database: still reproduces.",
+          "evidence": "Linear models group project has releasedAt NULL and the planner labels it Hidden from students, yet demo.student1 sees it in GET /api/student/assessments with hasMark:true, published:true, score:16 because lib/student-assessments.ts:96-140 has no releasedAt filter. Re-verified 2026-09-17 against the re-seeded database: still reproduces. Fixed 2026-09-18: same release filter as SN-5 — the student reader now scopes assessments to `releasedAt != null`, so the planner's \"Hidden from students\" label is true on the student side. Verified against the running app: demo-assessment-group-project is absent from demo.student1's /student/assessments and dashboard, leaving 4 assessments.",
           "location": "lib/student-assessments.ts:96-140",
-          "status": "open"
+          "status": "fixed"
         },
         {
           "id": "TN-35",
@@ -2958,9 +2958,9 @@
           "severity": "major",
           "category": "fabricated-number",
           "title": "hasMark is always true: every assessment says Mark not released even when nothing was marked",
-          "evidence": "ownGrade is undefined and undefined !== null, so hasMark is true for every row; demo.student5 has 0 grades and 0 submissions yet /api/student/assessments returns hasMark:true for all items and /student prints Mark not released. Re-verified 2026-09-17 against the re-seeded database: still reproduces.",
+          "evidence": "ownGrade is undefined and undefined !== null, so hasMark is true for every row; demo.student5 has 0 grades and 0 submissions yet /api/student/assessments returns hasMark:true for all items and /student prints Mark not released. Re-verified 2026-09-17 against the re-seeded database: still reproduces. Fixed 2026-09-18: the reader now tests `ownGrade !== undefined` (lib/student-assessments.ts), because `finalGrades.find` yields `undefined`, not `null`, when no row exists. Verified against the running app: GET /api/student/assessments as demo.student5 returns hasMark:false for all four visible assessments and /student renders 0 \"Mark not released\" pills, while demo.student1's unreleased essay mark still returns hasMark:true, published:false.",
           "location": "lib/student-assessments.ts:146",
-          "status": "open"
+          "status": "fixed"
         },
         {
           "id": "SN-5",
@@ -2971,9 +2971,9 @@
           "severity": "major",
           "category": "inconsistency",
           "title": "An unreleased assessment is visible and submittable on the student side",
-          "evidence": "demo-assessment-group-project has releasedAt NULL yet appears on demo.student1's /student/assessments and dashboard Due next, while /student/events correctly hides it because lib/student-assessments.ts:96-101 has no release filter. Re-verified 2026-09-17 against the re-seeded database: still reproduces.",
+          "evidence": "demo-assessment-group-project has releasedAt NULL yet appears on demo.student1's /student/assessments and dashboard Due next, while /student/events correctly hides it because lib/student-assessments.ts:96-101 has no release filter. Re-verified 2026-09-17 against the re-seeded database: still reproduces. Fixed 2026-09-18: the reader now scopes `prisma.assessment.findMany` with `releasedAt: { not: null }` (lib/student-assessments.ts), the same predicate shape as the SN-29 fix in the student branch of `lib/gradebook-db.ts` and the calendar filter in `lib/calendar.ts`. Verified against the running app: GET /api/student/assessments and GET /student/assessments as demo.student1 no longer list demo-assessment-group-project (4 assessments, not 5), and /student renders it nowhere, matching the already-correct /student/events.",
           "location": "lib/student-assessments.ts:96-101",
-          "status": "open"
+          "status": "fixed"
         },
         {
           "id": "SN-6",
@@ -3296,9 +3296,9 @@
           "severity": "major",
           "category": "inconsistency",
           "title": "/student/assessments says Not submitted for quizzes the student actually submitted",
-          "evidence": "For demo-assessment-quiz the payload shows score:20, percentage:100, published:true but submissionState:\"not_submitted\" and submittedAt:null, because quiz attempts write QuizAttempt and QuizResponse while lib/student-assessments.ts:211 derives state from Submission only. Re-verified 2026-09-17 against the re-seeded database: still reproduces.",
+          "evidence": "For demo-assessment-quiz the payload shows score:20, percentage:100, published:true but submissionState:\"not_submitted\" and submittedAt:null, because quiz attempts write QuizAttempt and QuizResponse while lib/student-assessments.ts:211 derives state from Submission only. Re-verified 2026-09-17 against the re-seeded database: still reproduces. Fixed 2026-09-18: the reader now derives the state from the student's graded `QuizAttempt` rows when there is no `Submission` row (lib/student-assessments.ts), counting only `kind: GRADED` and treating a finished sitting as submitted/graded, an `IN_PROGRESS` sitting as draft, and a `PRACTICE` sitting as no submission at all. Verified against the running app: GET /api/student/assessments as demo.student1 now returns submissionState:graded and submittedAt:2026-09-17T15:51:17.038Z for demo-assessment-quiz (score 20) instead of not_submitted/null.",
           "location": "lib/student-assessments.ts:211",
-          "status": "open"
+          "status": "fixed"
         },
         {
           "id": "SN-33",
@@ -3583,8 +3583,8 @@
       "minor": 61
     },
     "byStatus": {
-      "open": 115,
-      "fixed": 14,
+      "open": 111,
+      "fixed": 18,
       "wontfix": 0
     },
     "byCategory": {

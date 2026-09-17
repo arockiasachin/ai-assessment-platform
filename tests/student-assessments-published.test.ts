@@ -51,6 +51,15 @@ beforeAll(async () => {
   offeringId = fixture.offering.id
   viewerUserId = fixture.student.id
 
+  // `createSpineFixture` leaves its assessment unreleased, which is the right
+  // default for most callers. This file asserts a student *sees* their marks, so
+  // its fixture has to be on the visible side of the release rule — the
+  // unreleased default silently encoded the SN-5 defect this file now guards.
+  await prisma.assessment.update({
+    where: { id: assessmentId },
+    data: { releasedAt: new Date("2026-09-01T08:00:00.000Z") },
+  })
+
   // Two extra students so there are peers whose marks can be unreleased.
   const peerA = await addStudent(2, "REG-INV-2")
   const peerB = await addStudent(3, "REG-INV-3")

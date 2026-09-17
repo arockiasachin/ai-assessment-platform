@@ -2,6 +2,7 @@ import "server-only"
 
 import { toAssessmentScale } from "@/lib/gradebook"
 import { prisma } from "@/lib/prisma"
+import { GRADED } from "@/lib/quiz-attempts/kinds"
 import { quizDeliveryStatus } from "@/lib/quiz-attempts/metadata"
 import type { AssessmentType } from "@/lib/generated/prisma/enums"
 import type { AuthUser } from "@/lib/session"
@@ -64,6 +65,44 @@ function submissionStateFromDbStatus(status: string | null): SubmissionState {
 }
 
 /**
+ * The submission state a graded quiz sitting implies (SN-32).
+ *
+ * A quiz writes `QuizAttempt`/`QuizResponse` and never a `Submission`, so
+ * deriving the state from `Submission` alone reported "Not submitted" for a quiz
+ * the student had actually finished — with a released mark next to it.
+ *
+ * `PRACTICE` sittings are excluded by the caller's query: a practice sitting is
+ * not a submission at all. Of the `GRADED` sittings, a finished one outranks one
+ * still in progress, because a student who submitted and then opened a retake is
+ * a submitter with a retake open, not a draft. `EXPIRED`/`ABANDONED` rows were
+ * never submitted, so this returns `null` and the caller's `not_submitted` stays
+ * honest rather than becoming a third alias for "submitted".
+ */
+function submissionStateFromAttempts(
+  attempts: readonly { status: string; submittedAt: Date | null }[],
+  hasReleasedMark: boolean,
+): { state: SubmissionState; submittedAt: Date | null } | null {
+  const finished = attempts.find(
+    (attempt) => attempt.status === "SUBMITTED" || attempt.status === "GRADED",
+  )
+  if (finished) {
+    return {
+      // A released mark is the quiz equivalent of a `GRADED` submission: the
+      // attempt row itself never leaves `SUBMITTED`, even after a teacher
+      // publishes, so the mark is the only signal that grading is done.
+      state: finished.status === "GRADED" || hasReleasedMark ? "graded" : "submitted",
+      submittedAt: finished.submittedAt,
+    }
+  }
+
+  if (attempts.some((attempt) => attempt.status === "IN_PROGRESS")) {
+    return { state: "draft", submittedAt: null }
+  }
+
+  return null
+}
+
+/**
  * The student's assessment list.
  *
  * Extracted from `app/api/student/assessments/route.ts`, which used to hold this
@@ -95,6 +134,15 @@ export async function listStudentAssessments(
 
   const assessments = await prisma.assessment.findMany({
     where: {
+      // Release governs visibility, and this is the assessment-list half of the
+      // same rule the gradebook projection applies (`lib/gradebook-db.ts`, the
+      // SN-29 fix) and `listStudentCalendar` already applied (`lib/calendar.ts`).
+      // The predicate shape is deliberately identical — `releasedAt: { not: null }`
+      // — so the three student-facing surfaces cannot drift into disagreeing
+      // about whether an unreleased assessment exists. This is what makes the
+      // planner's "Hidden from students" label true on the student side, where
+      // it was previously false (SN-5 / TN-33).
+      releasedAt: { not: null },
       offering: {
         enrollments: {
           some: { studentId: student.id, status: { in: ["active", "waitlisted"] } },
@@ -133,6 +181,15 @@ export async function listStudentAssessments(
       },
       questions: {
         select: { status: true, metadata: true, options: { select: { isCorrect: true } } },
+      },
+      quizAttempts: {
+        // A quiz's submission record is the sitting, not a `Submission` row.
+        // `PRACTICE` is recorded for history but is not a submission, so it is
+        // excluded here rather than filtered in JS; `GRADED` is the vocabulary's
+        // own constant, so this cannot drift from the attempt rules.
+        where: { studentId: student.id, kind: GRADED },
+        orderBy: { attemptNumber: "desc" },
+        select: { status: true, submittedAt: true },
       },
     },
     orderBy: [{ dueDate: "asc" }, { createdAt: "desc" }],
@@ -175,6 +232,20 @@ export async function listStudentAssessments(
           : null
 
       const submission = assessment.submissions[0] ?? null
+      const attemptSubmission = submissionStateFromAttempts(
+        assessment.quizAttempts,
+        publishedGrade !== null,
+      )
+      // An assessment's submission record is one or the other: a `Submission`
+      // row for the assignment types, a graded `QuizAttempt` for quizzes. The
+      // `Submission` row wins if both somehow exist, because it is the explicit
+      // record rather than an inference from a sitting.
+      const submissionState =
+        submission !== null
+          ? submissionStateFromDbStatus(submission.status)
+          : (attemptSubmission?.state ?? "not_submitted")
+      const submittedAt =
+        submission !== null ? submission.submittedAt : (attemptSubmission?.submittedAt ?? null)
 
       // Count only a deliverable question set: a generated draft quiz shows 0
       // questions until its questions are published, exactly as it did before the
@@ -201,15 +272,16 @@ export async function listStudentAssessments(
         teacherName: assessment.offering.teacher.fullName,
         score,
         percentage,
-        // `ownGrade !== null` is the discriminator the earlier version computed
-        // and then threw away, which made `published: false` mean two different
-        // things. The mark's value still never leaves here unless published.
-        hasMark: ownGrade !== null,
+        // `ownGrade` is `undefined`, not `null`, when no grade row exists.
+        // `undefined !== null` is true, so the previous expression reported a
+        // withheld mark on every assessment — including ones never marked at all
+        // (SN-4). The mark's value still never leaves here unless published.
+        hasMark: ownGrade !== undefined,
         published: publishedGrade !== null,
         classAveragePercentage,
         quizQuestionCount,
-        submissionState: submissionStateFromDbStatus(submission?.status ?? null),
-        submittedAt: submission?.submittedAt?.toISOString() ?? null,
+        submissionState,
+        submittedAt: submittedAt?.toISOString() ?? null,
         gradedAt: submission?.gradedAt?.toISOString() ?? null,
         // Feedback is withheld until the mark is released, matching the design's
         // rule that a student sees nothing about an assessment's outcome before
