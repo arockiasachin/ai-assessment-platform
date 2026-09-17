@@ -9,6 +9,7 @@ import {
   CodeTaskSetupForm,
   SimilarityReview,
   TestCaseActions,
+  TestCaseRowActions,
 } from "@/components/teacher-code-task-actions"
 import { buttonVariants } from "@/components/ui/button"
 import { CodeBlock } from "@/components/ui/code-block"
@@ -499,6 +500,12 @@ export default async function TeacherCodeTasksPage({
                         columns={caseColumns}
                         rows={testCases}
                         getRowId={(testCase) => testCase.id}
+                        rowActions={(testCase) => (
+                          <TestCaseRowActions
+                            assessmentId={selected.assessmentId}
+                            testCase={testCase}
+                          />
+                        )}
                         empty={
                           <EmptyState
                             title="No test cases"

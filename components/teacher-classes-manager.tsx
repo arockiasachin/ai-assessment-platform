@@ -1,13 +1,22 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
-import { CalendarClock, Filter, GraduationCap, Save, Send, Users2 } from "lucide-react"
+import { CalendarClock, Filter, GraduationCap, Loader2, Save, Send, Users2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import { OfferingGradingPolicy } from "@/components/offering-grading-policy"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Progress } from "@/components/ui/progress"
+import { resultsPublicationView } from "@/lib/results-publication-view"
 
 type OfferingRow = {
   id: string
@@ -46,6 +55,10 @@ export function TeacherClassesManager() {
   const [message, setMessage] = useState<string | null>(null)
   const [savingId, setSavingId] = useState<string | null>(null)
   const [publishingId, setPublishingId] = useState<string | null>(null)
+  // The offering whose one-way "Publish results" is awaiting confirmation. Publishing
+  // starts the 15-day retention clock and cannot be undone, so the button opens this
+  // rather than posting from `onClick` (TN-5).
+  const [publishTarget, setPublishTarget] = useState<OfferingRow | null>(null)
   const [search, setSearch] = useState("")
   const [drafts, setDrafts] = useState<
     Record<
@@ -156,7 +169,7 @@ export function TeacherClassesManager() {
     }
   }
 
-  const publishResults = async (offeringId: string) => {
+  const publishResults = async (offeringId: string): Promise<boolean> => {
     setMessage(null)
     setPublishingId(offeringId)
     try {
@@ -168,12 +181,27 @@ export function TeacherClassesManager() {
       if (response.ok) {
         await refresh()
       }
+      return response.ok
     } catch {
       setMessage("Unable to publish results.")
+      return false
     } finally {
       setPublishingId(null)
     }
   }
+
+  const confirmPublish = async () => {
+    const target = publishTarget
+    if (!target) return
+    if (await publishResults(target.id)) setPublishTarget(null)
+  }
+
+  const publishView = publishTarget
+    ? resultsPublicationView({
+        courseName: publishTarget.courseName,
+        resultsPublishedAt: publishTarget.resultsPublishedAt,
+      })
+    : null
 
   if (isLoading) {
     return <p className="py-10 text-center text-sm text-muted-foreground">Loading classes…</p>
@@ -400,7 +428,7 @@ export function TeacherClassesManager() {
                     <Button
                       type="button"
                       variant="secondary"
-                      onClick={() => publishResults(row.id)}
+                      onClick={() => setPublishTarget(row)}
                       disabled={publishingId === row.id}
                     >
                       <Send className="size-4" />
@@ -430,6 +458,41 @@ export function TeacherClassesManager() {
           </CardContent>
         </Card>
       )}
+
+      {/*
+        One dialog for the whole page, driven by `publishTarget`. Publishing is one-way and
+        starts the retention clock, so the confirmation names that rather than offering an
+        undo that does not exist (the same pattern as the assessment release control).
+      */}
+      <Dialog
+        open={publishTarget !== null}
+        onOpenChange={(open) => !open && setPublishTarget(null)}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{publishView?.confirmationTitle}</DialogTitle>
+            <DialogDescription>{publishView?.confirmationBody}</DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={publishingId !== null}
+              onClick={() => setPublishTarget(null)}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              disabled={publishingId !== null}
+              onClick={() => void confirmPublish()}
+            >
+              {publishingId !== null ? <Loader2 className="animate-spin" /> : <Send />}
+              Publish results
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

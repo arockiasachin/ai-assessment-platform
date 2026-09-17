@@ -119,6 +119,53 @@ export function submissionBodyText(item: SubmissionEditorItem): string {
 }
 
 /**
+ * The DOM id a submission's card carries in the grading editor.
+ *
+ * The submissions queue's per-row "Open" links here as a fragment, so the browser lands on
+ * the clicked submission in `/teacher/assignments` rather than on the top of a page that
+ * renders every submission (TN-38). Shared by the link and the card so the two cannot drift.
+ */
+export function submissionAnchorId(submissionId: string): string {
+  return `submission-${submissionId}`
+}
+
+export type SubmissionSaveBody = {
+  submissionId: string
+  /** Absent when the score field was not edited — the route leaves status untouched. */
+  score?: number | null
+  feedback: string
+}
+
+/**
+ * Build the `PUT /api/teacher/assessments/submissions` body for one save (TN-45).
+ *
+ * Only an **edited** score is sent. The previous client always sent `score`, and an empty
+ * field validated to `score: null`, so saving feedback alone was read by the route as an
+ * explicit un-grade: a `LATE` submission became `SUBMITTED` with its flag destroyed, and a
+ * `DRAFT` became `SUBMITTED` with `submittedAt` still null. Omitting the key is what the
+ * route's partial-update semantics read as "leave the status alone" — an explicit `null`
+ * remains the deliberate "clear this mark" action.
+ */
+export function buildSubmissionSaveBody(input: {
+  submissionId: string
+  /** `undefined` means the teacher never touched the score field. */
+  scoreDraft: string | undefined
+  feedbackDraft: string | undefined
+  item: SubmissionEditorItem
+}): { ok: true; body: SubmissionSaveBody } | { ok: false; message: string } {
+  const body: SubmissionSaveBody = {
+    submissionId: input.submissionId,
+    feedback: feedbackDraftValue(input.item, input.feedbackDraft),
+  }
+  if (input.scoreDraft !== undefined) {
+    const validation = validateScoreInput(input.scoreDraft, input.item.assessment.maxMarks)
+    if (!validation.ok) return { ok: false, message: validation.message }
+    body.score = validation.score
+  }
+  return { ok: true, body }
+}
+
+/**
  * Whether a typed score is acceptable before it is sent.
  *
  * Returns `null` for an empty field, which means "clear the mark" and is a legitimate submission

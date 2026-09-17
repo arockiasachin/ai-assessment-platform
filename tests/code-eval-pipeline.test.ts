@@ -446,6 +446,11 @@ describe("code evaluation pipeline", () => {
       verdict: "CLEARED",
     })
     expect(cleared.verdict).toBe("CLEARED")
+
+    // A re-scan recomputes the score; it must not discard the human verdict (TN-48).
+    const rescan = await scanCohortSimilarityForTeacher(teacher, assessment.id, {})
+    expect(rescan.pairs.find((pair) => pair.id === flagged[0].id)?.verdict).toBe("CLEARED")
+
     expect(await prisma.grade.count()).toBe(0)
 
     // A student cannot read the similarity report at all.

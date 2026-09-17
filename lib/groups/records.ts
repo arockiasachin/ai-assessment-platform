@@ -193,6 +193,38 @@ export async function updateMilestoneForTeacher(
   return serializeMilestone(updated)
 }
 
+/**
+ * Delete a milestone from one owned group (TN-49). Mirrors the update's ownership scope and
+ * records an audit row, because a deleted milestone is a planning decision, not a silent
+ * row removal.
+ */
+export async function deleteMilestoneForTeacher(
+  user: AuthUser,
+  milestoneId: string,
+): Promise<void> {
+  const staffId = await resolveTeacherStaffId(user)
+  const milestone = await prisma.milestone.findFirst({
+    where: { id: milestoneId, group: { offering: { teacherId: staffId } } },
+    select: { id: true, groupId: true, title: true, status: true },
+  })
+  if (!milestone) throw new GroupError(404, "Milestone not found.")
+
+  await prisma.$transaction(async (tx) => {
+    await tx.milestone.delete({ where: { id: milestone.id } })
+    await writeAuditLog(tx, {
+      entityType: "Milestone",
+      entityId: milestone.id,
+      action: "milestone.deleted",
+      actor: { id: user.id, role: user.role },
+      before: {
+        groupId: milestone.groupId,
+        title: milestone.title,
+        status: milestone.status,
+      },
+    })
+  })
+}
+
 export type MilestonesForTeacher = {
   milestones: MilestoneResponse[]
   cohortProgress: GroupProgress[]

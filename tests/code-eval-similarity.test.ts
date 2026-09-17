@@ -4,6 +4,7 @@ import {
   SIMILARITY_MIN_TOKENS,
   compareSources,
   jaccard,
+  nextSimilarityVerdict,
   shingleTokens,
   stripComments,
   tokenizeSource,
@@ -102,5 +103,21 @@ describe("shingleTokens", () => {
     expect(shingleTokens(["a", "b", "c"], 2)).toEqual(new Set(["a b", "b c"]))
     expect(shingleTokens(["a"], 5)).toEqual(new Set(["a"]))
     expect(shingleTokens([], 5).size).toBe(0)
+  })
+})
+
+describe("nextSimilarityVerdict", () => {
+  it("keeps a human verdict so a re-scan cannot wipe it (TN-48)", () => {
+    // The scan recomputes the score; the review is the teacher's. A FLAGGED pair whose
+    // score drops, or a CLEARED pair whose score rises, keeps the recorded decision.
+    expect(nextSimilarityVerdict("FLAGGED", false)).toBe("FLAGGED")
+    expect(nextSimilarityVerdict("CLEARED", true)).toBe("CLEARED")
+  })
+
+  it("classifies a new or still-pending pair from the score", () => {
+    expect(nextSimilarityVerdict(undefined, true)).toBe("FLAGGED")
+    expect(nextSimilarityVerdict(undefined, false)).toBe("PENDING")
+    expect(nextSimilarityVerdict("PENDING", true)).toBe("FLAGGED")
+    expect(nextSimilarityVerdict("PENDING", false)).toBe("PENDING")
   })
 })

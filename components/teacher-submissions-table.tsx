@@ -18,6 +18,7 @@ import {
   SUBMISSION_STATE_TO_STATUS,
 } from "@/lib/labels"
 import { formatDateTime, formatPoints } from "@/lib/format"
+import { submissionAnchorId } from "@/lib/teacher-submissions-view"
 import type { TeacherSubmissionRow } from "@/lib/teacher-submissions"
 
 /**
@@ -255,11 +256,11 @@ export function TeacherSubmissionsTable({ rows }: { rows: TeacherSubmissionRow[]
           hideCaption
           rowActions={(row) => (
             // Named per row: "Open" repeated on every row gives a screen-reader
-            // link list of identical labels with no way to choose. The href is
-            // the assignments page because that is where the editor lives — this
-            // queue is read-only (see docs/plans/wave-1.md §D2).
+            // link list of identical labels with no way to choose. The href carries
+            // the submission's own fragment, so the editor lands on the clicked row
+            // rather than the top of a page that renders every submission (TN-38).
             <Link
-              href="/teacher/assignments"
+              href={`/teacher/assignments#${submissionAnchorId(row.id)}`}
               aria-label={`Open ${row.studentName}'s submission for ${row.assessmentTitle} in assignments`}
               title={`Open in assignments: ${row.assessmentTitle}`}
               className={buttonVariants({ variant: "outline", size: "sm" })}

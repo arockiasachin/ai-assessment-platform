@@ -12,7 +12,7 @@ import type { AuthUser } from "@/lib/session"
 
 import { loadOwnedCodeTask } from "./authz"
 import { CodeEvalError } from "./errors"
-import { SIMILARITY_FLAG_THRESHOLD, compareSources } from "./similarity"
+import { SIMILARITY_FLAG_THRESHOLD, compareSources, nextSimilarityVerdict } from "./similarity"
 
 /**
  * Cohort similarity scanning for one owned code task.
@@ -124,10 +124,12 @@ export async function scanCohortSimilarityForTeacher(
           studentId: pair.studentId,
           comparedStudentId: pair.comparedStudentId,
         },
-        select: { id: true },
+        select: { id: true, verdict: true },
       })
 
-      const verdict = comparison.flagged ? "FLAGGED" : "PENDING"
+      // A scan recomputes the score, not the human decision: keep a FLAGGED/CLEARED
+      // verdict so re-running the scan cannot wipe a teacher's review (TN-48).
+      const verdict = nextSimilarityVerdict(existing?.verdict, comparison.flagged)
       const evidence = comparison.evidence as unknown as Prisma.InputJsonValue
 
       if (existing) {

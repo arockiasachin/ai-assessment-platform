@@ -204,6 +204,42 @@ export function buildAssessmentProgressRows(
   })
 }
 
+export type MarkingProgress = {
+  /** Marks recorded on the assessment. */
+  graded: number
+  /**
+   * The denominator a bar over the cohort can honestly use. Never smaller than
+   * `graded`, so the bar can never exceed its own maximum.
+   */
+  markable: number
+  valueText: string
+  complete: boolean
+}
+
+/**
+ * The "Marked" cell's bar (TN-2).
+ *
+ * `graded` is **not** a subset of `submitted`. A manual mark can exist for a student who
+ * never submitted — the seed's DSA sets are exactly that: nine `Grade` rows and zero
+ * `Submission` rows — so dividing `graded` by `submitted` produced "9 / 0 ... 100%", a
+ * ratio that cannot exist. The honest denominator is the cohort the marks are drawn from,
+ * `enrolled`, widened to `graded` (and `submitted`) so a mark recorded against a student
+ * outside that count still renders a bar that fits.
+ */
+export function markingProgress(input: {
+  graded: number
+  submitted: number
+  enrolled: number
+}): MarkingProgress {
+  const markable = Math.max(input.enrolled, input.graded, input.submitted)
+  return {
+    graded: input.graded,
+    markable,
+    valueText: `${input.graded} / ${markable}`,
+    complete: markable > 0 && input.graded >= markable,
+  }
+}
+
 /** Chart-ready points: one per teaching week, `null` where nothing was assessed. */
 export function cohortTrendPoints(
   series: CohortTrendValue["series"],

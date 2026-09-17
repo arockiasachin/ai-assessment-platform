@@ -240,6 +240,44 @@ export async function getGroupDetailForTeacher(
   }
 }
 
+/**
+ * Reject a placement that would put a student in two teams of the same offering (TN-49).
+ *
+ * `GroupMember` is unique per `(groupId, studentId)`, which stops the same student twice in
+ * one team but permits the same student in two teams of one offering — the state the groups
+ * page rendered as both "placed" and "unassigned". The structural fix is a database
+ * constraint on the offering-wide placement; until that decision is made, every write path
+ * guards against it here.
+ *
+ * A soft-removed member (`leftAt != null`) or a member of an `ARCHIVED` team is not a
+ * current placement and does not block a new one.
+ */
+async function assertStudentsNotAlreadyGrouped(
+  offeringId: string,
+  studentIds: string[],
+  options: { excludeGroupId?: string } = {},
+): Promise<void> {
+  if (studentIds.length === 0) return
+  const memberships = await prisma.groupMember.findMany({
+    where: {
+      studentId: { in: studentIds },
+      leftAt: null,
+      group: {
+        offeringId,
+        status: { not: "ARCHIVED" },
+        ...(options.excludeGroupId ? { id: { not: options.excludeGroupId } } : {}),
+      },
+    },
+    select: { group: { select: { name: true } } },
+  })
+  if (memberships.length === 0) return
+  const names = [...new Set(memberships.map((membership) => membership.group.name))]
+  throw new GroupError(
+    409,
+    `A student can belong to only one team in an offering. Already a member of: ${names.join(", ")}.`,
+  )
+}
+
 /** Create one team manually and place its members. */
 export async function createGroupForTeacher(user: AuthUser, input: unknown): Promise<GroupSummary> {
   const request = createGroupRequestSchema.parse(input)
@@ -251,6 +289,7 @@ export async function createGroupForTeacher(user: AuthUser, input: unknown): Pro
   if (enrolled.length !== uniqueStudentIds.length) {
     throw new GroupValidationError("Every group member must be actively enrolled in the offering.")
   }
+  await assertStudentsNotAlreadyGrouped(request.offeringId, uniqueStudentIds)
 
   const groupId = await prisma.$transaction(async (tx) => {
     const group = await tx.group.create({
@@ -309,6 +348,9 @@ export async function updateGroupForTeacher(
         "Every group member must be actively enrolled in the offering.",
       )
     }
+    await assertStudentsNotAlreadyGrouped(group.offeringId, addStudentIds, {
+      excludeGroupId: groupId,
+    })
   }
 
   await prisma.$transaction(async (tx) => {
@@ -432,6 +474,12 @@ export async function formTeamsForTeacher(
     const prefix = request.groupNamePrefix ?? "Team"
     const names = formation.teams.map((team) => `${prefix} ${team.index + 1}`)
     for (const name of names) await assertUniqueGroupName(request.offeringId, name)
+    // Persisting would place every candidate, so a student already on a team would end up
+    // on two (TN-49). Refuse rather than duplicate; archive the existing teams first.
+    await assertStudentsNotAlreadyGrouped(
+      request.offeringId,
+      students.map((student) => student.studentId),
+    )
 
     await prisma.$transaction(async (tx) => {
       for (const team of formation.teams) {

@@ -32,6 +32,7 @@ import {
   cohortTrendPoints,
   hasTrendData,
   lowestConfidence,
+  markingProgress,
   teacherDashboardKpis,
   type AssessmentProgressRow,
   type TeacherKpiId,
@@ -169,19 +170,28 @@ export function TeacherDashboard({
     {
       id: "marked",
       header: "Marked",
-      cell: (row) =>
-        row.graded === null || row.submitted === null ? (
-          <span className="text-muted-foreground">—</span>
-        ) : (
+      // A mark is not tied to a submission: a manual mark with no `Submission` row is
+      // legitimate, so the bar counts against the cohort, not against `submitted` (TN-2).
+      cell: (row) => {
+        if (row.graded === null || row.submitted === null) {
+          return <span className="text-muted-foreground">—</span>
+        }
+        const progress = markingProgress({
+          graded: row.graded,
+          submitted: row.submitted,
+          enrolled: overview.gradingRegime.enrolledCount,
+        })
+        return (
           <ProgressBar
             className="w-36"
             label="Marked"
-            value={row.graded}
-            max={row.submitted}
-            valueText={`${row.graded} / ${row.submitted}`}
-            tone={row.submitted > 0 && row.graded === row.submitted ? "success" : "primary"}
+            value={progress.graded}
+            max={progress.markable}
+            valueText={progress.valueText}
+            tone={progress.complete ? "success" : "primary"}
           />
-        ),
+        )
+      },
     },
     {
       id: "submitted",

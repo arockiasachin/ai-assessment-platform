@@ -12,6 +12,7 @@ import {
   cohortTrendPoints,
   hasTrendData,
   lowestConfidence,
+  markingProgress,
   reviewQueueForOffering,
   teacherDashboardKpis,
 } from "@/lib/teacher-dashboard-view"
@@ -361,5 +362,41 @@ describe("teacherDashboardKpis", () => {
     const kpi = teacherDashboardKpis(base)[0] as Record<string, unknown>
     expect(kpi.sparkline).toBeUndefined()
     expect(kpi.delta).toBeUndefined()
+  })
+})
+
+describe("markingProgress", () => {
+  it("counts marks against the cohort, not against submissions (TN-2)", () => {
+    // The seed's DSA sets have nine Grade rows and zero Submission rows: a manual mark
+    // with no submission is legitimate. `graded / submitted` produced "9 / 0 ... 100%".
+    expect(markingProgress({ graded: 9, submitted: 0, enrolled: 9 })).toEqual({
+      graded: 9,
+      markable: 9,
+      valueText: "9 / 9",
+      complete: true,
+    })
+  })
+
+  it("never lets the denominator fall below the mark count", () => {
+    // A mark recorded for a student outside the enrolled count still renders a bar that
+    // fits, rather than one over 100%.
+    const progress = markingProgress({ graded: 12, submitted: 4, enrolled: 9 })
+    expect(progress.markable).toBe(12)
+    expect(progress.complete).toBe(true)
+  })
+
+  it("uses the larger of submissions and enrolment when nothing is marked", () => {
+    expect(markingProgress({ graded: 0, submitted: 5, enrolled: 9 })).toEqual({
+      graded: 0,
+      markable: 9,
+      valueText: "0 / 9",
+      complete: false,
+    })
+  })
+
+  it("does not call a zero-mark, zero-cohort row complete", () => {
+    const progress = markingProgress({ graded: 0, submitted: 0, enrolled: 0 })
+    expect(progress.complete).toBe(false)
+    expect(progress.markable).toBe(0)
   })
 })

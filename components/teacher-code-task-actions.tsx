@@ -2,17 +2,25 @@
 
 import { useState } from "react"
 import { useRouter } from "next/navigation"
-import { Loader2, Play, Save, Sparkles, Upload } from "lucide-react"
+import { Loader2, Pencil, Play, Save, Sparkles, Trash2, Upload } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { DataTable, type Column } from "@/components/ui/data-table"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import { EmptyState } from "@/components/ui/empty-state"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { SectionCard } from "@/components/ui/section-card"
 import { StatusPill, type StatusKey } from "@/components/ui/status-pill"
 import { SUCCESS_TEXT } from "@/components/ui/tone"
-import type { CodeTaskResponse, SimilarityPair } from "@/lib/contracts/code-eval"
+import type { CodeTaskResponse, SimilarityPair, TestCaseResponse } from "@/lib/contracts/code-eval"
 import { formatConfidence, formatDateTime } from "@/lib/format"
 
 /**
@@ -35,7 +43,11 @@ import { formatConfidence, formatDateTime } from "@/lib/format"
 
 type ApiEnvelope = { success?: boolean; message?: string }
 
-async function request<T>(url: string, method: "POST" | "PATCH", body: unknown): Promise<T> {
+async function request<T>(
+  url: string,
+  method: "POST" | "PATCH" | "DELETE",
+  body: unknown,
+): Promise<T> {
   const response = await fetch(url, {
     method,
     headers: { "Content-Type": "application/json" },
@@ -400,6 +412,224 @@ export function TestCaseActions({
         </div>
       </div>
     </SectionCard>
+  )
+}
+
+/**
+ * Per-row edit and delete for one test case (TN-48).
+ *
+ * The API has always supported `PATCH` and `DELETE` on a test case; the only client call
+ * was `POST`, so a typo or a stale case could never be corrected. Keeping the actions here,
+ * beside the create form, means no new read: the row arrives from the Server Component and
+ * a successful write calls `router.refresh()`, which re-reads it.
+ *
+ * `description` is deliberately not a field in the form. Editing must not silently clear a
+ * generated case's description, so it is omitted from the request and left untouched.
+ */
+export function TestCaseRowActions({
+  assessmentId,
+  testCase,
+}: {
+  assessmentId: string
+  testCase: TestCaseResponse
+}) {
+  const { busy, error, run } = useTaskAction()
+  const [editOpen, setEditOpen] = useState(false)
+  const [deleteOpen, setDeleteOpen] = useState(false)
+  const [form, setForm] = useState(() => ({
+    name: testCase.name,
+    category: testCase.category,
+    input: testCase.input ?? "",
+    expectedOutput: testCase.expectedOutput ?? "",
+    points: String(testCase.points),
+    isHidden: testCase.isHidden,
+  }))
+
+  const save = () =>
+    run(async () => {
+      if (form.name.trim() === "") throw new Error("A test case needs a name.")
+      const points = Number(form.points)
+      if (!Number.isFinite(points) || points <= 0) {
+        throw new Error("Points must be a positive number.")
+      }
+      await request(`/api/teacher/code-tasks/${assessmentId}/test-cases/${testCase.id}`, "PATCH", {
+        name: form.name.trim(),
+        category: form.category,
+        input: form.input.trim() === "" ? null : form.input,
+        expectedOutput: form.expectedOutput.trim() === "" ? null : form.expectedOutput,
+        points,
+        isHidden: form.isHidden,
+      })
+      setEditOpen(false)
+      return "Test case updated."
+    })
+
+  const remove = () =>
+    run(async () => {
+      await request(
+        `/api/teacher/code-tasks/${assessmentId}/test-cases/${testCase.id}`,
+        "DELETE",
+        {},
+      )
+      setDeleteOpen(false)
+      return "Test case deleted."
+    })
+
+  return (
+    <div className="flex flex-col items-end gap-1">
+      <div className="flex justify-end gap-1">
+        <Button
+          variant="ghost"
+          size="xs"
+          disabled={busy}
+          aria-label={`Edit test case ${testCase.name}`}
+          onClick={() => setEditOpen(true)}
+        >
+          <Pencil className="size-3.5" />
+          Edit
+        </Button>
+        <Button
+          variant="ghost"
+          size="xs"
+          disabled={busy}
+          aria-label={`Delete test case ${testCase.name}`}
+          onClick={() => setDeleteOpen(true)}
+        >
+          <Trash2 className="size-3.5" />
+          Delete
+        </Button>
+      </div>
+      {error && (
+        <span role="alert" className="text-xs text-destructive">
+          {error}
+        </span>
+      )}
+
+      <Dialog open={editOpen} onOpenChange={setEditOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit test case</DialogTitle>
+            <DialogDescription>
+              Changes apply the next time this task is run. The description is left untouched.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="sm:col-span-2">
+              <Label htmlFor={`case-name-${testCase.id}`}>Name</Label>
+              <Input
+                id={`case-name-${testCase.id}`}
+                value={form.name}
+                onChange={(event) => setForm((prev) => ({ ...prev, name: event.target.value }))}
+              />
+            </div>
+            <div>
+              <Label htmlFor={`case-category-${testCase.id}`}>Category</Label>
+              <select
+                id={`case-category-${testCase.id}`}
+                className="mt-1 w-full rounded-md border border-input bg-background p-2 text-sm"
+                value={form.category}
+                onChange={(event) =>
+                  setForm((prev) => ({
+                    ...prev,
+                    category: event.target.value as TestCaseResponse["category"],
+                  }))
+                }
+              >
+                {TEST_CATEGORIES.map((category) => (
+                  <option key={category} value={category}>
+                    {category}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <Label htmlFor={`case-points-${testCase.id}`}>Points</Label>
+              <Input
+                id={`case-points-${testCase.id}`}
+                inputMode="decimal"
+                value={form.points}
+                onChange={(event) => setForm((prev) => ({ ...prev, points: event.target.value }))}
+              />
+            </div>
+            <div className="sm:col-span-2">
+              <Label htmlFor={`case-input-${testCase.id}`}>Input</Label>
+              <textarea
+                id={`case-input-${testCase.id}`}
+                className="mt-1 min-h-16 w-full rounded-md border border-input bg-background p-2 font-mono text-xs"
+                value={form.input}
+                onChange={(event) => setForm((prev) => ({ ...prev, input: event.target.value }))}
+              />
+            </div>
+            <div className="sm:col-span-2">
+              <Label htmlFor={`case-expected-${testCase.id}`}>Expected output</Label>
+              <textarea
+                id={`case-expected-${testCase.id}`}
+                className="mt-1 min-h-16 w-full rounded-md border border-input bg-background p-2 font-mono text-xs"
+                value={form.expectedOutput}
+                onChange={(event) =>
+                  setForm((prev) => ({ ...prev, expectedOutput: event.target.value }))
+                }
+              />
+            </div>
+            <label className="flex items-center gap-2 text-sm sm:col-span-2">
+              <input
+                type="checkbox"
+                checked={form.isHidden}
+                onChange={(event) =>
+                  setForm((prev) => ({ ...prev, isHidden: event.target.checked }))
+                }
+              />
+              Hidden from students (only pass/fail is shown)
+            </label>
+          </div>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={busy}
+              onClick={() => setEditOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button type="button" disabled={busy} onClick={() => void save()}>
+              {busy ? <Loader2 className="animate-spin" /> : <Save />}
+              Save test case
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{`Delete "${testCase.name}"?`}</DialogTitle>
+            <DialogDescription>
+              The test case is removed from this task. Past runs keep their recorded results, but
+              the case can no longer be run or restored.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={busy}
+              onClick={() => setDeleteOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              disabled={busy}
+              onClick={() => void remove()}
+            >
+              {busy ? <Loader2 className="animate-spin" /> : <Trash2 />}
+              Delete test case
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
   )
 }
 

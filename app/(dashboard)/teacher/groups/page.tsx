@@ -9,7 +9,7 @@ import {
   GroupContributionForm,
   GroupFormationPanel,
   GroupGradeSuggestionForm,
-  GroupMilestoneCompleteButton,
+  GroupMilestoneActions,
   GroupMilestoneForm,
   GroupsOfferingPicker,
 } from "@/components/teacher-groups-manager"
@@ -476,9 +476,7 @@ export default async function TeacherGroupsPage({
           label={MILESTONE_STATE_LABEL[milestone.status]}
           dot
         />
-        {milestone.status !== "COMPLETED" && (
-          <GroupMilestoneCompleteButton milestoneId={milestone.id} title={milestone.title} />
-        )}
+        <GroupMilestoneActions milestone={milestone} />
       </span>
     ),
     description: milestone.description ?? undefined,

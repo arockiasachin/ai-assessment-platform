@@ -39,6 +39,26 @@ export type SimilarityComparison = {
   evidence: SimilarityEvidence
 }
 
+/** A pair's review state. `PENDING` is the scan's own, un-reviewed state. */
+export type SimilarityVerdict = "PENDING" | "FLAGGED" | "CLEARED"
+
+/**
+ * The verdict a re-scan may store for an existing pair (TN-48).
+ *
+ * A scan recomputes the *similarity*; it is not a review, so it must never discard a
+ * teacher's verdict. Once a pair has been `FLAGGED` or `CLEARED` by a human, a later scan
+ * keeps that decision; only a new pair, or one still `PENDING`, may be (re)classified from
+ * the score. Without this, pressing "Scan cohort" after a review silently reset a decision
+ * the teacher had recorded.
+ */
+export function nextSimilarityVerdict(
+  existing: SimilarityVerdict | null | undefined,
+  flagged: boolean,
+): SimilarityVerdict {
+  if (existing === "FLAGGED" || existing === "CLEARED") return existing
+  return flagged ? "FLAGGED" : "PENDING"
+}
+
 const TWO_CHAR_OPERATORS = new Set([
   "==",
   "!=",

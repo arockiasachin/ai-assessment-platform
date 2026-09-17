@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react"
 import { AlertTriangle, BarChart3, Loader2 } from "lucide-react"
 
 import { AnalyticsThresholdsPanel } from "@/components/analytics-thresholds-panel"
-import { ClassAverageChart, GradeDistributionChart } from "@/components/charts"
+import { ClassAverageChart, GradeDistributionChart, TrendChart } from "@/components/charts"
 import { Badge } from "@/components/ui/badge"
 import { Callout } from "@/components/ui/callout"
 import { Button } from "@/components/ui/button"
@@ -31,6 +31,7 @@ import type {
   TeacherAnalyticsOverviewResponse,
   AnalyticsSettingsResponse,
 } from "@/lib/contracts/analytics"
+import { cohortTrendPoints, hasTrendData } from "@/lib/teacher-dashboard-view"
 
 /**
  * Teacher analytics and intervention dashboard.
@@ -232,6 +233,96 @@ export function TeacherAnalyticsDashboard({
             ))}
           </CardContent>
         </Card>
+      )}
+
+      {/*
+        The payload has always carried the at-risk roster and the weekly series; the page
+        simply never rendered them, so the "At risk" tile was a dead end and both reads ran
+        for nothing (TN-6). Both are rendered here from the same overview the rest of the
+        page uses — no second fetch.
+      */}
+      {overview && (
+        <div className="grid gap-6 lg:grid-cols-2">
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">At-risk students</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {overview.atRisk.atRisk.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  No student is below the pass line, and every enrolled student has a published
+                  total.
+                </p>
+              ) : (
+                <div className="space-y-3">
+                  <p className="text-xs text-muted-foreground">
+                    {overview.atRisk.atRisk.length} of {overview.atRisk.enrolledCount} enrolled ·{" "}
+                    {overview.atRisk.aboveBoundaryCount} above the pass line ·{" "}
+                    {overview.atRisk.publishedCount} with a published total
+                    {overview.atRisk.boundary !== null
+                      ? ` · pass line ${formatPercent(overview.atRisk.boundary)}`
+                      : ""}
+                  </p>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Student</TableHead>
+                        <TableHead>Register number</TableHead>
+                        <TableHead>Grand total</TableHead>
+                        <TableHead>Why</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {overview.atRisk.atRisk.map((student) => (
+                        <TableRow key={student.studentId}>
+                          <TableCell className="max-w-[14rem] truncate">
+                            {student.fullName}
+                          </TableCell>
+                          <TableCell>{student.registerNumber}</TableCell>
+                          <TableCell>{formatPercent(student.grandTotal)}</TableCell>
+                          <TableCell>
+                            {student.group === "below-boundary" ? (
+                              <Badge variant="destructive">Below the pass line</Badge>
+                            ) : (
+                              <Badge variant="secondary">No published work</Badge>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">Cohort trend</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {overview.trend.series === null ? (
+                <p className="text-sm text-muted-foreground">
+                  This offering has no term window, so there is no axis to bucket the cohort&apos;s
+                  marks against.
+                </p>
+              ) : hasTrendData(overview.trend.series) ? (
+                <>
+                  <TrendChart data={cohortTrendPoints(overview.trend.series)} />
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    Mean score by teaching week · {overview.trend.series.weeks} teaching weeks ·{" "}
+                    {overview.trend.markedCount} released marks. A week with no assessed work is
+                    left blank.
+                  </p>
+                </>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  No released marks fall inside the term window yet.
+                </p>
+              )}
+            </CardContent>
+          </Card>
+        </div>
       )}
 
       {overview && overview.assessments.length > 0 && (

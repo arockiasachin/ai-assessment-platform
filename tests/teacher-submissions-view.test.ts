@@ -2,8 +2,10 @@ import { describe, expect, it } from "vitest"
 
 import type { TeacherSubmissionRow } from "@/lib/teacher-submissions"
 import {
+  buildSubmissionSaveBody,
   feedbackDraftValue,
   scoreDraftValue,
+  submissionAnchorId,
   submissionBodyText,
   toSubmissionEditorItem,
   validateScoreInput,
@@ -189,5 +191,75 @@ describe("validateScoreInput", () => {
   it("accepts a fractional mark, which the column stores", () => {
     // `Grade.points` is a decimal, and rubric scoring produces halves.
     expect(validateScoreInput("21.5", 30)).toEqual({ ok: true, score: 21.5 })
+  })
+})
+
+describe("submissionAnchorId", () => {
+  it("is a stable DOM id the queue can link to", () => {
+    // The submissions queue's "Open" links to `/teacher/assignments#<id>`; the card in the
+    // editor uses the same helper, so the two cannot drift (TN-38).
+    expect(submissionAnchorId("sub_1")).toBe("submission-sub_1")
+  })
+})
+
+describe("buildSubmissionSaveBody", () => {
+  it("omits the score entirely when the teacher did not touch it (TN-45)", () => {
+    // This is the fix: a feedback-only save must not send `score: null`, which the route
+    // reads as a deliberate un-grade and which reverted a LATE/DRAFT submission to SUBMITTED.
+    const item = toSubmissionEditorItem(row({ state: "LATE", feedback: null }))
+    const built = buildSubmissionSaveBody({
+      submissionId: item.id,
+      scoreDraft: undefined,
+      feedbackDraft: "Good work",
+      item,
+    })
+
+    expect(built.ok).toBe(true)
+    if (!built.ok) return
+    expect(built.body).toEqual({ submissionId: "sub_1", feedback: "Good work" })
+    expect("score" in built.body).toBe(false)
+  })
+
+  it("sends an edited score", () => {
+    const item = toSubmissionEditorItem(row())
+    const built = buildSubmissionSaveBody({
+      submissionId: item.id,
+      scoreDraft: "21",
+      feedbackDraft: undefined,
+      item,
+    })
+
+    expect(built.ok).toBe(true)
+    if (!built.ok) return
+    expect(built.body.score).toBe(21)
+  })
+
+  it("treats an emptied score field as a deliberate clear", () => {
+    // An empty string is a real edit — "clear this mark" — not an absent draft.
+    const item = toSubmissionEditorItem(row({ points: 21, published: true }))
+    const built = buildSubmissionSaveBody({
+      submissionId: item.id,
+      scoreDraft: "",
+      feedbackDraft: undefined,
+      item,
+    })
+
+    expect(built.ok).toBe(true)
+    if (!built.ok) return
+    expect(built.body.score).toBeNull()
+  })
+
+  it("refuses an out-of-range score before any request is sent", () => {
+    const item = toSubmissionEditorItem(row())
+    const built = buildSubmissionSaveBody({
+      submissionId: item.id,
+      scoreDraft: "31",
+      feedbackDraft: undefined,
+      item,
+    })
+
+    expect(built.ok).toBe(false)
+    if (built.ok) return
+    expect(built.message).toContain("30")
   })
 })

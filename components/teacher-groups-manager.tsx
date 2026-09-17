@@ -2,9 +2,17 @@
 
 import { useState } from "react"
 import { usePathname, useRouter } from "next/navigation"
-import { CalendarCheck, Loader2, Plus, Wand2 } from "lucide-react"
+import { CalendarCheck, Loader2, Pencil, Plus, Trash2, Wand2 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import {
@@ -17,9 +25,11 @@ import {
 import { SUCCESS_TEXT } from "@/components/ui/tone"
 import type {
   FormationResultValue,
+  MilestoneResponse,
   RosterStudent,
   TeacherOfferingSummary,
 } from "@/lib/contracts/groups"
+import { milestoneCreatePayload } from "@/lib/groups/milestone-form"
 
 /**
  * The `teacher/groups` write surface.
@@ -440,16 +450,22 @@ export function GroupFormationPanel({
   )
 }
 
-/** Add a milestone to one group. */
+/** Add a milestone to one group, with its description, weight and due date (TN-49). */
 export function GroupMilestoneForm({ groupId }: { groupId: string }) {
   const router = useRouter()
-  const [title, setTitle] = useState("")
+  const [draft, setDraft] = useState({
+    title: "",
+    description: "",
+    weight: "1",
+    dueDate: "",
+  })
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   async function addMilestone() {
-    if (title.trim() === "") {
-      setError("A milestone needs a title.")
+    const built = milestoneCreatePayload(draft)
+    if (!built.ok) {
+      setError(built.message)
       return
     }
     setBusy(true)
@@ -458,11 +474,11 @@ export function GroupMilestoneForm({ groupId }: { groupId: string }) {
       const response = await fetch("/api/teacher/groups/milestones", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ groupId, title: title.trim() }),
+        body: JSON.stringify({ groupId, ...built.body }),
       })
       const { ok, data } = await readJson<unknown>(response)
       if (!ok) throw new Error(data.message ?? "Unable to add the milestone.")
-      setTitle("")
+      setDraft({ title: "", description: "", weight: "1", dueDate: "" })
       router.refresh()
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Unable to add the milestone.")
@@ -472,75 +488,270 @@ export function GroupMilestoneForm({ groupId }: { groupId: string }) {
   }
 
   return (
-    <div className="flex flex-wrap items-end gap-2">
-      <div className="min-w-[200px] flex-1">
-        <Label htmlFor={`milestone-${groupId}`}>New milestone</Label>
-        <Input
-          id={`milestone-${groupId}`}
-          placeholder="e.g. Proposal draft"
-          value={title}
-          onChange={(event) => setTitle(event.target.value)}
-        />
-        {error && (
-          <p role="alert" className="mt-1 text-xs text-destructive">
-            {error}
-          </p>
-        )}
+    <div className="space-y-3 rounded-lg border border-border p-3">
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div>
+          <Label htmlFor={`milestone-title-${groupId}`}>Title</Label>
+          <Input
+            id={`milestone-title-${groupId}`}
+            placeholder="e.g. Proposal draft"
+            value={draft.title}
+            onChange={(event) => setDraft((prev) => ({ ...prev, title: event.target.value }))}
+          />
+        </div>
+        <div>
+          <Label htmlFor={`milestone-due-${groupId}`}>Due date</Label>
+          <Input
+            id={`milestone-due-${groupId}`}
+            type="date"
+            value={draft.dueDate}
+            onChange={(event) => setDraft((prev) => ({ ...prev, dueDate: event.target.value }))}
+          />
+        </div>
+        <div className="sm:col-span-2">
+          <Label htmlFor={`milestone-description-${groupId}`}>Description</Label>
+          <textarea
+            id={`milestone-description-${groupId}`}
+            className="mt-1 min-h-16 w-full rounded-md border border-input bg-background p-2 text-sm"
+            placeholder="What counts as done for this milestone"
+            value={draft.description}
+            onChange={(event) => setDraft((prev) => ({ ...prev, description: event.target.value }))}
+          />
+        </div>
+        <div>
+          <Label htmlFor={`milestone-weight-${groupId}`}>Weight</Label>
+          <Input
+            id={`milestone-weight-${groupId}`}
+            className="w-24"
+            inputMode="decimal"
+            value={draft.weight}
+            onChange={(event) => setDraft((prev) => ({ ...prev, weight: event.target.value }))}
+          />
+        </div>
       </div>
+      {error && (
+        <p role="alert" className="text-xs text-destructive">
+          {error}
+        </p>
+      )}
       <Button variant="outline" size="sm" onClick={() => void addMilestone()} disabled={busy}>
-        <CalendarCheck className="size-4" /> Add milestone
+        {busy ? <Loader2 className="size-4 animate-spin" /> : <CalendarCheck className="size-4" />}
+        Add milestone
       </Button>
     </div>
   )
 }
 
-/** Mark one milestone complete (the engine timestamps it). */
-export function GroupMilestoneCompleteButton({
-  milestoneId,
-  title,
-}: {
-  milestoneId: string
-  title: string
-}) {
+/**
+ * Complete, edit or delete one milestone (TN-49).
+ *
+ * The API accepted `description`, `weight` and `dueDate` and supported `PATCH`, but the UI
+ * only ever sent a title and had no delete, so a milestone could be created and never
+ * corrected. The edit form is seeded from the row itself, and clearing an optional field
+ * sends an explicit `null` — a deliberate clear, distinct from leaving it untouched.
+ */
+export function GroupMilestoneActions({ milestone }: { milestone: MilestoneResponse }) {
   const router = useRouter()
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [editOpen, setEditOpen] = useState(false)
+  const [deleteOpen, setDeleteOpen] = useState(false)
+  const [draft, setDraft] = useState(() => ({
+    title: milestone.title,
+    description: milestone.description ?? "",
+    weight: String(milestone.weight),
+    dueDate: milestone.dueDate ? milestone.dueDate.slice(0, 10) : "",
+  }))
 
-  async function completeMilestone() {
+  async function send(body: unknown, method: "PATCH" | "DELETE"): Promise<boolean> {
     setBusy(true)
     setError(null)
     try {
-      const response = await fetch(`/api/teacher/groups/milestones/${milestoneId}`, {
-        method: "PATCH",
+      const response = await fetch(`/api/teacher/groups/milestones/${milestone.id}`, {
+        method,
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: "COMPLETED" }),
+        ...(method === "PATCH" ? { body: JSON.stringify(body) } : {}),
       })
       const { ok, data } = await readJson<unknown>(response)
-      if (!ok) throw new Error(data.message ?? "Unable to complete the milestone.")
+      if (!ok) throw new Error(data.message ?? "Unable to update the milestone.")
       router.refresh()
+      return true
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Unable to complete the milestone.")
+      setError(caught instanceof Error ? caught.message : "Unable to update the milestone.")
+      return false
     } finally {
       setBusy(false)
     }
   }
 
+  async function completeMilestone() {
+    await send({ status: "COMPLETED" }, "PATCH")
+  }
+
+  async function saveEdits() {
+    const title = draft.title.trim()
+    if (title === "") {
+      setError("A milestone needs a title.")
+      return
+    }
+    const weight = draft.weight.trim() === "" ? 1 : Number(draft.weight)
+    if (!Number.isFinite(weight) || weight <= 0) {
+      setError("Weight must be a positive number.")
+      return
+    }
+    const saved = await send(
+      {
+        title,
+        description: draft.description.trim() === "" ? null : draft.description.trim(),
+        weight,
+        dueDate: draft.dueDate.trim() === "" ? null : draft.dueDate,
+      },
+      "PATCH",
+    )
+    if (saved) setEditOpen(false)
+  }
+
+  async function removeMilestone() {
+    if (await send({}, "DELETE")) setDeleteOpen(false)
+  }
+
   return (
     <>
-      <Button
-        variant="ghost"
-        size="xs"
-        onClick={() => void completeMilestone()}
-        disabled={busy}
-        aria-label={`Mark ${title} complete`}
-      >
-        Mark complete
-      </Button>
+      <span className="inline-flex flex-wrap items-center gap-1">
+        {milestone.status !== "COMPLETED" && (
+          <Button
+            variant="ghost"
+            size="xs"
+            onClick={() => void completeMilestone()}
+            disabled={busy}
+            aria-label={`Mark ${milestone.title} complete`}
+          >
+            Mark complete
+          </Button>
+        )}
+        <Button
+          variant="ghost"
+          size="xs"
+          onClick={() => setEditOpen(true)}
+          disabled={busy}
+          aria-label={`Edit milestone ${milestone.title}`}
+        >
+          <Pencil className="size-3.5" />
+          Edit
+        </Button>
+        <Button
+          variant="ghost"
+          size="xs"
+          onClick={() => setDeleteOpen(true)}
+          disabled={busy}
+          aria-label={`Delete milestone ${milestone.title}`}
+        >
+          <Trash2 className="size-3.5" />
+          Delete
+        </Button>
+      </span>
       {error && (
         <span role="alert" className="text-xs text-destructive">
           {error}
         </span>
       )}
+
+      <Dialog open={editOpen} onOpenChange={setEditOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit milestone</DialogTitle>
+            <DialogDescription>
+              Weights decide the group&apos;s weighted completion; an empty due date or description
+              clears it.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div>
+              <Label htmlFor={`milestone-edit-title-${milestone.id}`}>Title</Label>
+              <Input
+                id={`milestone-edit-title-${milestone.id}`}
+                value={draft.title}
+                onChange={(event) => setDraft((prev) => ({ ...prev, title: event.target.value }))}
+              />
+            </div>
+            <div>
+              <Label htmlFor={`milestone-edit-due-${milestone.id}`}>Due date</Label>
+              <Input
+                id={`milestone-edit-due-${milestone.id}`}
+                type="date"
+                value={draft.dueDate}
+                onChange={(event) => setDraft((prev) => ({ ...prev, dueDate: event.target.value }))}
+              />
+            </div>
+            <div className="sm:col-span-2">
+              <Label htmlFor={`milestone-edit-description-${milestone.id}`}>Description</Label>
+              <textarea
+                id={`milestone-edit-description-${milestone.id}`}
+                className="mt-1 min-h-16 w-full rounded-md border border-input bg-background p-2 text-sm"
+                value={draft.description}
+                onChange={(event) =>
+                  setDraft((prev) => ({ ...prev, description: event.target.value }))
+                }
+              />
+            </div>
+            <div>
+              <Label htmlFor={`milestone-edit-weight-${milestone.id}`}>Weight</Label>
+              <Input
+                id={`milestone-edit-weight-${milestone.id}`}
+                className="w-24"
+                inputMode="decimal"
+                value={draft.weight}
+                onChange={(event) => setDraft((prev) => ({ ...prev, weight: event.target.value }))}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={busy}
+              onClick={() => setEditOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button type="button" disabled={busy} onClick={() => void saveEdits()}>
+              {busy ? <Loader2 className="animate-spin" /> : <CalendarCheck />}
+              Save milestone
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{`Delete "${milestone.title}"?`}</DialogTitle>
+            <DialogDescription>
+              The milestone is removed from this team&apos;s progress and cannot be restored.
+              Contribution evidence is not affected.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={busy}
+              onClick={() => setDeleteOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              disabled={busy}
+              onClick={() => void removeMilestone()}
+            >
+              {busy ? <Loader2 className="animate-spin" /> : <Trash2 />}
+              Delete milestone
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   )
 }

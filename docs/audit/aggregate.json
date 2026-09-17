@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-09-17T21:34:29.010Z",
+  "generatedAt": "2026-09-17T21:40:23.785Z",
   "source": {
     "convention": "docs/audit/README.md",
     "files": [
@@ -42,9 +42,9 @@
           "severity": "major",
           "category": "fabricated-number",
           "title": "Marking progress renders an impossible ratio (9 / 0) beside a contradictory Submitted cell",
-          "evidence": "GET /teacher as dsa.teacher: DSA Section A CAT 1 shows Marked 9 / 0 with a 100% bar, and 0 / 9 for Submitted. Root cause confirmed in SQL: Submission rows = 0 while Grade rows = 9, because graded is not a subset of submitted. The planner repeats it in words: Week 2 practice set 0 submitted, 4 graded. Re-verified 2026-09-17 against the re-seeded database: still reproduces.",
+          "evidence": "GET /teacher as dsa.teacher: DSA Section A CAT 1 shows Marked 9 / 0 with a 100% bar, and 0 / 9 for Submitted. Root cause confirmed in SQL: Submission rows = 0 while Grade rows = 9, because graded is not a subset of submitted. The planner repeats it in words: Week 2 practice set 0 submitted, 4 graded. Re-verified 2026-09-17 against the re-seeded database: still reproduces. Fixed 2026-09-18: the Marked bar now counts marks against the cohort, not against submissions, because a manual mark with no Submission row is legitimate product behaviour and graded is not a subset of submitted. `lib/teacher-dashboard-view.ts` gains `markingProgress` and the cell uses it. Verified on the running app: GET /teacher as dsa.teacher renders DSA Section A CAT 1 Marked `9 / 9` and Submitted `0 / 9` (was `9 / 0` beside a 100% bar), and no `N / 0` ratio remains anywhere on the page.",
           "location": "components/teacher-dashboard.tsx:166-179",
-          "status": "open"
+          "status": "fixed"
         },
         {
           "id": "TN-3",
@@ -81,9 +81,9 @@
           "severity": "major",
           "category": "broken-flow",
           "title": "Publish results is irreversible and fires with no confirmation",
-          "evidence": "components/teacher-classes-manager.tsx posts to /api/teacher/offerings/[id]/results directly from onClick with no confirm or dialog anywhere in the file. The page copy itself says publishing cannot be undone and starts the retention clock, so one misclick purges a cohort after 15 days.",
+          "evidence": "components/teacher-classes-manager.tsx posts to /api/teacher/offerings/[id]/results directly from onClick with no confirm or dialog anywhere in the file. The page copy itself says publishing cannot be undone and starts the retention clock, so one misclick purges a cohort after 15 days. Fixed 2026-09-18: publishing is one-way (`publishOfferingResults` stamps resultsPublishedAt exactly once and there is no route that clears it), so the button now opens a confirmation dialog that names the 15-day retention clock and states there is no unpublish action, matching the assessment release control. The copy and state live in `lib/results-publication-view.ts` and are unit-tested in `tests/results-publication-view.test.ts`.",
           "location": "components/teacher-classes-manager.tsx:159-176",
-          "status": "open"
+          "status": "fixed"
         },
         {
           "id": "TN-6",
@@ -94,9 +94,9 @@
           "severity": "major",
           "category": "unreachable-ui",
           "title": "Analytics promises trends and at-risk students and renders neither; the payload is computed and discarded",
-          "evidence": "The nav and page description say Grade distribution, question quality, trends, and at-risk students. GET /teacher/analytics (demo) renders no at-risk content and no trend chart, yet the RSC payload contains the full roster (atRisk: 2 students) and the 15-week series. The dashboard At risk 2 tile is therefore a dead end, and the roster and trend queries run on every load for nothing. Re-verified 2026-09-17 against the re-seeded database: still reproduces.",
+          "evidence": "The nav and page description say Grade distribution, question quality, trends, and at-risk students. GET /teacher/analytics (demo) renders no at-risk content and no trend chart, yet the RSC payload contains the full roster (atRisk: 2 students) and the 15-week series. The dashboard At risk 2 tile is therefore a dead end, and the roster and trend queries run on every load for nothing. Re-verified 2026-09-17 against the re-seeded database: still reproduces. Fixed 2026-09-18: `components/teacher-analytics-dashboard.tsx` now renders the at-risk roster and the weekly trend from the overview it already fetched, so the At risk tile is no longer a dead end and neither read runs for nothing. Verified on the running app: GET /teacher/analytics as demo.teacher renders `At-risk students` (2 of 5 enrolled, pass line 50.0%, Demo Student Four below the line and Demo Student Five with no published work) and `Cohort trend` (15 teaching weeks, 8 released marks, chart SVG present).",
           "location": "components/teacher-analytics-dashboard.tsx",
-          "status": "open"
+          "status": "fixed"
         },
         {
           "id": "TN-7",
@@ -486,9 +486,9 @@
           "severity": "major",
           "category": "partial-implementation",
           "title": "Review queue never shows the submission being judged",
-          "evidence": "GET /api/teacher/reviews returns submission.contentText but components/teacher-review-queue.tsx has zero references to contentText, so the text appears only in the RSC payload and the teacher sees just the model's ~64-char self-quote.",
+          "evidence": "GET /api/teacher/reviews returns submission.contentText but components/teacher-review-queue.tsx has zero references to contentText, so the text appears only in the RSC payload and the teacher sees just the model's ~64-char self-quote. Fixed 2026-09-18: `components/teacher-review-queue.tsx` now renders `submission.contentText` in a Submission block above the suggestions, with `No text submitted.` when empty. Verified on the running app: GET /teacher/reviews as demo.teacher renders 3 Submission blocks, one carrying the descriptive answer text and two honest empty ones for quiz submissions.",
           "location": "components/teacher-review-queue.tsx",
-          "status": "open"
+          "status": "fixed"
         },
         {
           "id": "TN-37",
@@ -512,9 +512,9 @@
           "severity": "major",
           "category": "dead-control",
           "title": "Submissions queue's Open action does not open the submission",
-          "evidence": "/teacher/submissions renders 13 Open rows but all 14 hrefs in the page are the bare href=\"/teacher/assignments\", and the target page has no assessment list to search. /teacher/submissions as demo.teacher now renders 3 submissions and 3 Open rows (the audit's own submissions are gone after the re-seed); every per-row action is still the fixed href=\"/teacher/assignments\" with no row id interpolated, so Open still lands on the generic assignments page rather than the clicked submission, and that page has no assessment list to search. Re-verified 2026-09-17.",
+          "evidence": "/teacher/submissions renders 13 Open rows but all 14 hrefs in the page are the bare href=\"/teacher/assignments\", and the target page has no assessment list to search. /teacher/submissions as demo.teacher now renders 3 submissions and 3 Open rows (the audit's own submissions are gone after the re-seed); every per-row action is still the fixed href=\"/teacher/assignments\" with no row id interpolated, so Open still lands on the generic assignments page rather than the clicked submission, and that page has no assessment list to search. Re-verified 2026-09-17. Fixed 2026-09-18: the per-row Open link now carries the submission's own fragment (`/teacher/assignments#submission-<id>`) and the editor card carries the matching id, so Open lands on the clicked submission instead of the page top. Verified on the running app: GET /teacher/submissions as demo.teacher renders three distinct `#submission-...` hrefs and GET /teacher/assignments renders the three matching `id=submission-...` anchors.",
           "location": "components/teacher-submissions-table.tsx:258-268",
-          "status": "open"
+          "status": "fixed"
         },
         {
           "id": "TN-39",
@@ -603,9 +603,9 @@
           "severity": "major",
           "category": "broken-flow",
           "title": "Grading editor's feedback-only save rewrites the submission status",
-          "evidence": "save() always sends score and an empty input validates to a null score, so a LATE submission became SUBMITTED with the LATE flag destroyed, and a DRAFT became SUBMITTED with submittedAt still NULL; the student's next save then returns 409. Caveat (re-verification 2026-09-17): the LATE and DRAFT submissions in the original observation were audit-created; the re-seeded database's 7 Submissions are all SUBMITTED with submittedAt set. The mechanism is unchanged; save() still posts a score on every save (components/teacher-submissions-manager.tsx:118-160).",
+          "evidence": "save() always sends score and an empty input validates to a null score, so a LATE submission became SUBMITTED with the LATE flag destroyed, and a DRAFT became SUBMITTED with submittedAt still NULL; the student's next save then returns 409. Caveat (re-verification 2026-09-17): the LATE and DRAFT submissions in the original observation were audit-created; the re-seeded database's 7 Submissions are all SUBMITTED with submittedAt set. The mechanism is unchanged; save() still posts a score on every save (components/teacher-submissions-manager.tsx:118-160). Fixed 2026-09-18: the editor no longer sends a score it was not given — `buildSubmissionSaveBody` in `lib/teacher-submissions-view.ts` omits an untouched score, so a feedback-only save cannot rewrite the status, while an emptied score field is still sent as an explicit null that deliberately un-grades. Verified by the new DB regression test `tests/submission-feedback-save-status.test.ts` (3 tests, passing against the test database): a LATE submission stays LATE with submittedAt intact and a DRAFT stays DRAFT with submittedAt null, and the explicit-clear case still un-grades.",
           "location": "components/teacher-submissions-manager.tsx:118-160",
-          "status": "open"
+          "status": "fixed"
         },
         {
           "id": "TN-46",
@@ -642,9 +642,9 @@
           "severity": "major",
           "category": "missing-write-path",
           "title": "Code-task test cases can be created but never edited or deleted and re-scanning wipes the teacher's verdict",
-          "evidence": "PATCH and DELETE on test-cases work via the API but the only client call is POST; a similarity PATCH verdict FLAGGED is reset to PENDING by the next Scan cohort POST, and GET runs returns no sourceCode while GET similarity is 405. Caveat (re-verification 2026-09-17): the similarity verdict and the extra runs in the original observation were audit-created; the re-seeded database has only the 2 seeded PASSED runs and no similarity pairs. The mechanism is unchanged (only POST is wired for test cases; a re-scan rewrites pending verdicts).",
+          "evidence": "PATCH and DELETE on test-cases work via the API but the only client call is POST; a similarity PATCH verdict FLAGGED is reset to PENDING by the next Scan cohort POST, and GET runs returns no sourceCode while GET similarity is 405. Caveat (re-verification 2026-09-17): the similarity verdict and the extra runs in the original observation were audit-created; the re-seeded database has only the 2 seeded PASSED runs and no similarity pairs. The mechanism is unchanged (only POST is wired for test cases; a re-scan rewrites pending verdicts). Fixed 2026-09-18: (1) a re-scan no longer discards a human verdict — `nextSimilarityVerdict` in `lib/code-eval/similarity.ts` keeps FLAGGED/CLEARED and only reclassifies new or PENDING pairs; (2) `TestCaseRowActions` in `components/teacher-code-task-actions.tsx` wires the existing PATCH and DELETE with per-row Edit and Delete dialogs, rendered from the page's test-case table. Verified: `tests/code-eval-similarity.test.ts` pins the verdict rule, and the extended `tests/code-eval-pipeline.test.ts` re-scans after a CLEARED verdict and sees it survive; both pass against the test database.",
           "location": "components/teacher-code-task-actions.tsx:255-401",
-          "status": "open"
+          "status": "fixed"
         },
         {
           "id": "TN-49",
@@ -655,7 +655,7 @@
           "severity": "major",
           "category": "missing-write-path",
           "title": "Groups milestones are title-only and groups are disconnected from GROUP_PROJECT assessments",
-          "evidence": "The milestone API accepts description, weight and dueDate but the UI sends only groupId and title with no edit or delete; there is no peer-evaluation config surface, Group has no assessmentId (schema.prisma:890-906), and a student can be in two teams rendering Members placed 4 / 5 and Unassigned 2. Caveat (re-verification 2026-09-17): the second team and the 'Members placed 4 / 5' state were audit-created; the re-seeded database has one 3-member team (demo-group-alpha) and no student in two teams. The title-only milestone write path is unchanged (the UI sends only groupId and title).",
+          "evidence": "The milestone API accepts description, weight and dueDate but the UI sends only groupId and title with no edit or delete; there is no peer-evaluation config surface, Group has no assessmentId (schema.prisma:890-906), and a student can be in two teams rendering Members placed 4 / 5 and Unassigned 2. Caveat (re-verification 2026-09-17): the second team and the 'Members placed 4 / 5' state were audit-created; the re-seeded database has one 3-member team (demo-group-alpha) and no student in two teams. The title-only milestone write path is unchanged (the UI sends only groupId and title). Partially fixed 2026-09-18, still open for the schema-dependent half. Done: milestone create now sends description, weight and due date (`lib/groups/milestone-form.ts`), each milestone has Edit and Delete actions backed by `deleteMilestoneForTeacher` and a new DELETE route handler, and the write paths refuse to place a student in two teams of one offering. Verified by `tests/groups-milestone-write-paths.test.ts` (5 tests passing against the test database: create fields, edit/clear, delete plus audit row, duplicate guard, reuse after archive). Not done, needs a decision: linking a Group to a GROUP_PROJECT assessment needs a new `Group.assessmentId` column, which is a schema change the brief forbids without approval, so it is reported here rather than migrated.",
           "location": "components/teacher-groups-manager.tsx:443-545",
           "status": "open"
         },
@@ -953,8 +953,8 @@
         "confidentiality-leak": 1
       },
       "byStatus": {
-        "open": 64,
-        "fixed": 6,
+        "open": 57,
+        "fixed": 13,
         "wontfix": 0
       },
       "byAgent": {
@@ -1919,9 +1919,9 @@
           "severity": "major",
           "category": "fabricated-number",
           "title": "Marking progress renders an impossible ratio (9 / 0) beside a contradictory Submitted cell",
-          "evidence": "GET /teacher as dsa.teacher: DSA Section A CAT 1 shows Marked 9 / 0 with a 100% bar, and 0 / 9 for Submitted. Root cause confirmed in SQL: Submission rows = 0 while Grade rows = 9, because graded is not a subset of submitted. The planner repeats it in words: Week 2 practice set 0 submitted, 4 graded. Re-verified 2026-09-17 against the re-seeded database: still reproduces.",
+          "evidence": "GET /teacher as dsa.teacher: DSA Section A CAT 1 shows Marked 9 / 0 with a 100% bar, and 0 / 9 for Submitted. Root cause confirmed in SQL: Submission rows = 0 while Grade rows = 9, because graded is not a subset of submitted. The planner repeats it in words: Week 2 practice set 0 submitted, 4 graded. Re-verified 2026-09-17 against the re-seeded database: still reproduces. Fixed 2026-09-18: the Marked bar now counts marks against the cohort, not against submissions, because a manual mark with no Submission row is legitimate product behaviour and graded is not a subset of submitted. `lib/teacher-dashboard-view.ts` gains `markingProgress` and the cell uses it. Verified on the running app: GET /teacher as dsa.teacher renders DSA Section A CAT 1 Marked `9 / 9` and Submitted `0 / 9` (was `9 / 0` beside a 100% bar), and no `N / 0` ratio remains anywhere on the page.",
           "location": "components/teacher-dashboard.tsx:166-179",
-          "status": "open"
+          "status": "fixed"
         },
         {
           "id": "TN-3",
@@ -1958,9 +1958,9 @@
           "severity": "major",
           "category": "broken-flow",
           "title": "Publish results is irreversible and fires with no confirmation",
-          "evidence": "components/teacher-classes-manager.tsx posts to /api/teacher/offerings/[id]/results directly from onClick with no confirm or dialog anywhere in the file. The page copy itself says publishing cannot be undone and starts the retention clock, so one misclick purges a cohort after 15 days.",
+          "evidence": "components/teacher-classes-manager.tsx posts to /api/teacher/offerings/[id]/results directly from onClick with no confirm or dialog anywhere in the file. The page copy itself says publishing cannot be undone and starts the retention clock, so one misclick purges a cohort after 15 days. Fixed 2026-09-18: publishing is one-way (`publishOfferingResults` stamps resultsPublishedAt exactly once and there is no route that clears it), so the button now opens a confirmation dialog that names the 15-day retention clock and states there is no unpublish action, matching the assessment release control. The copy and state live in `lib/results-publication-view.ts` and are unit-tested in `tests/results-publication-view.test.ts`.",
           "location": "components/teacher-classes-manager.tsx:159-176",
-          "status": "open"
+          "status": "fixed"
         },
         {
           "id": "TN-6",
@@ -1971,9 +1971,9 @@
           "severity": "major",
           "category": "unreachable-ui",
           "title": "Analytics promises trends and at-risk students and renders neither; the payload is computed and discarded",
-          "evidence": "The nav and page description say Grade distribution, question quality, trends, and at-risk students. GET /teacher/analytics (demo) renders no at-risk content and no trend chart, yet the RSC payload contains the full roster (atRisk: 2 students) and the 15-week series. The dashboard At risk 2 tile is therefore a dead end, and the roster and trend queries run on every load for nothing. Re-verified 2026-09-17 against the re-seeded database: still reproduces.",
+          "evidence": "The nav and page description say Grade distribution, question quality, trends, and at-risk students. GET /teacher/analytics (demo) renders no at-risk content and no trend chart, yet the RSC payload contains the full roster (atRisk: 2 students) and the 15-week series. The dashboard At risk 2 tile is therefore a dead end, and the roster and trend queries run on every load for nothing. Re-verified 2026-09-17 against the re-seeded database: still reproduces. Fixed 2026-09-18: `components/teacher-analytics-dashboard.tsx` now renders the at-risk roster and the weekly trend from the overview it already fetched, so the At risk tile is no longer a dead end and neither read runs for nothing. Verified on the running app: GET /teacher/analytics as demo.teacher renders `At-risk students` (2 of 5 enrolled, pass line 50.0%, Demo Student Four below the line and Demo Student Five with no published work) and `Cohort trend` (15 teaching weeks, 8 released marks, chart SVG present).",
           "location": "components/teacher-analytics-dashboard.tsx",
-          "status": "open"
+          "status": "fixed"
         },
         {
           "id": "TN-7",
@@ -2322,9 +2322,9 @@
           "severity": "major",
           "category": "partial-implementation",
           "title": "Review queue never shows the submission being judged",
-          "evidence": "GET /api/teacher/reviews returns submission.contentText but components/teacher-review-queue.tsx has zero references to contentText, so the text appears only in the RSC payload and the teacher sees just the model's ~64-char self-quote.",
+          "evidence": "GET /api/teacher/reviews returns submission.contentText but components/teacher-review-queue.tsx has zero references to contentText, so the text appears only in the RSC payload and the teacher sees just the model's ~64-char self-quote. Fixed 2026-09-18: `components/teacher-review-queue.tsx` now renders `submission.contentText` in a Submission block above the suggestions, with `No text submitted.` when empty. Verified on the running app: GET /teacher/reviews as demo.teacher renders 3 Submission blocks, one carrying the descriptive answer text and two honest empty ones for quiz submissions.",
           "location": "components/teacher-review-queue.tsx",
-          "status": "open"
+          "status": "fixed"
         },
         {
           "id": "TN-37",
@@ -2348,9 +2348,9 @@
           "severity": "major",
           "category": "dead-control",
           "title": "Submissions queue's Open action does not open the submission",
-          "evidence": "/teacher/submissions renders 13 Open rows but all 14 hrefs in the page are the bare href=\"/teacher/assignments\", and the target page has no assessment list to search. /teacher/submissions as demo.teacher now renders 3 submissions and 3 Open rows (the audit's own submissions are gone after the re-seed); every per-row action is still the fixed href=\"/teacher/assignments\" with no row id interpolated, so Open still lands on the generic assignments page rather than the clicked submission, and that page has no assessment list to search. Re-verified 2026-09-17.",
+          "evidence": "/teacher/submissions renders 13 Open rows but all 14 hrefs in the page are the bare href=\"/teacher/assignments\", and the target page has no assessment list to search. /teacher/submissions as demo.teacher now renders 3 submissions and 3 Open rows (the audit's own submissions are gone after the re-seed); every per-row action is still the fixed href=\"/teacher/assignments\" with no row id interpolated, so Open still lands on the generic assignments page rather than the clicked submission, and that page has no assessment list to search. Re-verified 2026-09-17. Fixed 2026-09-18: the per-row Open link now carries the submission's own fragment (`/teacher/assignments#submission-<id>`) and the editor card carries the matching id, so Open lands on the clicked submission instead of the page top. Verified on the running app: GET /teacher/submissions as demo.teacher renders three distinct `#submission-...` hrefs and GET /teacher/assignments renders the three matching `id=submission-...` anchors.",
           "location": "components/teacher-submissions-table.tsx:258-268",
-          "status": "open"
+          "status": "fixed"
         },
         {
           "id": "TN-39",
@@ -2439,9 +2439,9 @@
           "severity": "major",
           "category": "broken-flow",
           "title": "Grading editor's feedback-only save rewrites the submission status",
-          "evidence": "save() always sends score and an empty input validates to a null score, so a LATE submission became SUBMITTED with the LATE flag destroyed, and a DRAFT became SUBMITTED with submittedAt still NULL; the student's next save then returns 409. Caveat (re-verification 2026-09-17): the LATE and DRAFT submissions in the original observation were audit-created; the re-seeded database's 7 Submissions are all SUBMITTED with submittedAt set. The mechanism is unchanged; save() still posts a score on every save (components/teacher-submissions-manager.tsx:118-160).",
+          "evidence": "save() always sends score and an empty input validates to a null score, so a LATE submission became SUBMITTED with the LATE flag destroyed, and a DRAFT became SUBMITTED with submittedAt still NULL; the student's next save then returns 409. Caveat (re-verification 2026-09-17): the LATE and DRAFT submissions in the original observation were audit-created; the re-seeded database's 7 Submissions are all SUBMITTED with submittedAt set. The mechanism is unchanged; save() still posts a score on every save (components/teacher-submissions-manager.tsx:118-160). Fixed 2026-09-18: the editor no longer sends a score it was not given — `buildSubmissionSaveBody` in `lib/teacher-submissions-view.ts` omits an untouched score, so a feedback-only save cannot rewrite the status, while an emptied score field is still sent as an explicit null that deliberately un-grades. Verified by the new DB regression test `tests/submission-feedback-save-status.test.ts` (3 tests, passing against the test database): a LATE submission stays LATE with submittedAt intact and a DRAFT stays DRAFT with submittedAt null, and the explicit-clear case still un-grades.",
           "location": "components/teacher-submissions-manager.tsx:118-160",
-          "status": "open"
+          "status": "fixed"
         },
         {
           "id": "TN-46",
@@ -2478,9 +2478,9 @@
           "severity": "major",
           "category": "missing-write-path",
           "title": "Code-task test cases can be created but never edited or deleted and re-scanning wipes the teacher's verdict",
-          "evidence": "PATCH and DELETE on test-cases work via the API but the only client call is POST; a similarity PATCH verdict FLAGGED is reset to PENDING by the next Scan cohort POST, and GET runs returns no sourceCode while GET similarity is 405. Caveat (re-verification 2026-09-17): the similarity verdict and the extra runs in the original observation were audit-created; the re-seeded database has only the 2 seeded PASSED runs and no similarity pairs. The mechanism is unchanged (only POST is wired for test cases; a re-scan rewrites pending verdicts).",
+          "evidence": "PATCH and DELETE on test-cases work via the API but the only client call is POST; a similarity PATCH verdict FLAGGED is reset to PENDING by the next Scan cohort POST, and GET runs returns no sourceCode while GET similarity is 405. Caveat (re-verification 2026-09-17): the similarity verdict and the extra runs in the original observation were audit-created; the re-seeded database has only the 2 seeded PASSED runs and no similarity pairs. The mechanism is unchanged (only POST is wired for test cases; a re-scan rewrites pending verdicts). Fixed 2026-09-18: (1) a re-scan no longer discards a human verdict — `nextSimilarityVerdict` in `lib/code-eval/similarity.ts` keeps FLAGGED/CLEARED and only reclassifies new or PENDING pairs; (2) `TestCaseRowActions` in `components/teacher-code-task-actions.tsx` wires the existing PATCH and DELETE with per-row Edit and Delete dialogs, rendered from the page's test-case table. Verified: `tests/code-eval-similarity.test.ts` pins the verdict rule, and the extended `tests/code-eval-pipeline.test.ts` re-scans after a CLEARED verdict and sees it survive; both pass against the test database.",
           "location": "components/teacher-code-task-actions.tsx:255-401",
-          "status": "open"
+          "status": "fixed"
         },
         {
           "id": "TN-49",
@@ -2491,7 +2491,7 @@
           "severity": "major",
           "category": "missing-write-path",
           "title": "Groups milestones are title-only and groups are disconnected from GROUP_PROJECT assessments",
-          "evidence": "The milestone API accepts description, weight and dueDate but the UI sends only groupId and title with no edit or delete; there is no peer-evaluation config surface, Group has no assessmentId (schema.prisma:890-906), and a student can be in two teams rendering Members placed 4 / 5 and Unassigned 2. Caveat (re-verification 2026-09-17): the second team and the 'Members placed 4 / 5' state were audit-created; the re-seeded database has one 3-member team (demo-group-alpha) and no student in two teams. The title-only milestone write path is unchanged (the UI sends only groupId and title).",
+          "evidence": "The milestone API accepts description, weight and dueDate but the UI sends only groupId and title with no edit or delete; there is no peer-evaluation config surface, Group has no assessmentId (schema.prisma:890-906), and a student can be in two teams rendering Members placed 4 / 5 and Unassigned 2. Caveat (re-verification 2026-09-17): the second team and the 'Members placed 4 / 5' state were audit-created; the re-seeded database has one 3-member team (demo-group-alpha) and no student in two teams. The title-only milestone write path is unchanged (the UI sends only groupId and title). Partially fixed 2026-09-18, still open for the schema-dependent half. Done: milestone create now sends description, weight and due date (`lib/groups/milestone-form.ts`), each milestone has Edit and Delete actions backed by `deleteMilestoneForTeacher` and a new DELETE route handler, and the write paths refuse to place a student in two teams of one offering. Verified by `tests/groups-milestone-write-paths.test.ts` (5 tests passing against the test database: create fields, edit/clear, delete plus audit row, duplicate guard, reuse after archive). Not done, needs a decision: linking a Group to a GROUP_PROJECT assessment needs a new `Group.assessmentId` column, which is a schema change the brief forbids without approval, so it is reported here rather than migrated.",
           "location": "components/teacher-groups-manager.tsx:443-545",
           "status": "open"
         },
@@ -3583,8 +3583,8 @@
       "minor": 61
     },
     "byStatus": {
-      "open": 111,
-      "fixed": 18,
+      "open": 104,
+      "fixed": 25,
       "wontfix": 0
     },
     "byCategory": {

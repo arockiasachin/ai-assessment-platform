@@ -8,11 +8,12 @@ import { formatDateTime } from "@/lib/format"
 import { ASSESSMENT_KIND_LABEL } from "@/lib/labels"
 import type { TeacherSubmissionRow } from "@/lib/teacher-submissions"
 import {
+  buildSubmissionSaveBody,
   feedbackDraftValue,
   scoreDraftValue,
+  submissionAnchorId,
   submissionBodyText,
   toSubmissionEditorItem,
-  validateScoreInput,
   type SubmissionEditorItem,
 } from "@/lib/teacher-submissions-view"
 import { Button } from "@/components/ui/button"
@@ -117,31 +118,28 @@ export function TeacherSubmissionsManager({ rows }: { rows: TeacherSubmissionRow
 
   const save = async (item: SubmissionEditorItem) => {
     const submissionId = item.id
-    const maxMarks = item.assessment.maxMarks
     setMessage(null)
     setSavingId(submissionId)
 
     try {
-      // Validation is shared with the tests (`lib/teacher-submissions-view.ts`), so the rule the
-      // button enforces is the rule that is asserted rather than a second, drifting copy.
-      const validation = validateScoreInput(
-        scoreDraftValue(item, scoreDrafts[submissionId]),
-        maxMarks,
-      )
-      if (!validation.ok) {
-        setMessage(validation.message)
+      // The body is built by a pure helper so the omitted-vs-null score rule is tested
+      // rather than re-derived here. An untouched score input is omitted, not sent as a
+      // null that would rewrite the submission's status (TN-45).
+      const built = buildSubmissionSaveBody({
+        submissionId,
+        scoreDraft: scoreDrafts[submissionId],
+        feedbackDraft: feedbackDrafts[submissionId],
+        item,
+      })
+      if (!built.ok) {
+        setMessage(built.message)
         return
       }
-      const score = validation.score
 
       const response = await fetch("/api/teacher/assessments/submissions", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          submissionId,
-          score,
-          feedback: feedbackDrafts[submissionId] ?? "",
-        }),
+        body: JSON.stringify(built.body),
       })
 
       const data = (await response.json()) as { success?: boolean; message?: string }
@@ -237,7 +235,11 @@ export function TeacherSubmissionsManager({ rows }: { rows: TeacherSubmissionRow
 
       <div className="space-y-3">
         {filtered.map((item) => (
-          <Card key={item.id} className="overflow-hidden border-border/70 shadow-sm">
+          <Card
+            key={item.id}
+            id={submissionAnchorId(item.id)}
+            className="scroll-mt-24 overflow-hidden border-border/70 shadow-sm target:ring-2 target:ring-primary/40"
+          >
             <CardHeader className="border-b border-border/60 bg-muted/15">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>

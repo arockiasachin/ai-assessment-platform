@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { StatusPill } from "@/components/ui/status-pill"
 import { GRADE_SOURCE_LABEL, REVIEW_STATE_LABEL, REVIEW_STATE_TO_STATUS } from "@/lib/labels"
+import { formatDateTime } from "@/lib/format"
 import type { EvaluationCandidate, ReviewQueueItem } from "@/lib/rubric-grading/contracts"
 
 /**
@@ -285,6 +286,22 @@ export function TeacherReviewQueue({
               </CardHeader>
 
               <CardContent className="space-y-3 pt-4">
+                {/*
+                  The submission being judged. The review payload has always carried
+                  `submission.contentText`; without it the teacher saw only the model's
+                  short self-quote and could not judge the evidence against the work (TN-36).
+                */}
+                <div className="rounded-md border border-border/70 bg-muted/20 p-3">
+                  <p className="mb-1 text-xs font-medium text-muted-foreground">
+                    Submission
+                    {item.submission.submittedAt
+                      ? ` · submitted ${formatDateTime(item.submission.submittedAt)}`
+                      : ""}
+                  </p>
+                  <p className="whitespace-pre-wrap text-sm">
+                    {item.submission.contentText?.trim() || "No text submitted."}
+                  </p>
+                </div>
                 {item.suggestions.length === 0 && (
                   <p className="text-sm text-muted-foreground">
                     No per-criterion suggestions recorded yet.
