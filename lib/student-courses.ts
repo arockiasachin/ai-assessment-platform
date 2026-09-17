@@ -78,11 +78,18 @@ export type CourseRegistrationMeta = {
  *
  * Pure, so the ordering of the rules is testable without a database: an
  * existing enrollment wins over capacity, and capacity wins over the window.
+ *
+ * `endsOn` closes an offering that has finished (`SN-8`): without it a course
+ * whose `endsOn` was eight months in the past still reported "Registration
+ * open" and accepted an enrolment. A completed course is closed regardless of
+ * its registration window or its spare seats — "class full" would be a
+ * misleading label for a course that no longer runs.
  */
 export function registrationStatusFor(input: {
   isEnrolled: boolean
   isWaitlisted: boolean
   now: Date
+  endsOn: Date | null
   registrationOpenAt: Date | null
   registrationCloseAt: Date | null
   enrolledCount: number
@@ -90,6 +97,7 @@ export function registrationStatusFor(input: {
 }): CourseRegistrationMeta {
   if (input.isEnrolled) return { status: "enrolled", canRegister: false }
   if (input.isWaitlisted) return { status: "waitlisted", canRegister: false }
+  if (input.endsOn && input.now > input.endsOn) return { status: "closed", canRegister: false }
   if (input.enrolledCount >= input.studentLimit) return { status: "full", canRegister: false }
   if (input.registrationOpenAt && input.now < input.registrationOpenAt)
     return { status: "upcoming", canRegister: false }
@@ -194,6 +202,7 @@ export async function listStudentCourses(user: AuthUser): Promise<StudentCourses
       isEnrolled,
       isWaitlisted,
       now,
+      endsOn: offering.endsOn,
       registrationOpenAt: offering.registrationOpenAt,
       registrationCloseAt: offering.registrationCloseAt,
       enrolledCount,

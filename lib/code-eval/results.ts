@@ -191,6 +191,28 @@ export function buildTestResults(
   })
 }
 
+/**
+ * The one-line reason a case failed, or `null` when there is nothing a reader
+ * would learn from.
+ *
+ * The per-test `message` carries the failure cause — a killed run's
+ * "Not executed: the run ended before this test.", a sandbox message, or a
+ * harness error. The student results table used to render it only when the
+ * case's `description` was `null`, so every seeded case (all with a non-null
+ * description) showed a red pill and no reason at all (`SN-33`). This decides
+ * once whether the message adds anything: a pass, the filler "Failed.", and a
+ * message identical to the description are all suppressed.
+ */
+export function failureReason(
+  result: Pick<TestResult, "passed" | "message" | "description">,
+): string | null {
+  if (result.passed) return null
+  const message = result.message.trim()
+  if (message.length === 0 || message === "Failed.") return null
+  if (result.description !== null && message === result.description.trim()) return null
+  return message
+}
+
 export type ResultSummary = {
   passedCount: number
   failedCount: number
@@ -235,9 +257,33 @@ export function resolveRunStatus(input: {
   return input.allPassed ? "PASSED" : "FAILED"
 }
 
-/** Execution coverage proxy: executed tests / total tests in [0, 1]. */
+/**
+ * The runtime to show for a run, or `null` when it is not a measurement.
+ *
+ * A sandboxed run that actually executed takes a non-zero wall clock, so `0ms` means the
+ * harness never ran — the same "unexecuted run" `SN-34` is about, rendered as `0ms` where the
+ * page intends an em dash. `null` is the contract's own "not measured". A run with no test count
+ * recorded nothing either. One definition, read by the student and teacher run tables.
+ */
+export function measuredRuntimeMs(run: {
+  runtimeMs: number | null
+  totalCount: number
+}): number | null {
+  if (run.runtimeMs === null || run.runtimeMs === 0) return null
+  if (run.totalCount === 0) return null
+  return run.runtimeMs
+}
+
+/**
+ * Execution coverage proxy: executed tests / total tests in [0, 1].
+ *
+ * `null` means "not measured", which is a different fact from `0`: a run the
+ * harness never reported cannot have its coverage described, and rendering `0%`
+ * invents a measurement (`SN-34`). A run that executed and failed every case has
+ * a non-zero `executedCount` (each case is reported), so it still reads `0`.
+ */
 export function computeCoverage(executedCount: number, totalCount: number): number | null {
-  if (totalCount <= 0) return null
+  if (totalCount <= 0 || executedCount <= 0) return null
   const ratio = executedCount / totalCount
   return Math.max(0, Math.min(1, Math.round(ratio * 1000) / 1000))
 }

@@ -1,6 +1,7 @@
 import "server-only"
 
 import { releasedAssessmentWhere } from "@/lib/assessment-visibility"
+import { liveEnrollmentStatuses } from "@/lib/enrollment-scope"
 import { toAssessmentScale } from "@/lib/gradebook"
 import { prisma } from "@/lib/prisma"
 import { GRADED } from "@/lib/quiz-attempts/kinds"
@@ -146,7 +147,7 @@ export async function listStudentAssessments(
       ...releasedAssessmentWhere(),
       offering: {
         enrollments: {
-          some: { studentId: student.id, status: { in: ["active", "waitlisted"] } },
+          some: { studentId: student.id, status: { in: liveEnrollmentStatuses() } },
         },
       },
     },

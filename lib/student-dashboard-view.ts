@@ -62,11 +62,21 @@ export function releasedMarkCount(assessments: readonly StudentAssessmentItem[])
 
 /** Work the student has handed in. A saved draft has no `submittedAt`, so it is not counted. */
 export function submittedCount(assessments: readonly StudentAssessmentItem[]): number {
-  return assessments.filter((assessment) => assessment.submittedAt !== null).length
+  // Derived from the one outstanding rule, not from `submittedAt` alone: an assessment a teacher
+  // has marked with no `Submission` row (legitimate — graded is not a subset of submitted) is
+  // handed in, and the tile must not call it "not submitted" while the marks column shows a
+  // released score (SN-9).
+  return assessments.length - outstandingAssessments(assessments).length
 }
 
 /**
- * Assessments the student still has to submit, soonest first.
+ * Assessments the student still has to hand in, soonest first.
+ *
+ * "Outstanding" is **no submission and no mark**. Keying on `submittedAt` alone put an
+ * assessment a teacher had already marked (a released or withheld `Grade` with no `Submission`
+ * row) into a table headed "still have to submit" and badged it "Not submitted" beside its own
+ * released score (SN-9). The mark states come from `studentMarkState`, so this cannot drift from
+ * the marks cell that renders them.
  *
  * `dueDate` is ISO, so a string compare sorts chronologically; the copy keeps the
  * caller's array untouched.
@@ -75,7 +85,9 @@ export function outstandingAssessments(
   assessments: readonly StudentAssessmentItem[],
 ): StudentAssessmentItem[] {
   return assessments
-    .filter((assessment) => assessment.submittedAt === null)
+    .filter(
+      (assessment) => assessment.submittedAt === null && studentMarkState(assessment) === "none",
+    )
     .slice()
     .sort((left, right) => left.dueDate.localeCompare(right.dueDate))
 }
@@ -91,11 +103,10 @@ export function dueThisWeek(
   assessments: readonly StudentAssessmentItem[],
   windowDays = 7,
 ): StudentAssessmentItem[] {
-  return assessments.filter(
-    (assessment) =>
-      assessment.submittedAt === null &&
-      assessment.daysUntilDue >= 0 &&
-      assessment.daysUntilDue <= windowDays,
+  // Built on the same "outstanding" rule as the Due-next table, so the tile and the table cannot
+  // disagree about which rows are still owed.
+  return outstandingAssessments(assessments).filter(
+    (assessment) => assessment.daysUntilDue >= 0 && assessment.daysUntilDue <= windowDays,
   )
 }
 
@@ -222,7 +233,7 @@ export function studentDashboardKpis(input: {
       id: "submitted",
       label: "Submitted",
       value: `${submitted} of ${total}`,
-      hint: `${total - submitted} not submitted`,
+      hint: `${total - submitted} still to hand in`,
       accent: "primary",
     },
     {

@@ -28,6 +28,7 @@ import {
   listRunsForTeacher,
   listSimilarityForTeacher,
   listTeacherCodeTasks,
+  measuredRuntimeMs,
 } from "@/lib/code-eval"
 import type {
   SimilarityListResponse,
@@ -98,7 +99,15 @@ const runColumns: Column<TestRunResponse>[] = [
     header: "Runtime",
     align: "right",
     hideBelow: "md",
-    cell: (run) => <span className="font-mono tabular-nums">{formatDuration(run.runtimeMs)}</span>,
+    cell: (run) => {
+      // `0ms` is not a measurement (SN-34); this is the same rule the student table uses.
+      const measured = measuredRuntimeMs(run)
+      return measured === null ? (
+        <span className="font-mono tabular-nums text-muted-foreground">—</span>
+      ) : (
+        <span className="font-mono tabular-nums">{formatDuration(measured)}</span>
+      )
+    },
   },
   {
     id: "finished",
@@ -423,7 +432,14 @@ export default async function TeacherCodeTasksPage({
                                   {run.finishedAt === null
                                     ? "Not finished"
                                     : formatDateTime(run.finishedAt)}{" "}
-                                  · {formatDuration(run.runtimeMs)} · coverage{" "}
+                                  ·{" "}
+                                  {(() => {
+                                    const measured = measuredRuntimeMs(run)
+                                    return measured === null
+                                      ? "runtime not measured"
+                                      : formatDuration(measured)
+                                  })()}{" "}
+                                  · coverage{" "}
                                   {run.coverage === null
                                     ? "not measured"
                                     : formatPercent(run.coverage * 100)}

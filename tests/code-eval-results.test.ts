@@ -8,6 +8,8 @@ import {
 import {
   buildTestResults,
   computeCoverage,
+  failureReason,
+  measuredRuntimeMs,
   normalizeCategory,
   parseHarnessOutput,
   resolveRunStatus,
@@ -160,6 +162,46 @@ describe("computeCoverage", () => {
   it("is executed/total and null when there are no tests", () => {
     expect(computeCoverage(2, 4)).toBe(0.5)
     expect(computeCoverage(0, 0)).toBeNull()
+  })
+
+  it("is null — not 0 — when nothing executed, because the run measured nothing (SN-34)", () => {
+    // The sandbox-error run reported no harness results against three test cases; the page
+    // rendered "Coverage 0%" from a measurement that never happened. A genuinely executed run
+    // that failed every case still reports each case, so `executedCount` is non-zero there.
+    expect(computeCoverage(0, 3)).toBeNull()
+    expect(computeCoverage(1, 1)).toBe(1)
+  })
+})
+
+describe("measuredRuntimeMs", () => {
+  it("treats 0ms and null as not measured (SN-34)", () => {
+    // A sandboxed run that executed takes a non-zero wall clock, so 0ms is the unexecuted run
+    // the page used to render as "0ms".
+    expect(measuredRuntimeMs({ runtimeMs: 0, totalCount: 3 })).toBeNull()
+    expect(measuredRuntimeMs({ runtimeMs: null, totalCount: 3 })).toBeNull()
+    expect(measuredRuntimeMs({ runtimeMs: 142, totalCount: 0 })).toBeNull()
+    expect(measuredRuntimeMs({ runtimeMs: 142, totalCount: 3 })).toBe(142)
+  })
+})
+
+describe("failureReason", () => {
+  const base = {
+    passed: false,
+    message: "Not executed: the run ended before this test.",
+    description: "Slope is 2.",
+  }
+
+  it("surfaces the failure cause even when the case has a description", () => {
+    // The results table used to render `description ?? message`, so every case with a
+    // description hid the reason the run actually failed (SN-33).
+    expect(failureReason(base)).toBe("Not executed: the run ended before this test.")
+  })
+
+  it("says nothing for a pass, for the filler message, or for a duplicate of the description", () => {
+    expect(failureReason({ ...base, passed: true })).toBeNull()
+    expect(failureReason({ ...base, message: "Failed." })).toBeNull()
+    expect(failureReason({ ...base, message: "Slope is 2." })).toBeNull()
+    expect(failureReason({ ...base, message: "   " })).toBeNull()
   })
 })
 

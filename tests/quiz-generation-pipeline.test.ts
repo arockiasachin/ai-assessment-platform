@@ -439,6 +439,36 @@ describe("quiz generation pipeline", () => {
     expect(outcome.retrieval.sourceTitles).toContain("Shared course syllabus")
   })
 
+  it("refuses to generate into a non-quiz assessment and hides it from the target list (TN-40)", async () => {
+    const { fixture, provider, teacherUser } = await seed()
+    const groupProject = await prisma.assessment.create({
+      data: {
+        offeringId: fixture.offering.id,
+        courseId: fixture.course.id,
+        classId: fixture.classroom.id,
+        title: "Group project",
+        type: "GROUP_PROJECT",
+        dueDate: new Date("2026-12-20T08:00:00.000Z"),
+        maxMarks: 20,
+        createdById: fixture.teacher.staffProfile!.id,
+      },
+    })
+
+    await expect(
+      generateQuizDraftsForTeacher(
+        teacherUser,
+        { assessmentId: groupProject.id, topic: "photosynthesis", questionCount: 1 },
+        { provider },
+      ),
+    ).rejects.toMatchObject({ status: 409 })
+
+    expect(await prisma.question.count({ where: { assessmentId: groupProject.id } })).toBe(0)
+
+    const targets = await listGenerationAssessmentsForTeacher(teacherUser)
+    expect(targets.map((target) => target.id)).toContain(fixture.assessment.id)
+    expect(targets.map((target) => target.id)).not.toContain(groupProject.id)
+  })
+
   it("rejects a malformed model response and writes no drafts", async () => {
     const { fixture, teacherUser } = await seed()
 

@@ -11,7 +11,11 @@ import type { AuthUser } from "@/lib/session"
 
 import { loadOwnedAssessment, resolveTeacherStaffId, teacherOwnsAssessment } from "./authz"
 import { QuizGenerationError } from "./errors"
-import { isGeneratedQuestion, resolveGenerationStatus } from "./metadata"
+import {
+  GENERATED_QUESTION_ASSESSMENT_TYPE,
+  isGeneratedQuestion,
+  resolveGenerationStatus,
+} from "./metadata"
 import { serializeQuestionForTeacher } from "./serialize"
 
 /**
@@ -32,7 +36,12 @@ export async function listGenerationAssessmentsForTeacher(
 ): Promise<GenerationAssessmentSummary[]> {
   const staffId = await resolveTeacherStaffId(user)
   const assessments = await prisma.assessment.findMany({
-    where: { OR: [{ createdById: staffId }, { offering: { teacherId: staffId } }] },
+    where: {
+      // Only quizzes accept generated questions (TN-40): the generator used to offer every kind,
+      // and attaching questions to a group project left a `quizQuestionCount` nothing could score.
+      type: GENERATED_QUESTION_ASSESSMENT_TYPE,
+      OR: [{ createdById: staffId }, { offering: { teacherId: staffId } }],
+    },
     select: {
       id: true,
       title: true,

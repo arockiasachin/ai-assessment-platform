@@ -17,7 +17,12 @@ import { SectionCard } from "@/components/ui/section-card"
 import { StatCard } from "@/components/ui/stat-card"
 import { StatusPill } from "@/components/ui/status-pill"
 import { getSessionUser } from "@/lib/auth"
-import { listStudentCodeTasks, listStudentRuns } from "@/lib/code-eval"
+import {
+  failureReason,
+  listStudentCodeTasks,
+  listStudentRuns,
+  measuredRuntimeMs,
+} from "@/lib/code-eval"
 import type { TestResult, TestRunResponse } from "@/lib/contracts/code-eval"
 import { TEST_RUN_STATE_TO_STATUS } from "@/lib/labels"
 import { formatDate, formatDateTime, formatDuration, formatPercent, trimNumber } from "@/lib/format"
@@ -44,11 +49,18 @@ const resultColumns: Column<TestResult>[] = [
     cell: (result) => (
       <div className="min-w-0">
         <p className="font-medium">{result.name}</p>
-        {(result.description ?? result.message) && (
+        {result.description && (
           <p className="max-w-[28rem] truncate text-xs text-muted-foreground">
-            {result.description ?? result.message}
+            {result.description}
           </p>
         )}
+        {(() => {
+          // The failure cause is not the case description: a killed run's reason ("Sandbox
+          // unavailable…", "Not executed…") is what a student needs, and showing the
+          // description instead hid it on every case that had one (SN-33).
+          const reason = failureReason(result)
+          return reason ? <p className="max-w-[28rem] text-xs text-destructive">{reason}</p> : null
+        })()}
       </div>
     ),
   },
@@ -145,7 +157,17 @@ const runColumns: Column<TestRunResponse>[] = [
     header: "Runtime",
     align: "right",
     hideBelow: "md",
-    cell: (run) => <span className="font-mono tabular-nums">{formatDuration(run.runtimeMs)}</span>,
+    cell: (run) => {
+      // `0ms` is not a measurement (SN-34); the rule is shared with the teacher table.
+      const measured = measuredRuntimeMs(run)
+      return measured === null ? (
+        <span className="font-mono tabular-nums text-muted-foreground">
+          —<span className="sr-only"> not measured</span>
+        </span>
+      ) : (
+        <span className="font-mono tabular-nums">{formatDuration(measured)}</span>
+      )
+    },
   },
   {
     id: "points",

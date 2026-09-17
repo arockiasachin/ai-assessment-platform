@@ -46,9 +46,17 @@ import type { AnalyticsSettingsResponse } from "@/lib/contracts/analytics"
 export function AnalyticsThresholdsPanel({
   offeringId,
   initialPayload = null,
+  onSaved,
 }: {
   offeringId: string
   initialPayload?: AnalyticsSettingsResponse | null
+  /**
+   * Called after a successful save. The thresholds govern the alerts and item-analysis withholds
+   * rendered elsewhere on the page, so the caller refetches its overview instead of leaving the
+   * header sentence and the alert card describing the old numbers until the offering changes
+   * (TN-8).
+   */
+  onSaved?: () => void
 }) {
   const [open, setOpen] = useState(false)
   const [payload, setPayload] = useState<AnalyticsSettingsResponse | null>(initialPayload)
@@ -92,7 +100,7 @@ export function AnalyticsThresholdsPanel({
   }, [open, offeringId, payload?.offeringId, load])
 
   const save = async () => {
-    const result = thresholdDraftToSettings(draft)
+    const result = thresholdDraftToSettings(draft, payload?.settings)
     if (!result.ok) {
       setError(result.message)
       return
@@ -114,6 +122,7 @@ export function AnalyticsThresholdsPanel({
       setPayload(data)
       setDraft(toThresholdDraft(data.settings))
       setMessage("Thresholds saved.")
+      onSaved?.()
     } catch {
       setError("Unable to save the analytics thresholds.")
     } finally {

@@ -12,6 +12,7 @@ import {
   Search,
   Sparkles,
   Target,
+  Terminal,
 } from "lucide-react"
 import { GradeBadge } from "@/components/grade-badge"
 import { Badge } from "@/components/ui/badge"
@@ -26,6 +27,12 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { formatDateTime } from "@/lib/format"
+import {
+  saveDraftAllowed,
+  submissionLockReason,
+  submissionSubmitAction,
+  supportsTextSubmission,
+} from "@/lib/assessment-submission-rules"
 import { reconcileDrafts } from "@/lib/student-drafts"
 import type { AssessmentType } from "@/lib/generated/prisma/enums"
 import { ASSESSMENT_KIND_LABEL } from "@/lib/labels"
@@ -172,8 +179,11 @@ export function StudentAssessmentsView({
       if (typeFilter !== "all" && item.type !== typeFilter) return false
       if (courseFilter !== "all" && item.courseId !== courseFilter) return false
 
-      if (statusFilter === "graded" && item.percentage === null) return false
-      if (statusFilter === "pending" && item.percentage !== null) return false
+      // The filter keys on the same `submissionState` the badge renders, so a card filtered as
+      // "Graded" carries the Graded badge and a graded sitting with an unreleased mark does not
+      // hide under "Pending" (SN-10). Keying on `percentage` made the two contradict.
+      if (statusFilter === "graded" && item.submissionState !== "graded") return false
+      if (statusFilter === "pending" && item.submissionState === "graded") return false
       if (statusFilter === "overdue" && !item.isPastDue) return false
 
       if (!q) return true
@@ -387,6 +397,9 @@ export function StudentAssessmentsView({
         {filtered.map((assessment) => {
           const isExpanded = Boolean(expanded[assessment.id])
           const tone = dueTone(assessment)
+          const lockReason = submissionLockReason(assessment.submissionState)
+          const submitAction = submissionSubmitAction(assessment.submissionState)
+          const draftAllowed = saveDraftAllowed(assessment.submissionState)
 
           return (
             <Card key={assessment.id} className="overflow-hidden border-border/70 shadow-sm">
@@ -469,13 +482,31 @@ export function StudentAssessmentsView({
 
                     <div className="mt-3 flex flex-wrap gap-2">
                       {assessment.type === "QUIZ" ? (
-                        <Link href="/quiz" className="inline-flex">
+                        <Link href="/student/quizzes" className="inline-flex">
                           <Button size="sm" variant="outline">
                             <BookOpenCheck className="size-4" />
-                            Open quiz center
+                            Open quiz
                           </Button>
                         </Link>
-                      ) : (
+                      ) : assessment.type === "CODE" ? (
+                        <Link
+                          href={{
+                            pathname: "/student/code-submissions",
+                            query: { assessmentId: assessment.id },
+                          }}
+                          className="inline-flex"
+                        >
+                          <Button size="sm" variant="outline">
+                            <Terminal className="size-4" />
+                            Open code editor
+                          </Button>
+                        </Link>
+                      ) : assessment.type === "GROUP_PROJECT" ? (
+                        <p className="w-full rounded-md border border-dashed border-border px-3 py-2 text-sm text-muted-foreground">
+                          A group project has no individual text submission. Your team&apos;s work
+                          is handed in outside this card.
+                        </p>
+                      ) : supportsTextSubmission(assessment.type) ? (
                         <div className="w-full space-y-2">
                           <textarea
                             value={submissionDrafts[assessment.id] ?? ""}
@@ -496,15 +527,15 @@ export function StudentAssessmentsView({
                             <span>{submissionLabel(assessment.submissionState)}</span>
                             <span>{(submissionDrafts[assessment.id] ?? "").length}/4000</span>
                           </div>
+                          {lockReason && (
+                            <p className="text-xs text-muted-foreground">{lockReason}</p>
+                          )}
                           <div className="grid gap-2 sm:flex sm:flex-wrap">
                             <Button
                               size="sm"
                               variant="outline"
                               onClick={() => void submitAssignment(assessment.id, "saveDraft")}
-                              disabled={
-                                savingSubmissionId === assessment.id ||
-                                assessment.submissionState === "graded"
-                              }
+                              disabled={savingSubmissionId === assessment.id || !draftAllowed}
                               className="w-full sm:w-auto"
                             >
                               Save draft
@@ -515,27 +546,22 @@ export function StudentAssessmentsView({
                               onClick={() =>
                                 void submitAssignment(
                                   assessment.id,
-                                  assessment.submissionState === "not_submitted" ||
-                                    assessment.submissionState === "draft"
-                                    ? "submit"
-                                    : "resubmit",
+                                  submitAction === "resubmit" ? "resubmit" : "submit",
                                 )
                               }
                               disabled={
-                                savingSubmissionId === assessment.id ||
-                                assessment.submissionState === "graded"
+                                savingSubmissionId === assessment.id || submitAction === null
                               }
                               className="w-full sm:w-auto"
                             >
                               <FileCheck2 className="size-4" />
-                              {assessment.submissionState === "not_submitted" ||
-                              assessment.submissionState === "draft"
-                                ? "Submit assignment"
-                                : "Resubmit assignment"}
+                              {submitAction === "resubmit"
+                                ? "Resubmit assignment"
+                                : "Submit assignment"}
                             </Button>
                           </div>
                         </div>
-                      )}
+                      ) : null}
                       <Button size="sm" variant="outline" disabled>
                         <Eye className="size-4" />
                         Detailed rubric soon

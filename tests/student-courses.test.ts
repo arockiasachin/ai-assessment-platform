@@ -70,6 +70,7 @@ describe("registrationStatusFor", () => {
     isEnrolled: false,
     isWaitlisted: false,
     now: new Date("2026-06-01T00:00:00.000Z"),
+    endsOn: null as Date | null,
     registrationOpenAt: new Date("2026-01-01T00:00:00.000Z"),
     registrationCloseAt: new Date("2026-12-01T00:00:00.000Z"),
     enrolledCount: 0,
@@ -109,6 +110,21 @@ describe("registrationStatusFor", () => {
       registrationStatusFor({ ...base, registrationCloseAt: new Date("2026-02-01T00:00:00.000Z") }),
     ).toEqual({ status: "closed", canRegister: false })
     expect(registrationStatusFor(base)).toEqual({ status: "open", canRegister: true })
+  })
+
+  it("closes an offering whose end date has passed even with seats and an open window (SN-8)", () => {
+    // `demo-offering-past` ended in June 2025 yet advertised "Registration open" and accepted an
+    // enrolment, because the rule never consulted `endsOn`.
+    expect(
+      registrationStatusFor({ ...base, endsOn: new Date("2026-05-31T00:00:00.000Z") }),
+    ).toEqual({ status: "closed", canRegister: false })
+  })
+
+  it("lets a completed offering read as closed rather than full", () => {
+    expect(registrationStatusFor({ ...base, endsOn: PAST, enrolledCount: 30 })).toEqual({
+      status: "closed",
+      canRegister: false,
+    })
   })
 })
 

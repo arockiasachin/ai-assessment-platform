@@ -177,7 +177,11 @@ export function StudentDashboard({
             <EmptyState
               size="sm"
               title="Nothing outstanding"
-              description="Every assessment on your courses has a submission from you."
+              description={
+                assessments.length === 0
+                  ? "No assessments are assigned to your courses yet."
+                  : "Every assessment on your courses has a submission from you."
+              }
             />
           }
         />

@@ -41,6 +41,7 @@ import { assertAnswerShapes } from "./answers"
 import { QuizAttemptError, QuizNotDeliverableError } from "./errors"
 import { evaluateAttemptEligibility, isLateSubmission, resolveMaxAttempts } from "./eligibility"
 import { quizDeliveryStatus } from "./metadata"
+import { retakeStateFrom, type RetakeRequestStatusValue } from "./retake-state"
 import {
   readOptionIds,
   serializeAttemptSummary,
@@ -317,6 +318,8 @@ export async function listStudentQuizzes(user: AuthUser): Promise<StudentQuizSum
       dueDate: true,
       maxMarks: true,
       maxAttempts: true,
+      retakePolicy: true,
+      retakesAllowed: true,
       questions: {
         orderBy: { order: "asc" },
         select: {
@@ -342,6 +345,9 @@ export async function listStudentQuizzes(user: AuthUser): Promise<StudentQuizSum
           submittedAt: true,
         },
       },
+      // The student's own retake request for an APPROVAL assessment, so the list can say "awaiting
+      // approval" instead of offering a Start button the start route refuses (SN-36).
+      retakeRequests: { where: { studentId }, select: { status: true }, take: 1 },
     },
   })
 
@@ -356,18 +362,36 @@ export async function listStudentQuizzes(user: AuthUser): Promise<StudentQuizSum
       (attempt) => attempt.status === "IN_PROGRESS" && isGraded(attempt),
     )
     const delivery = quizDeliveryStatus(assessment.questions)
+    // The same read-only retake picture the /student/retake page uses, so the list cannot offer a
+    // Start the server would refuse: an APPROVAL quiz past its first sitting reads "awaiting your
+    // teacher's approval" here rather than "can start" (SN-36).
+    const retake = retakeStateFrom({
+      policy: assessment.retakePolicy,
+      maxAttempts: assessment.maxAttempts,
+      retakesAllowed: assessment.retakesAllowed,
+      dueDate: assessment.dueDate,
+      now,
+      attempts: assessment.quizAttempts,
+      requestStatus: (assessment.retakeRequests[0]?.status as RetakeRequestStatusValue) ?? null,
+    })
 
     let canStart = delivery.deliverable
     let blockedReason = delivery.reason
     if (delivery.deliverable && !inProgress) {
-      const eligibility = evaluateAttemptEligibility({
-        existingAttemptCount: used,
-        maxAttempts,
-        now,
-        dueDate: assessment.dueDate,
-      })
-      canStart = eligibility.allowed
-      blockedReason = eligibility.reason
+      if (!retake.canRetake) {
+        canStart = false
+        blockedReason = retake.blockedReason
+      } else {
+        // The policy permits another sitting; the cap and the deadline still decide.
+        const eligibility = evaluateAttemptEligibility({
+          existingAttemptCount: used,
+          maxAttempts: retake.sittingCap,
+          now,
+          dueDate: assessment.dueDate,
+        })
+        canStart = eligibility.allowed
+        blockedReason = eligibility.reason
+      }
     }
 
     return {

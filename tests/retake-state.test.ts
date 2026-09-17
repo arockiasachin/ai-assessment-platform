@@ -1,6 +1,6 @@
 import { beforeAll, describe, expect, it } from "vitest"
 
-import { getRetakeStateForStudent } from "@/lib/quiz-attempts/retake-state"
+import { getRetakeStateForStudent, retakeStateFrom } from "@/lib/quiz-attempts/retake-state"
 import { decideRetake, resolveSittingCap } from "@/lib/quiz-attempts/retake-policy"
 
 import { disconnectTestDatabase, prisma, truncateAll } from "./helpers/db"
@@ -185,6 +185,60 @@ describe("getRetakeStateForStudent", () => {
       const state = await getRetakeStateForStudent(studentId, f.assessment.id)
       expect(state?.canRetake, JSON.stringify(scenario)).toBe(canRetake)
     }
+  })
+})
+
+describe("retakeStateFrom", () => {
+  const now = new Date("2026-06-01T00:00:00.000Z")
+  const dueDate = new Date("2026-12-01T00:00:00.000Z")
+  const graded = (statuses: ("IN_PROGRESS" | "SUBMITTED")[]) =>
+    statuses.map((status) => ({ status, kind: "GRADED" as const }))
+
+  it("makes an APPROVAL retake unstartable without a request (SN-36)", () => {
+    // The quizzes list used `evaluateAttemptEligibility` alone, so it offered "Start attempt" for
+    // a sitting the start route refuses until a teacher approves.
+    const state = retakeStateFrom({
+      policy: "APPROVAL",
+      maxAttempts: 3,
+      retakesAllowed: null,
+      dueDate,
+      now,
+      attempts: graded(["SUBMITTED"]),
+      requestStatus: null,
+    })
+
+    expect(state.canRetake).toBe(false)
+    expect(state.blockedReason).toMatch(/approved request/)
+  })
+
+  it("grants it once the request is approved", () => {
+    const state = retakeStateFrom({
+      policy: "APPROVAL",
+      maxAttempts: 3,
+      retakesAllowed: null,
+      dueDate,
+      now,
+      attempts: graded(["SUBMITTED"]),
+      requestStatus: "APPROVED",
+    })
+
+    expect(state.canRetake).toBe(true)
+    expect(state.blockedReason).toBeNull()
+  })
+
+  it("never counts a practice sitting against the cap", () => {
+    const state = retakeStateFrom({
+      policy: "FIXED",
+      maxAttempts: 1,
+      retakesAllowed: null,
+      dueDate,
+      now,
+      attempts: [{ status: "SUBMITTED", kind: "PRACTICE" }],
+      requestStatus: null,
+    })
+
+    expect(state.gradedAttemptsUsed).toBe(0)
+    expect(state.canRetake).toBe(true)
   })
 })
 

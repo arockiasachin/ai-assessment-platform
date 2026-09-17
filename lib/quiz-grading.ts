@@ -1,6 +1,7 @@
 import type { AuthUser } from "@/lib/auth"
 import type { QuizGradeRequest, QuizGradeResponse } from "@/lib/contracts/quiz"
 import { quizGradeRequestSchema } from "@/lib/contracts/quiz"
+import { isLiveEnrollmentStatus } from "@/lib/enrollment-scope"
 import { prisma } from "@/lib/prisma"
 
 import {
@@ -94,7 +95,7 @@ async function assertCanGradeForStudent(
     },
     select: { status: true },
   })
-  if (!enrollment || (enrollment.status !== "active" && enrollment.status !== "waitlisted")) {
+  if (!enrollment || !isLiveEnrollmentStatus(enrollment.status)) {
     throw new QuizGradingError(403, "Student is not enrolled in this assessment.")
   }
 }

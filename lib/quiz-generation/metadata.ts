@@ -18,6 +18,22 @@ import type { GeneratedQuestionStatus } from "@/lib/contracts/quiz-generation"
 
 export const QUIZ_GENERATION_MARKER = "quiz-generation"
 
+/**
+ * The only assessment kind generated questions may be attached to (TN-40).
+ *
+ * The generator offered `GROUP_PROJECT`, `CODE` and `DESCRIPTIVE` as targets and would attach
+ * `Question` rows to them; the student payload then reported `quizQuestionCount` on a group
+ * project, and no pipeline could ever score those questions. The rule is stated here, next to the
+ * draft/published marker, and read by both the target list and the ownership loader — one
+ * definition, not one per entry point.
+ */
+export const GENERATED_QUESTION_ASSESSMENT_TYPE = "QUIZ"
+
+/** Whether this assessment kind accepts generated quiz questions. */
+export function acceptsGeneratedQuestions(type: string): boolean {
+  return type === GENERATED_QUESTION_ASSESSMENT_TYPE
+}
+
 export type GeneratedQuestionMetadata = {
   generator: typeof QUIZ_GENERATION_MARKER
   promptVersion: string

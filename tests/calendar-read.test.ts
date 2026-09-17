@@ -35,6 +35,7 @@ let outsider: AuthUser
 let eOffering: string
 let eClassOnly: string
 let eInstitutionWide: string
+let eDanglingAssessment: string
 let eReleasedAssessment: string
 let eUnreleasedAssessment: string
 let eOtherOffering: string
@@ -216,6 +217,22 @@ beforeAll(async () => {
     })
   ).id
 
+  // A deleted assessment (or offering) nulls every scope column by `SetNull`. Without the guard
+  // this event matched the unscoped tier and was served to every student in every institution,
+  // and nulling `assessmentId` also exempted it from the release filter (TN-70).
+  eDanglingAssessment = (
+    await prisma.calendarEvent.create({
+      data: {
+        ...base,
+        classId: null,
+        offeringId: null,
+        assessmentId: null,
+        title: "Due: deleted assessment",
+        eventType: "ASSESSMENT",
+      },
+    })
+  ).id
+
   eReleasedAssessment = (
     await prisma.calendarEvent.create({
       data: {
@@ -301,6 +318,11 @@ describe("listStudentCalendar", () => {
     const visible = ids(await listStudentCalendar(student))
     expect(visible).not.toContain(eOtherOffering)
     expect(visible).not.toContain(eOtherOfferingAssessmentOfMine)
+  })
+
+  it("does NOT see a dangling assessment event with no scope (TN-70)", async () => {
+    // Both readers must exclude it: it is an orphan, not an institution-wide notice.
+    expect(ids(await listStudentCalendar(student))).not.toContain(eDanglingAssessment)
   })
 
   it("returns exactly the four events it should", async () => {

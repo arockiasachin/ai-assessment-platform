@@ -178,7 +178,11 @@ export function TeacherAnalyticsDashboard({
        * item-analysis withholds below are exactly what these numbers decide.
        */}
       {offeringId && (
-        <AnalyticsThresholdsPanel offeringId={offeringId} initialPayload={initialSettings} />
+        <AnalyticsThresholdsPanel
+          offeringId={offeringId}
+          initialPayload={initialSettings}
+          onSaved={() => void loadOverview(offeringId)}
+        />
       )}
 
       <Card>

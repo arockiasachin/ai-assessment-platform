@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 
 import { jsonError, parseJsonBody } from "@/lib/api"
 import { releasedAssessmentWhere } from "@/lib/assessment-visibility"
+import { supportsTextSubmission } from "@/lib/assessment-submission-rules"
 import { requireRole } from "@/lib/authz"
 import { submissionRequestSchema } from "@/lib/contracts"
 import { prisma } from "@/lib/prisma"
@@ -95,9 +96,11 @@ export async function POST(
    *
    * `QUIZ` and `CODE` are still refused, deliberately: a quiz is sat through the attempt pipeline and
    * a code task through the sandbox pipeline, and neither has any business creating a `Submission`
-   * from a text body here.
+   * from a text body here. `GROUP_PROJECT` is likewise refused: group work has no per-student text
+   * submission path. The predicate lives in `lib/assessment-submission-rules.ts` so the student
+   * assessments view cannot render an editor for a kind this route will refuse (SN-7 / TN-46).
    */
-  if (assessment.type !== "ASSIGNMENT" && assessment.type !== "DESCRIPTIVE") {
+  if (!supportsTextSubmission(assessment.type)) {
     return jsonError("Only written assessments support text submissions.", 409)
   }
 

@@ -59,6 +59,11 @@ export async function POST(request: Request) {
     if (offering.registrationOpenAt && now < offering.registrationOpenAt) {
       return { kind: "not-open" }
     }
+    if (offering.endsOn && now > offering.endsOn) {
+      // A completed offering is closed even with seats free (SN-8). The same rule the course
+      // reader applies, enforced here so a hand-crafted POST cannot enrol into a finished course.
+      return { kind: "closed" }
+    }
     if (offering.registrationCloseAt && now > offering.registrationCloseAt) {
       return { kind: "closed" }
     }

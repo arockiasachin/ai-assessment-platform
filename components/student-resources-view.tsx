@@ -151,16 +151,24 @@ export function StudentResourcesView({ materials }: { materials: StudentMaterial
       label: "Pending indexing",
       value: String(kpis.pending),
       hint:
-        kpis.pending === 0 ? "Everything is indexed" : "Not searchable until the index catches up",
+        kpis.total === 0
+          ? // "Everything is indexed" over an empty set is a confident statement about nothing
+            // (SN-17).
+            "No materials on your courses yet"
+          : kpis.pending === 0
+            ? "Everything is indexed"
+            : "Not searchable until the index catches up",
     },
     {
       id: "chunks",
       label: "Retrieval chunks",
       value: String(kpis.chunks),
       hint:
-        kpis.indexed === 1
-          ? "Across 1 indexed material"
-          : `Across ${kpis.indexed} indexed materials`,
+        kpis.total === 0
+          ? "No materials on your courses yet"
+          : kpis.indexed === 1
+            ? "Across 1 indexed material"
+            : `Across ${kpis.indexed} indexed materials`,
     },
   ]
 

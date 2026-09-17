@@ -173,12 +173,22 @@ function parseField(field: ThresholdField, raw: string): number | string {
 /**
  * The request body for a draft, or the reason it cannot be sent.
  *
- * A field left blank is **omitted**, not sent as `null` or 0 — the API's merge keeps the code default
- * for an omitted key, and sending 0 would be a real (and wrong) override for every field whose valid
- * range includes zero. A section with no overrides is omitted entirely so the stored section is
- * preserved rather than cleared.
+ * A field left blank is **omitted** from its section, not sent as `null` or 0 — the API's merge
+ * keeps the code default for an omitted key, and sending 0 would be a real (and wrong) override
+ * for every field whose valid range includes zero.
+ *
+ * `previous` is the stored settings the form was loaded from, and it is what makes **clearing**
+ * work. The API's merge replaces a section wholesale when the request carries that key, so an
+ * empty section is the only way to remove the last override in it. Without `previous` an
+ * entirely blank draft produced `{}`, the merge saw no section keys, and "Save" was a silent
+ * no-op that restored the old value (TN-8). Passing the stored settings lets a section that
+ * *had* overrides be sent as `{}` when the teacher blanked every field; a section that was
+ * already empty stays omitted, so an untouched save is still the identity.
  */
-export function thresholdDraftToSettings(draft: ThresholdDraft): DraftValidation {
+export function thresholdDraftToSettings(
+  draft: ThresholdDraft,
+  previous?: AnalyticsSettingsValue,
+): DraftValidation {
   const intervention: Record<string, number> = {}
   const itemAnalysis: Record<string, number> = {}
 
@@ -194,9 +204,13 @@ export function thresholdDraftToSettings(draft: ThresholdDraft): DraftValidation
   const settings: AnalyticsSettingsValue = {}
   if (Object.keys(intervention).length > 0) {
     settings.intervention = intervention as AnalyticsSettingsValue["intervention"]
+  } else if (previous?.intervention && Object.keys(previous.intervention).length > 0) {
+    settings.intervention = {}
   }
   if (Object.keys(itemAnalysis).length > 0) {
     settings.itemAnalysis = itemAnalysis as AnalyticsSettingsValue["itemAnalysis"]
+  } else if (previous?.itemAnalysis && Object.keys(previous.itemAnalysis).length > 0) {
+    settings.itemAnalysis = {}
   }
   return { ok: true, settings }
 }

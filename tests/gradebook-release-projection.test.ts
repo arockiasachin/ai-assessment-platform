@@ -106,4 +106,28 @@ describe("gradebook projection release filter", () => {
     })
     expect(teacherPayload.assessments.map((assessment) => assessment.id)).toContain(unreleased.id)
   })
+
+  it("scopes a dropped or withdrawn student out of the payload (SN-37)", async () => {
+    // `bda.student31` had 0 active enrolments yet still received the course, the assessment
+    // titles and the class averages, because the enrollment include applied no status filter.
+    const fixture = await createSpineFixture(prisma)
+    const studentId = fixture.student.studentProfile!.id
+    await prisma.assessment.update({
+      where: { id: fixture.assessment.id },
+      data: { releasedAt: new Date("2026-09-01T00:00:00.000Z") },
+    })
+
+    const enrollment = await prisma.enrollment.create({
+      data: { studentId, offeringId: fixture.offering.id, status: "active" },
+    })
+    const active = await getGradebookPayloadForSessionUser(studentSession(fixture.student))
+    expect(active.assessments.map((assessment) => assessment.id)).toContain(fixture.assessment.id)
+
+    await prisma.enrollment.update({ where: { id: enrollment.id }, data: { status: "dropped" } })
+    const dropped = await getGradebookPayloadForSessionUser(studentSession(fixture.student))
+
+    expect(dropped.assessments).toEqual([])
+    expect(dropped.courses).toEqual([])
+    expect(JSON.stringify(dropped)).not.toContain(fixture.course.code)
+  })
 })

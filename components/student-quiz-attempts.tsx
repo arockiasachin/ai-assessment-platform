@@ -343,10 +343,20 @@ export function StudentQuizAttempts({ initialQuizzes, initialAttempt = null }: P
         />
         <StatCard
           label="Latest attempt scored"
-          value={String(
-            quizzes.filter((quiz) => (quiz.latestAttempt?.score ?? null) !== null).length,
-          )}
-          hint="A quiz counts here only if its most recent attempt has a score"
+          value={
+            quizzes.length === 0
+              ? // A zero here reads as "the latest attempt scored 0", which is a fabricated
+                // number when there are no quizzes at all (SN-17).
+                "—"
+              : String(
+                  quizzes.filter((quiz) => (quiz.latestAttempt?.score ?? null) !== null).length,
+                )
+          }
+          hint={
+            quizzes.length === 0
+              ? "No quizzes assigned to you yet"
+              : "A quiz counts here only if its most recent attempt has a score"
+          }
           icon={CheckCheck}
         />
       </div>

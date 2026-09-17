@@ -88,20 +88,35 @@ export function toCalendarEventItem(row: CalendarEventQueryRow): CalendarEventIt
 }
 
 /**
- * Events attached to neither an offering nor a class: a holiday, or an
- * institution-wide reminder.
+ * Events attached to neither an offering, a class nor an assessment: a holiday, or
+ * an institution-wide reminder.
  *
  * These belong to **everyone**. There is no cohort to scope them to, so the only
  * sensible reading of an unscoped event is that it is for the whole institution —
  * and without this tier a seeded holiday would be invisible to every student, which
  * would look like a bug in the reader rather than in the scope.
  *
+ * **An unscoped *assessment* event is not institution-wide (TN-70).** Both relations on
+ * `CalendarEvent` (`offeringId`, `classId`, `assessmentId`) are `onDelete: SetNull`, so
+ * deleting an assessment — or an offering, which cascades to its assessments — leaves the
+ * event row with no scope at all. It would then match the unscoped tier and be served to
+ * every student in every institution, and nulling `assessmentId` also exempts it from the
+ * release filter. Nothing legitimate is missed by excluding the type: an event that hangs
+ * off an assessment is created *with* the `assessmentId`, and a holiday or reminder carries
+ * its own `EventType`. The assessment-delete path also removes its events in the same
+ * transaction; this is the structural guard for every other deletion path.
+ *
  * The converse is worth stating because nothing enforces it: an event with a
  * `classId` but **no** `offeringId` has no teacher or student link at all, so it
  * would be visible to nobody. No code path creates one — there is no calendar write
  * path, and the seed must not.
  */
-const INSTITUTION_WIDE = { offeringId: null, classId: null } as const
+const INSTITUTION_WIDE = {
+  offeringId: null,
+  classId: null,
+  assessmentId: null,
+  eventType: { not: "ASSESSMENT" },
+} as const
 
 /** The columns both readers need. Kept in one place so the two cannot drift. */
 const eventSelect = {

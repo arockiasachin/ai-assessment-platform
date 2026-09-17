@@ -190,6 +190,30 @@ describe("thresholdDraftToSettings", () => {
 
     expect(result).toEqual({ ok: true, settings: stored })
   })
+
+  it("sends an empty section so the last override can actually be cleared (TN-8)", () => {
+    // Blanking the final override used to send `{}`; the API's merge then saw no section key and
+    // kept the old value while the UI said "Thresholds saved".
+    const previous = {
+      intervention: { classAverageBelow: 90 },
+      itemAnalysis: { extremeGroupFraction: 0.3 },
+    }
+
+    expect(thresholdDraftToSettings({}, previous)).toEqual({
+      ok: true,
+      settings: { intervention: {}, itemAnalysis: {} },
+    })
+  })
+
+  it("does not send a section that previous never had, so an untouched save stays the identity", () => {
+    expect(thresholdDraftToSettings({}, {})).toEqual({ ok: true, settings: {} })
+    expect(
+      thresholdDraftToSettings(
+        { classAverageBelow: "40" },
+        { intervention: { classAverageBelow: 40 } },
+      ),
+    ).toEqual({ ok: true, settings: { intervention: { classAverageBelow: 40 } } })
+  })
 })
 
 describe("settingsSummary", () => {

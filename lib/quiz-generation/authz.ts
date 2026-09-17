@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma"
 import type { AuthUser } from "@/lib/session"
 
 import { QuizGenerationError } from "./errors"
+import { acceptsGeneratedQuestions, GENERATED_QUESTION_ASSESSMENT_TYPE } from "./metadata"
 
 /**
  * Object-level ownership for the quiz-generation pod.
@@ -51,6 +52,7 @@ export async function loadOwnedAssessment(
     select: {
       id: true,
       title: true,
+      type: true,
       maxMarks: true,
       courseId: true,
       offeringId: true,
@@ -61,6 +63,15 @@ export async function loadOwnedAssessment(
   if (!assessment) throw new QuizGenerationError(404, "Assessment not found.")
   if (!teacherOwnsAssessment(assessment, staffId)) {
     throw new QuizGenerationError(403, "Forbidden")
+  }
+  // Generation, editing and publishing all begin here, so the kind check lives here too: a
+  // generated question on a group project or a code task can never be scored (TN-40). 409 rather
+  // than 403 — the teacher owns it, the request is simply not applicable to that kind.
+  if (!acceptsGeneratedQuestions(assessment.type)) {
+    throw new QuizGenerationError(
+      409,
+      `Generated questions can only be attached to a ${GENERATED_QUESTION_ASSESSMENT_TYPE} assessment.`,
+    )
   }
   return {
     id: assessment.id,

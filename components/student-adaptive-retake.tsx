@@ -78,6 +78,28 @@ export function StudentAdaptiveRetake({
     [retake],
   )
 
+  /*
+   * Base UI renders the raw `value` in the trigger unless the Select is given `items`, which is
+   * why the dropdowns showed `demo-assessment-quiz` and `true` instead of a quiz name and
+   * "Include unanswered" (SN-13). Every other Select in the app supplies `items`; these two did
+   * not. The labels are built here so the trigger and the options cannot drift.
+   */
+  const assessmentItems = useMemo(
+    () =>
+      assessments.map((assessment) => ({
+        value: assessment.id,
+        label: `${assessment.courseCode} · ${assessment.title} (${assessment.failedCount + assessment.unansweredCount} to retry)`,
+      })),
+    [assessments],
+  )
+  const unansweredItems = useMemo(
+    () => [
+      { value: "true", label: "Include unanswered" },
+      { value: "false", label: "Wrong answers only" },
+    ],
+    [],
+  )
+
   if (assessments.length === 0) {
     return (
       <Card>
@@ -98,7 +120,11 @@ export function StudentAdaptiveRetake({
           </CardTitle>
         </CardHeader>
         <CardContent className="flex flex-wrap items-center gap-3">
-          <Select value={selectedId} onValueChange={(value) => setSelectedId(value ?? "")}>
+          <Select
+            value={selectedId}
+            onValueChange={(value) => setSelectedId(value ?? "")}
+            items={assessmentItems}
+          >
             <SelectTrigger className="w-full sm:w-96" aria-label="Assessment to retake">
               <SelectValue placeholder="Select an assessment" />
             </SelectTrigger>
@@ -114,6 +140,7 @@ export function StudentAdaptiveRetake({
           <Select
             value={includeUnanswered}
             onValueChange={(value) => setIncludeUnanswered(value ?? "true")}
+            items={unansweredItems}
           >
             <SelectTrigger className="w-full sm:w-56" aria-label="Include unanswered questions">
               <SelectValue />

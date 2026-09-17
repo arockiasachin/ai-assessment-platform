@@ -122,6 +122,23 @@ describe("outstandingAssessments", () => {
     expect(outstandingAssessments(input).map((row) => row.id)).toEqual(["soon", "late"])
     expect(input.map((row) => row.id)).toEqual(["late", "soon", "done"])
   })
+
+  it("leaves out an assessment the teacher already marked, released or withheld (SN-9)", () => {
+    // A manual `Grade` with no `Submission` row is legitimate, so `submittedAt` alone put a
+    // marked row into a "still have to submit" table badged "Not submitted" beside its own
+    // released score.
+    const marked = assessment({
+      id: "marked",
+      percentage: 90,
+      hasMark: true,
+      published: true,
+    })
+    const withheld = assessment({ id: "withheld", hasMark: true, published: false })
+
+    expect(outstandingAssessments([marked, withheld])).toEqual([])
+    expect(submittedCount([marked, withheld])).toBe(2)
+    expect(dueThisWeek([assessment({ ...marked, daysUntilDue: 2 })])).toEqual([])
+  })
 })
 
 describe("dueThisWeek", () => {
@@ -237,7 +254,7 @@ describe("studentDashboardKpis", () => {
     expect(kpis.map((kpi) => kpi.id)).toEqual(["overall", "due-this-week", "submitted", "peer"])
     expect(kpis[0]).toMatchObject({ value: "85%", hint: "Across 2 released assessments" })
     expect(kpis[1]).toMatchObject({ value: "1", hint: "Essay" })
-    expect(kpis[2]).toMatchObject({ value: "3 of 4", hint: "1 not submitted" })
+    expect(kpis[2]).toMatchObject({ value: "3 of 4", hint: "1 still to hand in" })
     expect(kpis[3]).toMatchObject({ value: "1 to do", hint: "1 of 2 · Matrices" })
   })
 

@@ -1,6 +1,7 @@
 import "server-only"
 
 import { releasedAssessmentWhere } from "@/lib/assessment-visibility"
+import { isLiveEnrollmentStatus } from "@/lib/enrollment-scope"
 import type { AssessmentType } from "@/lib/generated/prisma/enums"
 import type { CreateAssessmentRequest, UpdateAssessmentRequest } from "@/lib/contracts"
 import { writeAuditLog } from "@/lib/grading/audit"
@@ -349,7 +350,12 @@ export async function getGradebookPayloadForSessionUser(
 
   if (!studentProfile) return emptyPayload()
 
-  const offerings = studentProfile.enrollments.map((e) => e.offering)
+  // A dropped or withdrawn student keeps no live course workspace: without this the projection
+  // served their course names, assessment titles and class averages anyway (SN-37). The rule is
+  // the shared live-enrollment predicate, not a second local copy.
+  const offerings = studentProfile.enrollments
+    .filter((enrollment) => isLiveEnrollmentStatus(enrollment.status))
+    .map((e) => e.offering)
 
   const courses: Course[] = uniqById(
     offerings.map((o) => ({ id: o.course.id, code: o.course.code, name: o.course.name })),

@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma"
+import type { QuizAttemptKind } from "@/lib/generated/prisma/client"
 
 import { GRADED, isCounted } from "./kinds"
 import { resolveMaxAttempts } from "./eligibility"
@@ -38,6 +39,67 @@ export type RetakeState = {
   canPractise: boolean
 }
 
+/**
+ * The retake picture from rows the caller already has.
+ *
+ * Extracted so the **list** read can apply the same rules without a query per assessment. It was
+ * the whole point of `getRetakeStateForStudent`, but the list computed `canStart` from
+ * `evaluateAttemptEligibility` alone and ignored `retakePolicy`/`retakesAllowed`, so it could
+ * offer "Start attempt" for an `APPROVAL` quiz the start route then refused (SN-36). Both reads
+ * now run this function, so they cannot disagree.
+ */
+export function retakeStateFrom(input: {
+  policy: RetakePolicy
+  maxAttempts: number | null
+  retakesAllowed: number | null
+  dueDate: Date
+  now: Date
+  attempts: readonly { status: string; kind: QuizAttemptKind | null }[]
+  requestStatus: RetakeRequestStatusValue | null
+}): RetakeState {
+  const gradedAttemptsUsed = input.attempts.filter((attempt) => isCounted(attempt)).length
+  // Whether any graded sitting has been submitted — the practice gate. Read from the rows already
+  // in hand rather than a second query.
+  const hasSubmittedGraded = input.attempts.some(
+    (attempt) => attempt.kind === GRADED && attempt.status === "SUBMITTED",
+  )
+
+  // `resolveMaxAttempts` owns the per-assessment → env → default chain, so the cap is not
+  // re-derived here. A null `maxAttempts` means "use the platform default", not "zero sittings".
+  const effectiveCap = resolveSittingCap({
+    policy: input.policy,
+    maxAttempts: resolveMaxAttempts(input.maxAttempts),
+    retakesAllowed: input.retakesAllowed,
+  })
+
+  const decision = decideRetake({
+    policy: input.policy,
+    gradedAttemptsUsed,
+    hasApprovedRequest: input.requestStatus === "APPROVED",
+    hasPendingRequest: input.requestStatus === "PENDING",
+  })
+
+  const reachedCap = gradedAttemptsUsed >= effectiveCap
+  const canRetake = decision.allowed && !reachedCap
+  const blockedReason = !decision.allowed
+    ? decision.reason
+    : reachedCap
+      ? `Attempt limit reached (${gradedAttemptsUsed} of ${effectiveCap} attempts used).`
+      : null
+
+  const pastDeadline = input.now.getTime() > input.dueDate.getTime()
+
+  return {
+    policy: input.policy,
+    gradedAttemptsUsed,
+    sittingCap: effectiveCap,
+    canRetake,
+    blockedReason,
+    requestStatus: input.requestStatus,
+    canPractise: pastDeadline || hasSubmittedGraded,
+  }
+}
+
 export async function getRetakeStateForStudent(
   studentId: string,
   assessmentId: string,
@@ -66,45 +128,13 @@ export async function getRetakeStateForStudent(
     }),
   ])
 
-  const gradedAttemptsUsed = attempts.filter((attempt) => isCounted(attempt)).length
-  // Whether any graded sitting has been submitted — the practice gate. Read from the rows already
-  // in hand rather than a second query.
-  const hasSubmittedGraded = attempts.some(
-    (attempt) => attempt.kind === GRADED && attempt.status === "SUBMITTED",
-  )
-
-  // `resolveMaxAttempts` owns the per-assessment → env → default chain, so the cap is not
-  // re-derived here. A null `maxAttempts` means "use the platform default", not "zero sittings".
-  const effectiveCap = resolveSittingCap({
+  return retakeStateFrom({
     policy: assessment.retakePolicy,
-    maxAttempts: resolveMaxAttempts(assessment.maxAttempts),
+    maxAttempts: assessment.maxAttempts,
     retakesAllowed: assessment.retakesAllowed,
-  })
-
-  const decision = decideRetake({
-    policy: assessment.retakePolicy,
-    gradedAttemptsUsed,
-    hasApprovedRequest: request?.status === "APPROVED",
-    hasPendingRequest: request?.status === "PENDING",
-  })
-
-  const reachedCap = gradedAttemptsUsed >= effectiveCap
-  const canRetake = decision.allowed && !reachedCap
-  const blockedReason = !decision.allowed
-    ? decision.reason
-    : reachedCap
-      ? `Attempt limit reached (${gradedAttemptsUsed} of ${effectiveCap} attempts used).`
-      : null
-
-  const pastDeadline = now.getTime() > assessment.dueDate.getTime()
-
-  return {
-    policy: assessment.retakePolicy,
-    gradedAttemptsUsed,
-    sittingCap: effectiveCap,
-    canRetake,
-    blockedReason,
+    dueDate: assessment.dueDate,
+    now,
+    attempts,
     requestStatus: (request?.status as RetakeRequestStatusValue | undefined) ?? null,
-    canPractise: pastDeadline || hasSubmittedGraded,
-  }
+  })
 }
