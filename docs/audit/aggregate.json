@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-09-17T22:31:01.596Z",
+  "generatedAt": "2026-09-17T23:03:39.116Z",
   "source": {
     "convention": "docs/audit/README.md",
     "files": [
@@ -120,9 +120,9 @@
           "severity": "major",
           "category": "broken-flow",
           "title": "Analytics thresholds cannot clear the last override (Save is a silent no-op) and saving does not refresh the alerts it governs",
-          "evidence": "Proven by round-trip: PUT classAverageBelow=90 stored 90; blanking it and PUT {} returned 200 with classAverageBelow still 90, because the merge keeps an absent key. The UI would show Thresholds saved and restore the old value. Separately save() updates only local state, so the header Alerts use thresholds text and the alert card keep the old numbers until an offering switch. Re-verified 2026-09-17 against the re-seeded database: still reproduces.",
+          "evidence": "Proven by round-trip: PUT classAverageBelow=90 stored 90; blanking it and PUT {} returned 200 with classAverageBelow still 90, because the merge keeps an absent key. The UI would show Thresholds saved and restore the old value. Separately save() updates only local state, so the header Alerts use thresholds text and the alert card keep the old numbers until an offering switch. Re-verified 2026-09-17 against the re-seeded database: still reproduces. Fixed 2026-09-18: `thresholdDraftToSettings(draft, previous)` now sends an empty section (`{ intervention: {} }`) when the teacher blanks the last override in it — the API's merge replaces a section wholesale, which is the only way to clear one — and `AnalyticsThresholdsPanel` calls a new `onSaved` so the dashboard refetches the overview the thresholds govern. Verified live as dsa.teacher on courses-offering-mcse501l-a: 90 stored, then a blank save returned settings `{ intervention: {} }` with effective classAverageBelow back at 60, whereas the old `{}` body left 77 in place. Test: tests/analytics-settings-view.test.ts.",
           "location": "lib/analytics/settings-view.ts:184-201",
-          "status": "open"
+          "status": "fixed"
         },
         {
           "id": "TN-9",
@@ -538,9 +538,9 @@
           "severity": "major",
           "category": "partial-implementation",
           "title": "Quiz AI offers every assessment kind as a generation target and attaches quiz questions to non-quiz assessments",
-          "evidence": "GET /api/teacher/quiz-generation returns every kind with no type filter (review-service.ts:34-52); generating into a GROUP_PROJECT returned 200 with publishedCount:1 and the student payload then showed quizQuestionCount:1 on a group project. Caveat (re-verification 2026-09-17): the target-list half still reproduces; GET /api/teacher/quiz-generation returns GROUP_PROJECT, CODE and DESCRIPTIVE assessments alongside QUIZ. The generation half could not be re-run because attaching new questions requires a provider call, outside this re-verification's scope; the generated-into-a-GROUP_PROJECT rows were the audit's and the re-seed purged them.",
+          "evidence": "GET /api/teacher/quiz-generation returns every kind with no type filter (review-service.ts:34-52); generating into a GROUP_PROJECT returned 200 with publishedCount:1 and the student payload then showed quizQuestionCount:1 on a group project. Caveat (re-verification 2026-09-17): the target-list half still reproduces; GET /api/teacher/quiz-generation returns GROUP_PROJECT, CODE and DESCRIPTIVE assessments alongside QUIZ. The generation half could not be re-run because attaching new questions requires a provider call, outside this re-verification's scope; the generated-into-a-GROUP_PROJECT rows were the audit's and the re-seed purged them. Fixed 2026-09-18: the generation target list filters to `type: QUIZ` and `loadOwnedAssessment` — the single loader every generate/edit/publish path uses — rejects any other kind with 409, so a question can no longer be attached to a group project. Verified live as demo.teacher: a probe GROUP_PROJECT was absent from GET /api/teacher/quiz-generation and POST /api/teacher/quiz-generation returned 409 `Generated questions can only be attached to a QUIZ assessment.`; the probe was deleted afterwards. Test: tests/quiz-generation-pipeline.test.ts.",
           "location": "lib/quiz-generation/review-service.ts:34-52",
-          "status": "open"
+          "status": "fixed"
         },
         {
           "id": "TN-41",
@@ -616,9 +616,9 @@
           "severity": "major",
           "category": "dead-control",
           "title": "Students get a working submission box for CODE and GROUP_PROJECT that always fails",
-          "evidence": "components/student-assessments-view.tsx:449-516 branches only on QUIZ; submitting CODE or GROUP_PROJECT text returns 409 \"Only written assessments support text submissions.\" and every row also carries a permanently disabled Detailed rubric soon button.",
+          "evidence": "components/student-assessments-view.tsx:449-516 branches only on QUIZ; submitting CODE or GROUP_PROJECT text returns 409 \"Only written assessments support text submissions.\" and every row also carries a permanently disabled Detailed rubric soon button. Fixed 2026-09-18: same defect and same fix as SN-7 (the student assessment card) — this is one defect filed by two domains, which `dupOf` cannot link across. The shared predicates in `lib/assessment-submission-rules.ts` now decide which kinds get a text editor, so CODE links to /student/code-submissions and GROUP_PROJECT says there is no individual text submission; the submission route reads the same `supportsTextSubmission`. Test: tests/assessment-submission-rules.test.ts.",
           "location": "components/student-assessments-view.tsx:449-519",
-          "status": "open"
+          "status": "fixed"
         },
         {
           "id": "TN-47",
@@ -655,9 +655,9 @@
           "severity": "major",
           "category": "missing-write-path",
           "title": "Groups milestones are title-only and groups are disconnected from GROUP_PROJECT assessments",
-          "evidence": "The milestone API accepts description, weight and dueDate but the UI sends only groupId and title with no edit or delete; there is no peer-evaluation config surface, Group has no assessmentId (schema.prisma:890-906), and a student can be in two teams rendering Members placed 4 / 5 and Unassigned 2. Caveat (re-verification 2026-09-17): the second team and the 'Members placed 4 / 5' state were audit-created; the re-seeded database has one 3-member team (demo-group-alpha) and no student in two teams. The title-only milestone write path is unchanged (the UI sends only groupId and title). Partially fixed 2026-09-18, still open for the schema-dependent half. Done: milestone create now sends description, weight and due date (`lib/groups/milestone-form.ts`), each milestone has Edit and Delete actions backed by `deleteMilestoneForTeacher` and a new DELETE route handler, and the write paths refuse to place a student in two teams of one offering. Verified by `tests/groups-milestone-write-paths.test.ts` (5 tests passing against the test database: create fields, edit/clear, delete plus audit row, duplicate guard, reuse after archive). Not done, needs a decision: linking a Group to a GROUP_PROJECT assessment needs a new `Group.assessmentId` column, which is a schema change the brief forbids without approval, so it is reported here rather than migrated.",
+          "evidence": "The milestone API accepts description, weight and dueDate but the UI sends only groupId and title with no edit or delete; there is no peer-evaluation config surface, Group has no assessmentId (schema.prisma:890-906), and a student can be in two teams rendering Members placed 4 / 5 and Unassigned 2. Caveat (re-verification 2026-09-17): the second team and the 'Members placed 4 / 5' state were audit-created; the re-seeded database has one 3-member team (demo-group-alpha) and no student in two teams. The title-only milestone write path is unchanged (the UI sends only groupId and title). Fixed 2026-09-18 in two halves. (1) Milestones (35f07fd): create now sends description, weight and due date, each has Edit and Delete via `deleteMilestoneForTeacher` and a DELETE route, and the write paths refuse a student in two teams of one offering (`tests/groups-milestone-write-paths.test.ts`). (2) Group ↔ GROUP_PROJECT link: `Group.assessmentId` is a nullable FK to `Assessment` with `onDelete: Restrict`. `Restrict` is deliberate — `SetNull` would silently unscope a project team (the `CalendarEvent` orphan shape), `Cascade` would delete the team and its peer evaluations with the assessment. Create/update accept `assessmentId`, validated to an owned GROUP_PROJECT of the same offering; the summary carries `assessmentId`/`assessmentTitle`; the filter is single-sourced in `lib/groups/assessment-link.ts`, used by the group list and the offering analysis. The demo seed links `demo-group-alpha` to `demo-assessment-group-project`. Verified live on :3000 as demo.teacher: GET groups showed null before the PATCH and the project title after, `?assessmentId=` narrowed to the one team, QUIZ/CODE ids were refused 400, and `/teacher/groups` rendered the link; `tests/groups-assessment-link.test.ts` (9 tests) covers link, filter, refusals and the RESTRICT delete; the migration applies from empty via `prisma migrate deploy`.",
           "location": "components/teacher-groups-manager.tsx:443-545",
-          "status": "open"
+          "status": "fixed"
         },
         {
           "id": "TN-50",
@@ -928,9 +928,9 @@
           "severity": "major",
           "category": "broken-flow",
           "title": "Deleting an assessment or offering would promote its calendar event to every student in every institution",
-          "evidence": "Code-inferred, not executed: lib/gradebook-db.ts:596-609 creates the CalendarEvent with `title: assessment.title` (bare; the `Due: ` marker lives only in `description`) and `assessmentId` on `onDelete: SetNull`. lib/calendar.ts:104 reads an event whose offeringId and classId are both null as INSTITUTION_WIDE, and the release filter at lib/calendar.ts:122-130 is keyed on assessmentId, so nulling that column both exempts the event from the release gate and serves it to every student. Latent today: nothing deletes an assessment (the retention purge is redact-only, lib/retention/purge.ts:343, and the only deleteMany callers are seeds), and TN-39/TN-55 record that no assessment delete endpoint exists. This is the same mechanism that left 28 student-visible AUDIT- calendar rows during the first audit pass; it becomes live the moment delete is implemented.",
+          "evidence": "Code-inferred, not executed: lib/gradebook-db.ts:596-609 creates the CalendarEvent with `title: assessment.title` (bare; the `Due: ` marker lives only in `description`) and `assessmentId` on `onDelete: SetNull`. lib/calendar.ts:104 reads an event whose offeringId and classId are both null as INSTITUTION_WIDE, and the release filter at lib/calendar.ts:122-130 is keyed on assessmentId, so nulling that column both exempts the event from the release gate and serves it to every student. Latent today: nothing deletes an assessment (the retention purge is redact-only, lib/retention/purge.ts:343, and the only deleteMany callers are seeds), and TN-39/TN-55 record that no assessment delete endpoint exists. This is the same mechanism that left 28 student-visible AUDIT- calendar rows during the first audit pass; it becomes live the moment delete is implemented. Fixed 2026-09-18, and the described trigger had partly changed: TN-39's assessment DELETE already removes the assessment's CalendarEvent rows in the same transaction, so the delete path no longer leaves an orphan. The latent offering/class path is now closed structurally too — `INSTITUTION_WIDE` in `lib/calendar.ts` requires `assessmentId: null` and excludes `eventType: ASSESSMENT`, so an event stripped of every scope column can no longer be served as a school-wide notice or evade the release filter. Test: the dangling-event case in tests/calendar-read.test.ts.",
           "location": "lib/gradebook-db.ts:596-609",
-          "status": "open"
+          "status": "fixed"
         }
       ],
       "total": 70,
@@ -943,7 +943,7 @@
       },
       "bySeverityOpen": {
         "blocker": 0,
-        "major": 8,
+        "major": 3,
         "minor": 34
       },
       "byCategory": {
@@ -958,8 +958,8 @@
         "confidentiality-leak": 1
       },
       "byStatus": {
-        "open": 42,
-        "fixed": 28,
+        "open": 37,
+        "fixed": 33,
         "wontfix": 0
       },
       "byAgent": {
@@ -1183,9 +1183,9 @@
           "severity": "major",
           "category": "dead-control",
           "title": "Save draft is enabled but always fails on a submitted, resubmitted or late assessment and graded immutability is unexplained",
-          "evidence": "The button is disabled only when submissionState is graded, but saveDraft on a submitted assessment returns 409 \"A submitted assignment can no longer be saved as a draft.\"; a GRADED card is readOnly with no message explaining why.",
+          "evidence": "The button is disabled only when submissionState is graded, but saveDraft on a submitted assessment returns 409 \"A submitted assignment can no longer be saved as a draft.\"; a GRADED card is readOnly with no message explaining why. Fixed 2026-09-18: `lib/assessment-submission-rules.ts` states `saveDraftAllowed` (not_submitted/draft only) and `submissionLockReason`; the card disables Save draft for a handed-in piece and explains graded immutability instead of rendering a mute read-only box. Verified the route rule it now mirrors: POST saveDraft to demo-assessment-essay (SUBMITTED) returned 409 `A submitted assignment can no longer be saved as a draft.` Test: tests/assessment-submission-rules.test.ts.",
           "location": "components/student-assessments-view.tsx:479-521",
-          "status": "open"
+          "status": "fixed"
         },
         {
           "id": "SN-7",
@@ -1196,9 +1196,9 @@
           "severity": "major",
           "category": "dead-control",
           "title": "Text editor offered on CODE and GROUP_PROJECT cards that can never submit",
-          "evidence": "CODE and GROUP_PROJECT cards render a textarea, a counter and Submit assignment, but both return 409 \"Only written assessments support text submissions.\"; the UI special-cases only QUIZ while the server accepts only ASSIGNMENT and DESCRIPTIVE.",
+          "evidence": "CODE and GROUP_PROJECT cards render a textarea, a counter and Submit assignment, but both return 409 \"Only written assessments support text submissions.\"; the UI special-cases only QUIZ while the server accepts only ASSIGNMENT and DESCRIPTIVE. Fixed 2026-09-18: the card renders an editor only for the kinds the route accepts (`supportsTextSubmission`: ASSIGNMENT/DESCRIPTIVE); CODE links to the recorded path /student/code-submissions and GROUP_PROJECT states there is no individual text submission, so the always-failing box is gone. Verified the route rule it now mirrors: a text submission POST to the CODE task demo-assessment-code returned 409 `Only written assessments support text submissions.` Test: tests/assessment-submission-rules.test.ts.",
           "location": "components/student-assessments-view.tsx:449-519",
-          "status": "open"
+          "status": "fixed"
         },
         {
           "id": "SN-8",
@@ -1209,9 +1209,9 @@
           "severity": "major",
           "category": "broken-flow",
           "title": "A course that ended in June 2025 is advertised Registration open and accepts enrolment",
-          "evidence": "demo-offering-past (endsOn 2025-06-06) shows Register on /student/courses and demo.student5 enrolled then saw Completed / Ready to rate; registrationStatusFor never consults endsOn and dropped or withdrawn enrolments are invisible. Re-verified 2026-09-17 against the re-seeded database: still reproduces.",
+          "evidence": "demo-offering-past (endsOn 2025-06-06) shows Register on /student/courses and demo.student5 enrolled then saw Completed / Ready to rate; registrationStatusFor never consults endsOn and dropped or withdrawn enrolments are invisible. Re-verified 2026-09-17 against the re-seeded database: still reproduces. Fixed 2026-09-18: `registrationStatusFor` now takes `endsOn` and reports `closed`/`canRegister:false` for a finished offering, and the enroll route refuses one by the same rule. Verified live as demo.student5: demo-offering-past (endsOn 2025-06-06) changed from `open`/canRegister true to `closed`/false, and POST /api/student/courses/enroll returned 409 `Registration window is closed.` Tests: tests/student-courses.test.ts.",
           "location": "lib/student-courses.ts:86-99",
-          "status": "open"
+          "status": "fixed"
         },
         {
           "id": "SN-9",
@@ -1222,9 +1222,9 @@
           "severity": "major",
           "category": "inconsistency",
           "title": "Dashboard Due next contradicts itself: Not submitted rows carry released marks",
-          "evidence": "bda.student01 sees Submitted 1 of 14 yet the Due-next table lists 13 rows badged Not submitted, 6 of them with released marks, and Overall 72% is computed from those rows; a SUBMITTED quiz attempt also reads Not submitted because state derives only from the Submission table. Re-verified 2026-09-17 against the re-seeded database: still reproduces.",
+          "evidence": "bda.student01 sees Submitted 1 of 14 yet the Due-next table lists 13 rows badged Not submitted, 6 of them with released marks, and Overall 72% is computed from those rows; a SUBMITTED quiz attempt also reads Not submitted because state derives only from the Submission table. Re-verified 2026-09-17 against the re-seeded database: still reproduces. Fixed 2026-09-18: `outstandingAssessments` is now 'no submission AND no mark' (`studentMarkState`), and `submittedCount`/`dueThisWeek` derive from the same rule. Verified live as bda.student01, who has 6 assessments with a released mark and no `Submission` row: the tile reads Submitted 7 of 10 / 3 still to hand in, and the Due-next table no longer lists those 6 as Not submitted (the audit saw Submitted 1 of 14 with the marked rows badged Not submitted). Test: tests/student-dashboard-view.test.ts.",
           "location": "components/student-dashboard.tsx:60-72",
-          "status": "open"
+          "status": "fixed"
         },
         {
           "id": "SN-10",
@@ -1235,9 +1235,9 @@
           "severity": "major",
           "category": "inconsistency",
           "title": "Graded and Pending filters contradict the badge on the same card",
-          "evidence": "The filter keys on percentage being non-null while the badge keys on submission state, so clicking Graded returns cards badged Not submitted and a graded submission with an unreleased mark hides under Pending.",
+          "evidence": "The filter keys on percentage being non-null while the badge keys on submission state, so clicking Graded returns cards badged Not submitted and a graded submission with an unreleased mark hides under Pending. Fixed 2026-09-18: the Graded/Pending filters now key on `submissionState`, the same field the badge renders, instead of `percentage`, so a card filtered as Graded carries the Graded badge and a graded sitting with an unreleased mark no longer hides under Pending. The rule lives in the component beside the badge it must agree with.",
           "location": "components/student-assessments-view.tsx:159-161",
-          "status": "open"
+          "status": "fixed"
         },
         {
           "id": "SN-11",
@@ -1261,9 +1261,9 @@
           "severity": "major",
           "category": "confidentiality-leak",
           "title": "/quiz is a second, unrecorded quiz centre that reveals the full answer key",
-          "evidence": "The assessments page links to a quiz center whose POST /api/quiz/grade returned full correctText and explanation both times with no QuizAttempt persisted, so a student can preview the key unlimited before the graded attempt. Re-verified 2026-09-17 against the re-seeded database: still reproduces.",
+          "evidence": "The assessments page links to a quiz center whose POST /api/quiz/grade returned full correctText and explanation both times with no QuizAttempt persisted, so a student can preview the key unlimited before the graded attempt. Re-verified 2026-09-17 against the re-seeded database: still reproduces. Fixed 2026-09-18: /quiz is retired. The unrecorded grader POST /api/quiz/grade and components/quiz-runner.tsx were deleted, and app/quiz/page.tsx redirects to the recorded flow /student/quizzes; the assessment card's quiz link points there too. Verified live as demo.student1: GET /quiz returns 307 to /student/quizzes and POST /api/quiz/grade returns 404, so the answer key can no longer be previewed without a persisted attempt.",
           "location": "app/quiz/page.tsx",
-          "status": "open"
+          "status": "fixed"
         },
         {
           "id": "SN-13",
@@ -1274,9 +1274,9 @@
           "severity": "major",
           "category": "inconsistency",
           "title": "Retake dropdowns render raw internal values",
-          "evidence": "demo.student1's /student/retake trigger labels are cmu5ny4xy005r3gk6djn2mg52 and true instead of a course or quiz label and Include unanswered, because the items prop is omitted on both Select roots. demo.student1's /student/retake trigger labels render the raw internal values \"demo-assessment-quiz\" and \"true\" instead of a course or quiz label and \"Include unanswered\", because the items prop is omitted on both Select roots. Re-verified 2026-09-17 (the earlier observation showed an audit-created assessment id; the raw-value defect is unchanged).",
+          "evidence": "demo.student1's /student/retake trigger labels are cmu5ny4xy005r3gk6djn2mg52 and true instead of a course or quiz label and Include unanswered, because the items prop is omitted on both Select roots. demo.student1's /student/retake trigger labels render the raw internal values \"demo-assessment-quiz\" and \"true\" instead of a course or quiz label and \"Include unanswered\", because the items prop is omitted on both Select roots. Re-verified 2026-09-17 (the earlier observation showed an audit-created assessment id; the raw-value defect is unchanged). Fixed 2026-09-18: both retake Selects now pass `items`, which is what Base UI needs to render a label. Verified live as demo.student1: the trigger renders `DEMO-MATH-101 · Linear Equations Check-in (AI-generated) (0 to retry)` and `Include unanswered` instead of `demo-assessment-quiz` and `true`.",
           "location": "components/student-adaptive-retake.tsx:102-118",
-          "status": "open"
+          "status": "fixed"
         },
         {
           "id": "SN-14",
@@ -1300,9 +1300,10 @@
           "severity": "major",
           "category": "partial-implementation",
           "title": "Mid-attempt answers are never saved and leaving silently discards them",
-          "evidence": "No draft or autosave endpoint exists, and openAttempt and startAttempt reset answers to all-null with an IN_PROGRESS attempt returning no stored selections, so every typed answer is lost on navigation.",
+          "evidence": "No draft or autosave endpoint exists, and openAttempt and startAttempt reset answers to all-null with an IN_PROGRESS attempt returning no stored selections, so every typed answer is lost on navigation. Linked as a duplicate of SL-1 rather than fixed twice: SL-1 (the blocker) landed the answer-persistence path — PUT /api/student/quiz-attempts/[attemptId]/draft with client autosave (debounced, flushed on pagehide) and hydration from `draftAnswers` — which is exactly the missing server home this row describes. dupOf set to SL-1 and status fixed.",
           "location": "components/student-quiz-attempts.tsx:121",
-          "status": "open"
+          "status": "fixed",
+          "dupOf": "SL-1"
         },
         {
           "id": "SN-16",
@@ -1326,9 +1327,9 @@
           "severity": "major",
           "category": "fabricated-number",
           "title": "Zero-data students are shown confident, false statements",
-          "evidence": "bda.student31 and 32 see Submitted 0 of 0, the empty state \"Every assessment on your courses has a submission from you\" over an empty set, \"Everything is indexed\" for 0 materials and \"Latest attempt scored 0\" with no attempts. Re-verified 2026-09-17 against the re-seeded database: still reproduces.",
+          "evidence": "bda.student31 and 32 see Submitted 0 of 0, the empty state \"Every assessment on your courses has a submission from you\" over an empty set, \"Everything is indexed\" for 0 materials and \"Latest attempt scored 0\" with no attempts. Re-verified 2026-09-17 against the re-seeded database: still reproduces. Fixed 2026-09-18: the empty-state copy distinguishes an empty set (`No assessments are assigned to your courses yet`), the resources tiles say `No materials on your courses yet` instead of `Everything is indexed`, and the quiz tile renders an em dash rather than 0 when no quizzes exist. Verified live as bda.student31: all three surfaces render the honest copy and no longer the false all-clear.",
           "location": "lib/student-dashboard-view.ts:215-226",
-          "status": "open"
+          "status": "fixed"
         },
         {
           "id": "SN-18",
@@ -1536,9 +1537,9 @@
           "severity": "major",
           "category": "partial-implementation",
           "title": "Test-run failure reason is unreachable once you leave the editor",
-          "evidence": "The Results table renders result.description or result.message, and every seeded case has a non-null description, so a sandbox-killed run shows three red Failed pills with no reason and stderr is empty so the disclosure does not appear. Re-verified 2026-09-17: the same fresh FAILED run rendered three red Failed pills labelled with each case's non-null description (for example \"Slope through (0,0) and (2,4) is 2.\") while the result payload's message said \"Sandbox unavailable: failed to connect to the docker API\"; the failure reason is still not reachable on the page.",
+          "evidence": "The Results table renders result.description or result.message, and every seeded case has a non-null description, so a sandbox-killed run shows three red Failed pills with no reason and stderr is empty so the disclosure does not appear. Re-verified 2026-09-17: the same fresh FAILED run rendered three red Failed pills labelled with each case's non-null description (for example \"Slope through (0,0) and (2,4) is 2.\") while the result payload's message said \"Sandbox unavailable: failed to connect to the docker API\"; the failure reason is still not reachable on the page. Fixed 2026-09-18: `failureReason` (lib/code-eval/results.ts) decides when a failed case's `message` adds information, and the results table renders it under the case instead of `description ?? message`. Verified live with a temporary FAILED run on demo.student1's code task: the page rendered `Sandbox unavailable: failed to connect to the docker API` under each case; the probe run was deleted (0 rows). Test: tests/code-eval-results.test.ts.",
           "location": "app/(dashboard)/student/code-submissions/page.tsx:44-51",
-          "status": "open"
+          "status": "fixed"
         },
         {
           "id": "SN-34",
@@ -1549,9 +1550,9 @@
           "severity": "major",
           "category": "fabricated-number",
           "title": "Unexecuted runs show Coverage 0% and Runtime 0ms",
-          "evidence": "The sandbox-error run returned coverage 0 and runtimeMs 0 rendered as 0% and 0ms, though the page's own comment intends an em dash; computeCoverage returns 0 rather than null. Re-verified 2026-09-17 against a fresh FAILED run (Docker down): the student page rendered Coverage 0% and the runs table rendered 0ms, a fabricated 0 rather than the page's intended em dash.",
+          "evidence": "The sandbox-error run returned coverage 0 and runtimeMs 0 rendered as 0% and 0ms, though the page's own comment intends an em dash; computeCoverage returns 0 rather than null. Re-verified 2026-09-17 against a fresh FAILED run (Docker down): the student page rendered Coverage 0% and the runs table rendered 0ms, a fabricated 0 rather than the page's intended em dash. Fixed 2026-09-18: `computeCoverage` returns null rather than 0 when nothing executed, and `measuredRuntimeMs` treats 0ms/null/zero-test runs as not measured; the student and teacher run tables render an em dash. Verified live with a temporary FAILED run (coverage null, runtimeMs 0) on demo.student1's code task: the card rendered Coverage — and the runs table `not measured`; the probe run was deleted (0 rows). Test: tests/code-eval-results.test.ts.",
           "location": "lib/code-eval/results.ts:239-243",
-          "status": "open"
+          "status": "fixed"
         },
         {
           "id": "SN-35",
@@ -1575,9 +1576,9 @@
           "severity": "major",
           "category": "inconsistency",
           "title": "Quizzes page eligibility ignores the retake policy (latent)",
-          "evidence": "lib/quiz-attempts/service.ts:309,323 compute attemptsUsed and canStart from resolveMaxAttempts only while the enforced start path also applies decideRetake and resolveSittingCap, so the list could offer Start attempt while the server refuses; no NONE or retakesAllowed seed.",
+          "evidence": "lib/quiz-attempts/service.ts:309,323 compute attemptsUsed and canStart from resolveMaxAttempts only while the enforced start path also applies decideRetake and resolveSittingCap, so the list could offer Start attempt while the server refuses; no NONE or retakesAllowed seed. Fixed 2026-09-18: `retakeStateFrom` is now the one rule the retake page and the quizzes list both read, so an APPROVAL quiz past its first sitting reports `canStart:false` with the policy reason instead of offering a Start the route refuses. Test: tests/retake-state.test.ts (pure cases for APPROVAL with and without a request, and practice exclusion).",
           "location": "lib/quiz-attempts/service.ts:309",
-          "status": "open"
+          "status": "fixed"
         },
         {
           "id": "SN-37",
@@ -1588,9 +1589,9 @@
           "severity": "major",
           "category": "inconsistency",
           "title": "Dropped or withdrawn student still scoped into /api/gradebook",
-          "evidence": "bda.student31 has 0 active enrolments yet /api/gradebook returns courses MCSE501L and MCSE501P with 7 assessment titles and classAverages, because lib/gradebook-db.ts:313-340 filters enrollments with no active status; no personal marks leak. Re-verified 2026-09-17 against the re-seeded database: still reproduces.",
+          "evidence": "bda.student31 has 0 active enrolments yet /api/gradebook returns courses MCSE501L and MCSE501P with 7 assessment titles and classAverages, because lib/gradebook-db.ts:313-340 filters enrollments with no active status; no personal marks leak. Re-verified 2026-09-17 against the re-seeded database: still reproduces. Fixed 2026-09-18: the student gradebook projection filters enrollments through the shared `isLiveEnrollmentStatus` (active/waitlisted), so a dropped or withdrawn student receives no courses, assessment titles or averages. Verified live as bda.student31 (0 active enrolments): GET /api/gradebook now returns 0 assessments, 0 courses and 0 events where it previously returned 2 courses and 7 assessment titles. Test: tests/gradebook-release-projection.test.ts. The predicate is also now shared with lib/student-assessments.ts and lib/quiz-grading.ts, which each carried a copy.",
           "location": "lib/gradebook-db.ts:313-340",
-          "status": "open"
+          "status": "fixed"
         },
         {
           "id": "SN-38",
@@ -1773,7 +1774,7 @@
       },
       "bySeverityOpen": {
         "blocker": 0,
-        "major": 17,
+        "major": 4,
         "minor": 22
       },
       "byCategory": {
@@ -1788,8 +1789,8 @@
         "confidentiality-leak": 3
       },
       "byStatus": {
-        "open": 39,
-        "fixed": 11,
+        "open": 26,
+        "fixed": 24,
         "wontfix": 0
       },
       "byAgent": {
@@ -2018,9 +2019,9 @@
           "severity": "major",
           "category": "broken-flow",
           "title": "Analytics thresholds cannot clear the last override (Save is a silent no-op) and saving does not refresh the alerts it governs",
-          "evidence": "Proven by round-trip: PUT classAverageBelow=90 stored 90; blanking it and PUT {} returned 200 with classAverageBelow still 90, because the merge keeps an absent key. The UI would show Thresholds saved and restore the old value. Separately save() updates only local state, so the header Alerts use thresholds text and the alert card keep the old numbers until an offering switch. Re-verified 2026-09-17 against the re-seeded database: still reproduces.",
+          "evidence": "Proven by round-trip: PUT classAverageBelow=90 stored 90; blanking it and PUT {} returned 200 with classAverageBelow still 90, because the merge keeps an absent key. The UI would show Thresholds saved and restore the old value. Separately save() updates only local state, so the header Alerts use thresholds text and the alert card keep the old numbers until an offering switch. Re-verified 2026-09-17 against the re-seeded database: still reproduces. Fixed 2026-09-18: `thresholdDraftToSettings(draft, previous)` now sends an empty section (`{ intervention: {} }`) when the teacher blanks the last override in it — the API's merge replaces a section wholesale, which is the only way to clear one — and `AnalyticsThresholdsPanel` calls a new `onSaved` so the dashboard refetches the overview the thresholds govern. Verified live as dsa.teacher on courses-offering-mcse501l-a: 90 stored, then a blank save returned settings `{ intervention: {} }` with effective classAverageBelow back at 60, whereas the old `{}` body left 77 in place. Test: tests/analytics-settings-view.test.ts.",
           "location": "lib/analytics/settings-view.ts:184-201",
-          "status": "open"
+          "status": "fixed"
         },
         {
           "id": "TN-9",
@@ -2395,9 +2396,9 @@
           "severity": "major",
           "category": "partial-implementation",
           "title": "Quiz AI offers every assessment kind as a generation target and attaches quiz questions to non-quiz assessments",
-          "evidence": "GET /api/teacher/quiz-generation returns every kind with no type filter (review-service.ts:34-52); generating into a GROUP_PROJECT returned 200 with publishedCount:1 and the student payload then showed quizQuestionCount:1 on a group project. Caveat (re-verification 2026-09-17): the target-list half still reproduces; GET /api/teacher/quiz-generation returns GROUP_PROJECT, CODE and DESCRIPTIVE assessments alongside QUIZ. The generation half could not be re-run because attaching new questions requires a provider call, outside this re-verification's scope; the generated-into-a-GROUP_PROJECT rows were the audit's and the re-seed purged them.",
+          "evidence": "GET /api/teacher/quiz-generation returns every kind with no type filter (review-service.ts:34-52); generating into a GROUP_PROJECT returned 200 with publishedCount:1 and the student payload then showed quizQuestionCount:1 on a group project. Caveat (re-verification 2026-09-17): the target-list half still reproduces; GET /api/teacher/quiz-generation returns GROUP_PROJECT, CODE and DESCRIPTIVE assessments alongside QUIZ. The generation half could not be re-run because attaching new questions requires a provider call, outside this re-verification's scope; the generated-into-a-GROUP_PROJECT rows were the audit's and the re-seed purged them. Fixed 2026-09-18: the generation target list filters to `type: QUIZ` and `loadOwnedAssessment` — the single loader every generate/edit/publish path uses — rejects any other kind with 409, so a question can no longer be attached to a group project. Verified live as demo.teacher: a probe GROUP_PROJECT was absent from GET /api/teacher/quiz-generation and POST /api/teacher/quiz-generation returned 409 `Generated questions can only be attached to a QUIZ assessment.`; the probe was deleted afterwards. Test: tests/quiz-generation-pipeline.test.ts.",
           "location": "lib/quiz-generation/review-service.ts:34-52",
-          "status": "open"
+          "status": "fixed"
         },
         {
           "id": "TN-41",
@@ -2473,9 +2474,9 @@
           "severity": "major",
           "category": "dead-control",
           "title": "Students get a working submission box for CODE and GROUP_PROJECT that always fails",
-          "evidence": "components/student-assessments-view.tsx:449-516 branches only on QUIZ; submitting CODE or GROUP_PROJECT text returns 409 \"Only written assessments support text submissions.\" and every row also carries a permanently disabled Detailed rubric soon button.",
+          "evidence": "components/student-assessments-view.tsx:449-516 branches only on QUIZ; submitting CODE or GROUP_PROJECT text returns 409 \"Only written assessments support text submissions.\" and every row also carries a permanently disabled Detailed rubric soon button. Fixed 2026-09-18: same defect and same fix as SN-7 (the student assessment card) — this is one defect filed by two domains, which `dupOf` cannot link across. The shared predicates in `lib/assessment-submission-rules.ts` now decide which kinds get a text editor, so CODE links to /student/code-submissions and GROUP_PROJECT says there is no individual text submission; the submission route reads the same `supportsTextSubmission`. Test: tests/assessment-submission-rules.test.ts.",
           "location": "components/student-assessments-view.tsx:449-519",
-          "status": "open"
+          "status": "fixed"
         },
         {
           "id": "TN-47",
@@ -2512,9 +2513,9 @@
           "severity": "major",
           "category": "missing-write-path",
           "title": "Groups milestones are title-only and groups are disconnected from GROUP_PROJECT assessments",
-          "evidence": "The milestone API accepts description, weight and dueDate but the UI sends only groupId and title with no edit or delete; there is no peer-evaluation config surface, Group has no assessmentId (schema.prisma:890-906), and a student can be in two teams rendering Members placed 4 / 5 and Unassigned 2. Caveat (re-verification 2026-09-17): the second team and the 'Members placed 4 / 5' state were audit-created; the re-seeded database has one 3-member team (demo-group-alpha) and no student in two teams. The title-only milestone write path is unchanged (the UI sends only groupId and title). Partially fixed 2026-09-18, still open for the schema-dependent half. Done: milestone create now sends description, weight and due date (`lib/groups/milestone-form.ts`), each milestone has Edit and Delete actions backed by `deleteMilestoneForTeacher` and a new DELETE route handler, and the write paths refuse to place a student in two teams of one offering. Verified by `tests/groups-milestone-write-paths.test.ts` (5 tests passing against the test database: create fields, edit/clear, delete plus audit row, duplicate guard, reuse after archive). Not done, needs a decision: linking a Group to a GROUP_PROJECT assessment needs a new `Group.assessmentId` column, which is a schema change the brief forbids without approval, so it is reported here rather than migrated.",
+          "evidence": "The milestone API accepts description, weight and dueDate but the UI sends only groupId and title with no edit or delete; there is no peer-evaluation config surface, Group has no assessmentId (schema.prisma:890-906), and a student can be in two teams rendering Members placed 4 / 5 and Unassigned 2. Caveat (re-verification 2026-09-17): the second team and the 'Members placed 4 / 5' state were audit-created; the re-seeded database has one 3-member team (demo-group-alpha) and no student in two teams. The title-only milestone write path is unchanged (the UI sends only groupId and title). Fixed 2026-09-18 in two halves. (1) Milestones (35f07fd): create now sends description, weight and due date, each has Edit and Delete via `deleteMilestoneForTeacher` and a DELETE route, and the write paths refuse a student in two teams of one offering (`tests/groups-milestone-write-paths.test.ts`). (2) Group ↔ GROUP_PROJECT link: `Group.assessmentId` is a nullable FK to `Assessment` with `onDelete: Restrict`. `Restrict` is deliberate — `SetNull` would silently unscope a project team (the `CalendarEvent` orphan shape), `Cascade` would delete the team and its peer evaluations with the assessment. Create/update accept `assessmentId`, validated to an owned GROUP_PROJECT of the same offering; the summary carries `assessmentId`/`assessmentTitle`; the filter is single-sourced in `lib/groups/assessment-link.ts`, used by the group list and the offering analysis. The demo seed links `demo-group-alpha` to `demo-assessment-group-project`. Verified live on :3000 as demo.teacher: GET groups showed null before the PATCH and the project title after, `?assessmentId=` narrowed to the one team, QUIZ/CODE ids were refused 400, and `/teacher/groups` rendered the link; `tests/groups-assessment-link.test.ts` (9 tests) covers link, filter, refusals and the RESTRICT delete; the migration applies from empty via `prisma migrate deploy`.",
           "location": "components/teacher-groups-manager.tsx:443-545",
-          "status": "open"
+          "status": "fixed"
         },
         {
           "id": "TN-50",
@@ -2785,9 +2786,9 @@
           "severity": "major",
           "category": "broken-flow",
           "title": "Deleting an assessment or offering would promote its calendar event to every student in every institution",
-          "evidence": "Code-inferred, not executed: lib/gradebook-db.ts:596-609 creates the CalendarEvent with `title: assessment.title` (bare; the `Due: ` marker lives only in `description`) and `assessmentId` on `onDelete: SetNull`. lib/calendar.ts:104 reads an event whose offeringId and classId are both null as INSTITUTION_WIDE, and the release filter at lib/calendar.ts:122-130 is keyed on assessmentId, so nulling that column both exempts the event from the release gate and serves it to every student. Latent today: nothing deletes an assessment (the retention purge is redact-only, lib/retention/purge.ts:343, and the only deleteMany callers are seeds), and TN-39/TN-55 record that no assessment delete endpoint exists. This is the same mechanism that left 28 student-visible AUDIT- calendar rows during the first audit pass; it becomes live the moment delete is implemented.",
+          "evidence": "Code-inferred, not executed: lib/gradebook-db.ts:596-609 creates the CalendarEvent with `title: assessment.title` (bare; the `Due: ` marker lives only in `description`) and `assessmentId` on `onDelete: SetNull`. lib/calendar.ts:104 reads an event whose offeringId and classId are both null as INSTITUTION_WIDE, and the release filter at lib/calendar.ts:122-130 is keyed on assessmentId, so nulling that column both exempts the event from the release gate and serves it to every student. Latent today: nothing deletes an assessment (the retention purge is redact-only, lib/retention/purge.ts:343, and the only deleteMany callers are seeds), and TN-39/TN-55 record that no assessment delete endpoint exists. This is the same mechanism that left 28 student-visible AUDIT- calendar rows during the first audit pass; it becomes live the moment delete is implemented. Fixed 2026-09-18, and the described trigger had partly changed: TN-39's assessment DELETE already removes the assessment's CalendarEvent rows in the same transaction, so the delete path no longer leaves an orphan. The latent offering/class path is now closed structurally too — `INSTITUTION_WIDE` in `lib/calendar.ts` requires `assessmentId: null` and excludes `eventType: ASSESSMENT`, so an event stripped of every scope column can no longer be served as a school-wide notice or evade the release filter. Test: the dangling-event case in tests/calendar-read.test.ts.",
           "location": "lib/gradebook-db.ts:596-609",
-          "status": "open"
+          "status": "fixed"
         }
       ],
       "uniqueToLangchain": [
@@ -3006,9 +3007,9 @@
           "severity": "major",
           "category": "dead-control",
           "title": "Save draft is enabled but always fails on a submitted, resubmitted or late assessment and graded immutability is unexplained",
-          "evidence": "The button is disabled only when submissionState is graded, but saveDraft on a submitted assessment returns 409 \"A submitted assignment can no longer be saved as a draft.\"; a GRADED card is readOnly with no message explaining why.",
+          "evidence": "The button is disabled only when submissionState is graded, but saveDraft on a submitted assessment returns 409 \"A submitted assignment can no longer be saved as a draft.\"; a GRADED card is readOnly with no message explaining why. Fixed 2026-09-18: `lib/assessment-submission-rules.ts` states `saveDraftAllowed` (not_submitted/draft only) and `submissionLockReason`; the card disables Save draft for a handed-in piece and explains graded immutability instead of rendering a mute read-only box. Verified the route rule it now mirrors: POST saveDraft to demo-assessment-essay (SUBMITTED) returned 409 `A submitted assignment can no longer be saved as a draft.` Test: tests/assessment-submission-rules.test.ts.",
           "location": "components/student-assessments-view.tsx:479-521",
-          "status": "open"
+          "status": "fixed"
         },
         {
           "id": "SN-7",
@@ -3019,9 +3020,9 @@
           "severity": "major",
           "category": "dead-control",
           "title": "Text editor offered on CODE and GROUP_PROJECT cards that can never submit",
-          "evidence": "CODE and GROUP_PROJECT cards render a textarea, a counter and Submit assignment, but both return 409 \"Only written assessments support text submissions.\"; the UI special-cases only QUIZ while the server accepts only ASSIGNMENT and DESCRIPTIVE.",
+          "evidence": "CODE and GROUP_PROJECT cards render a textarea, a counter and Submit assignment, but both return 409 \"Only written assessments support text submissions.\"; the UI special-cases only QUIZ while the server accepts only ASSIGNMENT and DESCRIPTIVE. Fixed 2026-09-18: the card renders an editor only for the kinds the route accepts (`supportsTextSubmission`: ASSIGNMENT/DESCRIPTIVE); CODE links to the recorded path /student/code-submissions and GROUP_PROJECT states there is no individual text submission, so the always-failing box is gone. Verified the route rule it now mirrors: a text submission POST to the CODE task demo-assessment-code returned 409 `Only written assessments support text submissions.` Test: tests/assessment-submission-rules.test.ts.",
           "location": "components/student-assessments-view.tsx:449-519",
-          "status": "open"
+          "status": "fixed"
         },
         {
           "id": "SN-8",
@@ -3032,9 +3033,9 @@
           "severity": "major",
           "category": "broken-flow",
           "title": "A course that ended in June 2025 is advertised Registration open and accepts enrolment",
-          "evidence": "demo-offering-past (endsOn 2025-06-06) shows Register on /student/courses and demo.student5 enrolled then saw Completed / Ready to rate; registrationStatusFor never consults endsOn and dropped or withdrawn enrolments are invisible. Re-verified 2026-09-17 against the re-seeded database: still reproduces.",
+          "evidence": "demo-offering-past (endsOn 2025-06-06) shows Register on /student/courses and demo.student5 enrolled then saw Completed / Ready to rate; registrationStatusFor never consults endsOn and dropped or withdrawn enrolments are invisible. Re-verified 2026-09-17 against the re-seeded database: still reproduces. Fixed 2026-09-18: `registrationStatusFor` now takes `endsOn` and reports `closed`/`canRegister:false` for a finished offering, and the enroll route refuses one by the same rule. Verified live as demo.student5: demo-offering-past (endsOn 2025-06-06) changed from `open`/canRegister true to `closed`/false, and POST /api/student/courses/enroll returned 409 `Registration window is closed.` Tests: tests/student-courses.test.ts.",
           "location": "lib/student-courses.ts:86-99",
-          "status": "open"
+          "status": "fixed"
         },
         {
           "id": "SN-9",
@@ -3045,9 +3046,9 @@
           "severity": "major",
           "category": "inconsistency",
           "title": "Dashboard Due next contradicts itself: Not submitted rows carry released marks",
-          "evidence": "bda.student01 sees Submitted 1 of 14 yet the Due-next table lists 13 rows badged Not submitted, 6 of them with released marks, and Overall 72% is computed from those rows; a SUBMITTED quiz attempt also reads Not submitted because state derives only from the Submission table. Re-verified 2026-09-17 against the re-seeded database: still reproduces.",
+          "evidence": "bda.student01 sees Submitted 1 of 14 yet the Due-next table lists 13 rows badged Not submitted, 6 of them with released marks, and Overall 72% is computed from those rows; a SUBMITTED quiz attempt also reads Not submitted because state derives only from the Submission table. Re-verified 2026-09-17 against the re-seeded database: still reproduces. Fixed 2026-09-18: `outstandingAssessments` is now 'no submission AND no mark' (`studentMarkState`), and `submittedCount`/`dueThisWeek` derive from the same rule. Verified live as bda.student01, who has 6 assessments with a released mark and no `Submission` row: the tile reads Submitted 7 of 10 / 3 still to hand in, and the Due-next table no longer lists those 6 as Not submitted (the audit saw Submitted 1 of 14 with the marked rows badged Not submitted). Test: tests/student-dashboard-view.test.ts.",
           "location": "components/student-dashboard.tsx:60-72",
-          "status": "open"
+          "status": "fixed"
         },
         {
           "id": "SN-10",
@@ -3058,9 +3059,9 @@
           "severity": "major",
           "category": "inconsistency",
           "title": "Graded and Pending filters contradict the badge on the same card",
-          "evidence": "The filter keys on percentage being non-null while the badge keys on submission state, so clicking Graded returns cards badged Not submitted and a graded submission with an unreleased mark hides under Pending.",
+          "evidence": "The filter keys on percentage being non-null while the badge keys on submission state, so clicking Graded returns cards badged Not submitted and a graded submission with an unreleased mark hides under Pending. Fixed 2026-09-18: the Graded/Pending filters now key on `submissionState`, the same field the badge renders, instead of `percentage`, so a card filtered as Graded carries the Graded badge and a graded sitting with an unreleased mark no longer hides under Pending. The rule lives in the component beside the badge it must agree with.",
           "location": "components/student-assessments-view.tsx:159-161",
-          "status": "open"
+          "status": "fixed"
         },
         {
           "id": "SN-11",
@@ -3084,9 +3085,9 @@
           "severity": "major",
           "category": "confidentiality-leak",
           "title": "/quiz is a second, unrecorded quiz centre that reveals the full answer key",
-          "evidence": "The assessments page links to a quiz center whose POST /api/quiz/grade returned full correctText and explanation both times with no QuizAttempt persisted, so a student can preview the key unlimited before the graded attempt. Re-verified 2026-09-17 against the re-seeded database: still reproduces.",
+          "evidence": "The assessments page links to a quiz center whose POST /api/quiz/grade returned full correctText and explanation both times with no QuizAttempt persisted, so a student can preview the key unlimited before the graded attempt. Re-verified 2026-09-17 against the re-seeded database: still reproduces. Fixed 2026-09-18: /quiz is retired. The unrecorded grader POST /api/quiz/grade and components/quiz-runner.tsx were deleted, and app/quiz/page.tsx redirects to the recorded flow /student/quizzes; the assessment card's quiz link points there too. Verified live as demo.student1: GET /quiz returns 307 to /student/quizzes and POST /api/quiz/grade returns 404, so the answer key can no longer be previewed without a persisted attempt.",
           "location": "app/quiz/page.tsx",
-          "status": "open"
+          "status": "fixed"
         },
         {
           "id": "SN-13",
@@ -3097,9 +3098,9 @@
           "severity": "major",
           "category": "inconsistency",
           "title": "Retake dropdowns render raw internal values",
-          "evidence": "demo.student1's /student/retake trigger labels are cmu5ny4xy005r3gk6djn2mg52 and true instead of a course or quiz label and Include unanswered, because the items prop is omitted on both Select roots. demo.student1's /student/retake trigger labels render the raw internal values \"demo-assessment-quiz\" and \"true\" instead of a course or quiz label and \"Include unanswered\", because the items prop is omitted on both Select roots. Re-verified 2026-09-17 (the earlier observation showed an audit-created assessment id; the raw-value defect is unchanged).",
+          "evidence": "demo.student1's /student/retake trigger labels are cmu5ny4xy005r3gk6djn2mg52 and true instead of a course or quiz label and Include unanswered, because the items prop is omitted on both Select roots. demo.student1's /student/retake trigger labels render the raw internal values \"demo-assessment-quiz\" and \"true\" instead of a course or quiz label and \"Include unanswered\", because the items prop is omitted on both Select roots. Re-verified 2026-09-17 (the earlier observation showed an audit-created assessment id; the raw-value defect is unchanged). Fixed 2026-09-18: both retake Selects now pass `items`, which is what Base UI needs to render a label. Verified live as demo.student1: the trigger renders `DEMO-MATH-101 · Linear Equations Check-in (AI-generated) (0 to retry)` and `Include unanswered` instead of `demo-assessment-quiz` and `true`.",
           "location": "components/student-adaptive-retake.tsx:102-118",
-          "status": "open"
+          "status": "fixed"
         },
         {
           "id": "SN-14",
@@ -3113,19 +3114,6 @@
           "evidence": "The page renders formatPercent(run.coverage * 100) while seeds write coverage 100 and computeCoverage returns a 0-1 ratio, so demo.student1 and bda.student01 show 10000% and a FAILED run with coverage 0 shows a fabricated 0%. Fixed 2026-09-17: re-verified on the re-seeded database. The seeds store coverage as the 0..1 fraction (1) and /student/code-submissions renders Coverage 100% for demo.student1 and bda.student01, not 10000%.",
           "location": "app/(dashboard)/student/code-submissions/page.tsx:140",
           "status": "fixed"
-        },
-        {
-          "id": "SN-15",
-          "group": "student-native",
-          "domain": "student",
-          "kind": "native",
-          "agent": "student-core-learning",
-          "severity": "major",
-          "category": "partial-implementation",
-          "title": "Mid-attempt answers are never saved and leaving silently discards them",
-          "evidence": "No draft or autosave endpoint exists, and openAttempt and startAttempt reset answers to all-null with an IN_PROGRESS attempt returning no stored selections, so every typed answer is lost on navigation.",
-          "location": "components/student-quiz-attempts.tsx:121",
-          "status": "open"
         },
         {
           "id": "SN-16",
@@ -3149,9 +3137,9 @@
           "severity": "major",
           "category": "fabricated-number",
           "title": "Zero-data students are shown confident, false statements",
-          "evidence": "bda.student31 and 32 see Submitted 0 of 0, the empty state \"Every assessment on your courses has a submission from you\" over an empty set, \"Everything is indexed\" for 0 materials and \"Latest attempt scored 0\" with no attempts. Re-verified 2026-09-17 against the re-seeded database: still reproduces.",
+          "evidence": "bda.student31 and 32 see Submitted 0 of 0, the empty state \"Every assessment on your courses has a submission from you\" over an empty set, \"Everything is indexed\" for 0 materials and \"Latest attempt scored 0\" with no attempts. Re-verified 2026-09-17 against the re-seeded database: still reproduces. Fixed 2026-09-18: the empty-state copy distinguishes an empty set (`No assessments are assigned to your courses yet`), the resources tiles say `No materials on your courses yet` instead of `Everything is indexed`, and the quiz tile renders an em dash rather than 0 when no quizzes exist. Verified live as bda.student31: all three surfaces render the honest copy and no longer the false all-clear.",
           "location": "lib/student-dashboard-view.ts:215-226",
-          "status": "open"
+          "status": "fixed"
         },
         {
           "id": "SN-18",
@@ -3331,9 +3319,9 @@
           "severity": "major",
           "category": "partial-implementation",
           "title": "Test-run failure reason is unreachable once you leave the editor",
-          "evidence": "The Results table renders result.description or result.message, and every seeded case has a non-null description, so a sandbox-killed run shows three red Failed pills with no reason and stderr is empty so the disclosure does not appear. Re-verified 2026-09-17: the same fresh FAILED run rendered three red Failed pills labelled with each case's non-null description (for example \"Slope through (0,0) and (2,4) is 2.\") while the result payload's message said \"Sandbox unavailable: failed to connect to the docker API\"; the failure reason is still not reachable on the page.",
+          "evidence": "The Results table renders result.description or result.message, and every seeded case has a non-null description, so a sandbox-killed run shows three red Failed pills with no reason and stderr is empty so the disclosure does not appear. Re-verified 2026-09-17: the same fresh FAILED run rendered three red Failed pills labelled with each case's non-null description (for example \"Slope through (0,0) and (2,4) is 2.\") while the result payload's message said \"Sandbox unavailable: failed to connect to the docker API\"; the failure reason is still not reachable on the page. Fixed 2026-09-18: `failureReason` (lib/code-eval/results.ts) decides when a failed case's `message` adds information, and the results table renders it under the case instead of `description ?? message`. Verified live with a temporary FAILED run on demo.student1's code task: the page rendered `Sandbox unavailable: failed to connect to the docker API` under each case; the probe run was deleted (0 rows). Test: tests/code-eval-results.test.ts.",
           "location": "app/(dashboard)/student/code-submissions/page.tsx:44-51",
-          "status": "open"
+          "status": "fixed"
         },
         {
           "id": "SN-34",
@@ -3344,9 +3332,9 @@
           "severity": "major",
           "category": "fabricated-number",
           "title": "Unexecuted runs show Coverage 0% and Runtime 0ms",
-          "evidence": "The sandbox-error run returned coverage 0 and runtimeMs 0 rendered as 0% and 0ms, though the page's own comment intends an em dash; computeCoverage returns 0 rather than null. Re-verified 2026-09-17 against a fresh FAILED run (Docker down): the student page rendered Coverage 0% and the runs table rendered 0ms, a fabricated 0 rather than the page's intended em dash.",
+          "evidence": "The sandbox-error run returned coverage 0 and runtimeMs 0 rendered as 0% and 0ms, though the page's own comment intends an em dash; computeCoverage returns 0 rather than null. Re-verified 2026-09-17 against a fresh FAILED run (Docker down): the student page rendered Coverage 0% and the runs table rendered 0ms, a fabricated 0 rather than the page's intended em dash. Fixed 2026-09-18: `computeCoverage` returns null rather than 0 when nothing executed, and `measuredRuntimeMs` treats 0ms/null/zero-test runs as not measured; the student and teacher run tables render an em dash. Verified live with a temporary FAILED run (coverage null, runtimeMs 0) on demo.student1's code task: the card rendered Coverage — and the runs table `not measured`; the probe run was deleted (0 rows). Test: tests/code-eval-results.test.ts.",
           "location": "lib/code-eval/results.ts:239-243",
-          "status": "open"
+          "status": "fixed"
         },
         {
           "id": "SN-35",
@@ -3370,9 +3358,9 @@
           "severity": "major",
           "category": "inconsistency",
           "title": "Quizzes page eligibility ignores the retake policy (latent)",
-          "evidence": "lib/quiz-attempts/service.ts:309,323 compute attemptsUsed and canStart from resolveMaxAttempts only while the enforced start path also applies decideRetake and resolveSittingCap, so the list could offer Start attempt while the server refuses; no NONE or retakesAllowed seed.",
+          "evidence": "lib/quiz-attempts/service.ts:309,323 compute attemptsUsed and canStart from resolveMaxAttempts only while the enforced start path also applies decideRetake and resolveSittingCap, so the list could offer Start attempt while the server refuses; no NONE or retakesAllowed seed. Fixed 2026-09-18: `retakeStateFrom` is now the one rule the retake page and the quizzes list both read, so an APPROVAL quiz past its first sitting reports `canStart:false` with the policy reason instead of offering a Start the route refuses. Test: tests/retake-state.test.ts (pure cases for APPROVAL with and without a request, and practice exclusion).",
           "location": "lib/quiz-attempts/service.ts:309",
-          "status": "open"
+          "status": "fixed"
         },
         {
           "id": "SN-37",
@@ -3383,9 +3371,9 @@
           "severity": "major",
           "category": "inconsistency",
           "title": "Dropped or withdrawn student still scoped into /api/gradebook",
-          "evidence": "bda.student31 has 0 active enrolments yet /api/gradebook returns courses MCSE501L and MCSE501P with 7 assessment titles and classAverages, because lib/gradebook-db.ts:313-340 filters enrollments with no active status; no personal marks leak. Re-verified 2026-09-17 against the re-seeded database: still reproduces.",
+          "evidence": "bda.student31 has 0 active enrolments yet /api/gradebook returns courses MCSE501L and MCSE501P with 7 assessment titles and classAverages, because lib/gradebook-db.ts:313-340 filters enrollments with no active status; no personal marks leak. Re-verified 2026-09-17 against the re-seeded database: still reproduces. Fixed 2026-09-18: the student gradebook projection filters enrollments through the shared `isLiveEnrollmentStatus` (active/waitlisted), so a dropped or withdrawn student receives no courses, assessment titles or averages. Verified live as bda.student31 (0 active enrolments): GET /api/gradebook now returns 0 assessments, 0 courses and 0 events where it previously returned 2 courses and 7 assessment titles. Test: tests/gradebook-release-projection.test.ts. The predicate is also now shared with lib/student-assessments.ts and lib/quiz-grading.ts, which each carried a copy.",
           "location": "lib/gradebook-db.ts:313-340",
-          "status": "open"
+          "status": "fixed"
         },
         {
           "id": "SN-38",
@@ -3546,19 +3534,6 @@
       ],
       "uniqueToLangchain": [
         {
-          "id": "SL-1",
-          "group": "student-langchain",
-          "domain": "student",
-          "kind": "langchain",
-          "agent": "student-quizzes",
-          "severity": "blocker",
-          "category": "broken-flow",
-          "title": "Mid-attempt answers do not survive a refresh (no save path; client resets all answers on reopen)",
-          "evidence": "Getting /api/student/quiz-attempts as demo.student1@school.edu returned the demo quiz as canStart with 4 questions; listing app/api/student/quiz-attempts shows only route.ts (list/start), [attemptId]/route.ts (GET), [attemptId]/submit/route.ts and practice/route.ts — there is no save/autosave endpoint, and the rendered attempt UI (components/student-quiz-attempts.tsx) sets every answer to null in startAttempt() and openAttempt() ('setAnswers(Object.fromEntries(body.attempt.questions.map((q) => [q.id, null])))') and clears textAnswers to {}. Why it matters: A student who answers three of four questions and refreshes, or reopens the in-progress attempt, sees an entirely blank quiz and loses all typed/selections with no warning, because nothing is ever written until Submit. Fixed 2026-09-18: added PUT /api/student/quiz-attempts/[attemptId]/draft backed by saveQuizAttemptDraft; a draft lives in the same QuizResponse rows the submitted attempt uses, getStudentAttempt returns draftAnswers while in progress, the client autosaves (debounced, flushed on pagehide) and hydrates on start/reopen instead of resetting every answer to null, and submit replaces the drafts with scored rows in one transaction. Verified as demo.student1: PUT returned {\"success\":true,...} and a subsequent GET returned draftAnswers [{questionId..., selectedIndex: 2}] (previously null/absent); a fresh attempt returns []. Covered by new tests in tests/quiz-attempts-pipeline.test.ts.",
-          "location": "components/student-quiz-attempts.tsx:121,139 / app/api/student/quiz-attempts/",
-          "status": "fixed"
-        },
-        {
           "id": "SL-2",
           "group": "student-langchain",
           "domain": "student",
@@ -3585,7 +3560,44 @@
           "status": "open"
         }
       ],
-      "shared": []
+      "shared": [
+        {
+          "key": "declared SN-15 = SL-1",
+          "category": "partial-implementation",
+          "location": "components/student-quiz-attempts.tsx:121",
+          "native": [
+            {
+              "id": "SN-15",
+              "group": "student-native",
+              "domain": "student",
+              "kind": "native",
+              "agent": "student-core-learning",
+              "severity": "major",
+              "category": "partial-implementation",
+              "title": "Mid-attempt answers are never saved and leaving silently discards them",
+              "evidence": "No draft or autosave endpoint exists, and openAttempt and startAttempt reset answers to all-null with an IN_PROGRESS attempt returning no stored selections, so every typed answer is lost on navigation. Linked as a duplicate of SL-1 rather than fixed twice: SL-1 (the blocker) landed the answer-persistence path — PUT /api/student/quiz-attempts/[attemptId]/draft with client autosave (debounced, flushed on pagehide) and hydration from `draftAnswers` — which is exactly the missing server home this row describes. dupOf set to SL-1 and status fixed.",
+              "location": "components/student-quiz-attempts.tsx:121",
+              "status": "fixed",
+              "dupOf": "SL-1"
+            }
+          ],
+          "langchain": [
+            {
+              "id": "SL-1",
+              "group": "student-langchain",
+              "domain": "student",
+              "kind": "langchain",
+              "agent": "student-quizzes",
+              "severity": "blocker",
+              "category": "broken-flow",
+              "title": "Mid-attempt answers do not survive a refresh (no save path; client resets all answers on reopen)",
+              "evidence": "Getting /api/student/quiz-attempts as demo.student1@school.edu returned the demo quiz as canStart with 4 questions; listing app/api/student/quiz-attempts shows only route.ts (list/start), [attemptId]/route.ts (GET), [attemptId]/submit/route.ts and practice/route.ts — there is no save/autosave endpoint, and the rendered attempt UI (components/student-quiz-attempts.tsx) sets every answer to null in startAttempt() and openAttempt() ('setAnswers(Object.fromEntries(body.attempt.questions.map((q) => [q.id, null])))') and clears textAnswers to {}. Why it matters: A student who answers three of four questions and refreshes, or reopens the in-progress attempt, sees an entirely blank quiz and loses all typed/selections with no warning, because nothing is ever written until Submit. Fixed 2026-09-18: added PUT /api/student/quiz-attempts/[attemptId]/draft backed by saveQuizAttemptDraft; a draft lives in the same QuizResponse rows the submitted attempt uses, getStudentAttempt returns draftAnswers while in progress, the client autosaves (debounced, flushed on pagehide) and hydrates on start/reopen instead of resetting every answer to null, and submit replaces the drafts with scored rows in one transaction. Verified as demo.student1: PUT returned {\"success\":true,...} and a subsequent GET returned draftAnswers [{questionId..., selectedIndex: 2}] (previously null/absent); a fresh attempt returns []. Covered by new tests in tests/quiz-attempts-pipeline.test.ts.",
+              "location": "components/student-quiz-attempts.tsx:121,139 / app/api/student/quiz-attempts/",
+              "status": "fixed"
+            }
+          ]
+        }
+      ]
     }
   ],
   "totals": {
@@ -3606,12 +3618,12 @@
     },
     "bySeverityOpen": {
       "blocker": 0,
-      "major": 26,
+      "major": 8,
       "minor": 61
     },
     "byStatus": {
-      "open": 87,
-      "fixed": 42,
+      "open": 69,
+      "fixed": 60,
       "wontfix": 0
     },
     "byCategory": {

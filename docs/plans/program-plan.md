@@ -435,6 +435,38 @@ Worth considering later, not now: the harness could allocate a per-run database 
 then it is a brief-level instruction, because a wrong guess here costs a worker a test cycle
 and produces failures that look like real bugs in someone else's code.
 
+### 8.3.4 An exported `DATABASE_URL` outlives the shell command that set it
+
+A related trap, hit while verifying this wave's work, and worth writing down because it
+presents as a broken application rather than as a configuration mistake.
+
+Setting a variable for one command exports it into the shell session, and **every later
+command in that session inherits it** — including a long-running `npm run dev`:
+
+```bash
+export DATABASE_URL="…/assessment_deleteguard_test"   # for one test run
+npm run dev                                            # inherits it
+# …then the scratch database is dropped
+# → every request 500s: "Database assessment_deleteguard_test does not exist"
+```
+
+The application is fine; the process is pointing at a database that no longer exists.
+
+**Why `.env` does not save you:** `dotenv` never overrides an already-set variable. This is
+the same trap the support desk's `scripts/guard-db.ts` was written for, where a `prisma
+migrate dev` resolved to a _sibling application's_ database because a sourced `.env` had
+exported it. Two services, one hazard.
+
+**So:** when starting a long-running process, start it with a clean environment
+(`env -u DATABASE_URL -u TEST_DATABASE_URL npm run dev`), or use a fresh shell. And when a
+running app 500s on every request after a test run, check what it inherited before reading
+any application code.
+
+The general rule, which is the third version of the same lesson in this plan: **a value that
+is set for convenience in one context silently changes meaning in another.** That is the
+shape of `TN-1`'s missing release control, `SN-29`'s leak, the schema comment that outlived
+its rule, and this.
+
 ### 8.4 The scratchpad
 
 Two things must be captured as they are learned rather than reconstructed later:
