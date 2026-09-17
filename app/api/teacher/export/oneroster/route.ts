@@ -8,6 +8,7 @@ import {
   oneRosterExportRequestSchema,
 } from "@/lib/contracts/lms-export"
 import { lmsExportErrorResponse } from "@/lib/lms-export/http"
+import { dropEmptyFinalGradeConfig } from "@/lib/lms-export/request"
 import { getTeacherOneRosterCsv } from "@/lib/lms-export/service"
 
 export const dynamic = "force-dynamic"
@@ -68,7 +69,9 @@ export async function POST(request: Request) {
     return jsonError("Invalid JSON body.", 400)
   }
 
-  const parsed = oneRosterExportRequestSchema.safeParse(raw)
+  // TN-54: an offering with no assessments round-trips `{ categories: [] }`,
+  // which means "no configuration", not an invalid one.
+  const parsed = oneRosterExportRequestSchema.safeParse(dropEmptyFinalGradeConfig(raw))
   if (!parsed.success) return jsonError(firstIssueMessage(parsed.error), 400)
 
   try {

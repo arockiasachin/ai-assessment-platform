@@ -15,6 +15,7 @@ import { collectFlagReasons } from "./flagging"
 import { parseCriterionEvaluation } from "./parsing"
 import { flagReviewForAi } from "./review-transitions"
 import { resolveTeacherStaffId, teacherOwnsAssessment } from "./rubric-service"
+import { isGradeableSubmissionStatus } from "./submission-status"
 
 /**
  * Per-criterion AI evaluation.
@@ -147,6 +148,7 @@ export async function evaluateSubmissionForTeacher(
     where: { id: submissionId },
     select: {
       id: true,
+      status: true,
       assessmentId: true,
       studentId: true,
       contentText: true,
@@ -156,6 +158,15 @@ export async function evaluateSubmissionForTeacher(
   if (!submission) throw new RubricGradingError(404, "Submission not found.")
   if (!teacherOwnsAssessment(submission.assessment, staffId)) {
     throw new RubricGradingError(403, "Forbidden")
+  }
+  // TN-35: the candidate reader hides a draft, but a caller with the submission
+  // id could still ask the evaluator to score it. The same rule is enforced on
+  // both paths so neither can publish a mark for work never handed in.
+  if (!isGradeableSubmissionStatus(submission.status)) {
+    throw new RubricGradingError(
+      409,
+      "Submission has not been handed in; there is nothing to grade.",
+    )
   }
 
   const rubric = submission.assessment.rubric

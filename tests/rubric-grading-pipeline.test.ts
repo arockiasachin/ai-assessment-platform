@@ -1,13 +1,15 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest"
 
-import { submitReviewDecision } from "@/lib/grading"
+import { recordManualMark, submitReviewDecision } from "@/lib/grading"
 import type { LlmGenerateResult, LlmProvider } from "@/lib/llm"
 import type { AuthUser } from "@/lib/session"
 import {
   RUBRIC_PROMPT_VERSION,
   evaluateSubmissionForTeacher,
   getReviewDetailForTeacher,
+  listEvaluationCandidatesForTeacher,
   listReviewQueueForTeacher,
+  listRubricsForTeacher,
   upsertRubricForTeacher,
   type RubricUpsertRequest,
 } from "@/lib/rubric-grading"
@@ -131,6 +133,25 @@ async function seedAssessment() {
   })
 
   return { f, assessment, rubric, submission, teacherUser, studentId }
+}
+
+/** A second enrolled student, so a test can hold two submissions on one assessment. */
+async function createEnrolledStudent(offeringId: string, registerNumber: string): Promise<string> {
+  const user = await prisma.user.create({
+    data: {
+      email: `${registerNumber.toLowerCase()}@rubric.test`,
+      passwordHash: "test-only-not-a-real-hash",
+      role: "STUDENT",
+      studentProfile: {
+        create: { fullName: `Student ${registerNumber}`, registerNumber },
+      },
+    },
+    include: { studentProfile: true },
+  })
+  await prisma.enrollment.create({
+    data: { studentId: user.studentProfile!.id, offeringId, status: "active" },
+  })
+  return user.studentProfile!.id
 }
 
 async function createOtherTeacher(): Promise<AuthUser> {
@@ -439,5 +460,158 @@ describe("rubric grading pipeline", () => {
     expect(byLabel.get("Argument")).toBe(9)
     expect(byLabel.get("Evidence")).toBe(2)
     expect(item.grade?.points).toBe(11)
+  })
+
+  it("never offers or evaluates a never-submitted draft (TN-35)", async () => {
+    const { f, assessment, submission, teacherUser } = await seedAssessment()
+    const draftStudentId = await createEnrolledStudent(f.offering.id, "REG-RUBRIC-DRAFT")
+    const draft = await prisma.submission.create({
+      data: {
+        assessmentId: assessment.id,
+        studentId: draftStudentId,
+        status: "DRAFT",
+        contentText: SUBMISSION_TEXT,
+      },
+    })
+
+    const candidates = await listEvaluationCandidatesForTeacher(teacherUser)
+    expect(candidates.map((candidate) => candidate.submissionId)).toContain(submission.id)
+    expect(candidates.map((candidate) => candidate.submissionId)).not.toContain(draft.id)
+
+    // The reader hides it, but a caller with the id must still be refused.
+    await expect(
+      evaluateSubmissionForTeacher(teacherUser, draft.id, {
+        provider: fakeProvider([argumentEval()]),
+      }),
+    ).rejects.toMatchObject({
+      status: 409,
+      message: expect.stringMatching(/not been handed in/i),
+    })
+  })
+
+  it("lists only rubric-eligible assessments and reports the frozen state (TN-43)", async () => {
+    const { f, assessment, submission, teacherUser, studentId } = await seedAssessment()
+    const quiz = await prisma.assessment.create({
+      data: {
+        offeringId: f.offering.id,
+        courseId: f.course.id,
+        classId: f.classroom.id,
+        title: "Auto-scored quiz",
+        type: "QUIZ",
+        dueDate: new Date("2027-02-01T08:00:00.000Z"),
+        maxMarks: 20,
+        createdById: f.teacher.staffProfile!.id,
+      },
+    })
+
+    const before = await listRubricsForTeacher(teacherUser)
+    expect(before.map((summary) => summary.id)).toContain(assessment.id)
+    expect(before.map((summary) => summary.id)).not.toContain(quiz.id)
+    expect(before.find((summary) => summary.id === assessment.id)!.locked).toBe(false)
+
+    // A quiz can never carry a rubric, on either path.
+    await expect(upsertRubricForTeacher(teacherUser, rubricPayload(quiz.id))).rejects.toMatchObject(
+      {
+        status: 409,
+      },
+    )
+
+    await evaluateSubmissionForTeacher(teacherUser, submission.id, {
+      provider: fakeProvider([argumentEval(), evidenceEval()]),
+    })
+    await submitReviewDecision({
+      assessmentId: assessment.id,
+      studentId,
+      reviewer: { id: teacherUser.id, role: "teacher" },
+      decision: { action: "accept" },
+    })
+
+    const after = await listRubricsForTeacher(teacherUser)
+    expect(after.find((summary) => summary.id === assessment.id)!.locked).toBe(true)
+  })
+
+  it("allows the first rubric after a manual mark, then freezes it (TN-44)", async () => {
+    const f = await createSpineFixture(prisma)
+    const studentId = f.student.studentProfile!.id
+    await prisma.enrollment.create({
+      data: { studentId, offeringId: f.offering.id, status: "active" },
+    })
+    const assessment = await prisma.assessment.create({
+      data: {
+        offeringId: f.offering.id,
+        courseId: f.course.id,
+        classId: f.classroom.id,
+        title: "Rubric-less descriptive",
+        type: "DESCRIPTIVE",
+        dueDate: new Date("2027-01-01T08:00:00.000Z"),
+        maxMarks: 50,
+        createdById: f.teacher.staffProfile!.id,
+      },
+    })
+    const teacherUser = teacherSession(f.teacher)
+    const submission = await prisma.submission.create({
+      data: {
+        assessmentId: assessment.id,
+        studentId,
+        status: "SUBMITTED",
+        submittedAt: new Date(),
+        contentText: SUBMISSION_TEXT,
+      },
+    })
+
+    // A manual mark is published before any rubric exists. Before TN-44 this
+    // permanently blocked authoring the rubric.
+    await recordManualMark({
+      assessmentId: assessment.id,
+      studentId,
+      points: 40,
+      maxPoints: 50,
+      actor: { id: teacherUser.id, role: "teacher" },
+    })
+    const first = await upsertRubricForTeacher(teacherUser, {
+      assessmentId: assessment.id,
+      title: "First rubric",
+      criteria: [
+        { label: "Argument", weight: 1, maxPoints: 25 },
+        { label: "Evidence", weight: 1, maxPoints: 25 },
+      ],
+    })
+    expect(first.rubric.criteria).toHaveLength(2)
+
+    // The manual mark pre-dates the rubric, so the rubric is not frozen and can
+    // still be edited.
+    expect(
+      (await listRubricsForTeacher(teacherUser)).find((summary) => summary.id === assessment.id)!
+        .locked,
+    ).toBe(false)
+    await expect(
+      upsertRubricForTeacher(teacherUser, {
+        assessmentId: assessment.id,
+        title: "Edited rubric",
+        criteria: [{ label: "Argument", weight: 1, maxPoints: 50 }],
+      }),
+    ).resolves.toBeTruthy()
+
+    // A grade published against the rubric freezes it.
+    await evaluateSubmissionForTeacher(teacherUser, submission.id, {
+      provider: fakeProvider([argumentEval({ score: 30 })]),
+    })
+    await submitReviewDecision({
+      assessmentId: assessment.id,
+      studentId,
+      reviewer: { id: teacherUser.id, role: "teacher" },
+      decision: { action: "override", points: 30, reason: "Aligned to the rubric." },
+    })
+    expect(
+      (await listRubricsForTeacher(teacherUser)).find((summary) => summary.id === assessment.id)!
+        .locked,
+    ).toBe(true)
+    await expect(
+      upsertRubricForTeacher(teacherUser, {
+        assessmentId: assessment.id,
+        title: "After publish",
+        criteria: [{ label: "Argument", weight: 1, maxPoints: 50 }],
+      }),
+    ).rejects.toMatchObject({ status: 409 })
   })
 })

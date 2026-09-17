@@ -127,10 +127,18 @@ export type FinalGradeComputation = {
 /**
  * Combine resolved marks into a weighted final grade.
  *
- * A category with no usable mark is excluded and the final percentage is
- * renormalised over the categories that do have marks (`completedWeight`). This
- * is why a pending AI suggestion cannot drag a grade toward zero: it simply is
- * not in the input.
+ * `completedWeight` is the share of the configured weight that has actually
+ * been marked, prorated **within** each category (TN-53). If a category's
+ * assessments carry relative weights 1:1:1:1:1 and only one has a published
+ * mark, that category contributes `weight / 5`, not its whole weight. A pending
+ * AI suggestion cannot drag a grade toward zero — it simply is not in the input —
+ * and, equally, one published mark out of five no longer presents a student as
+ * fully graded.
+ *
+ * The final percentage is renormalised over the weight that has marks, i.e. over
+ * `completedWeight`, using the same prorated contribution per category. When
+ * every configured assessment is marked this reduces to the plain weighted
+ * average, so nothing changes for a complete cohort.
  */
 export function computeFinalGrade(
   config: FinalGradeConfig,
@@ -138,50 +146,61 @@ export function computeFinalGrade(
 ): FinalGradeComputation {
   const marksByAssessment = new Map(resolved.marks.map((mark) => [mark.assessmentId, mark]))
 
-  const categories: FinalGradeCategoryResult[] = config.categories.map((category) => {
+  const categories: FinalGradeCategoryResult[] = []
+  // Kept unrounded so the percentage is not divided by a rounded coverage.
+  let completedWeightRaw = 0
+  let weightedPercentageSum = 0
+
+  for (const category of config.categories) {
     const includedAssessmentIds: string[] = []
     const missingAssessmentIds: string[] = []
     let weightedSum = 0
-    let weightSum = 0
+    let gradedAssessmentWeight = 0
+    let categoryAssessmentWeight = 0
 
     for (const assessmentId of category.assessmentIds) {
+      const weight = assessmentWeight(category, assessmentId)
+      categoryAssessmentWeight += weight
       const mark = marksByAssessment.get(assessmentId)
       if (!mark) {
         missingAssessmentIds.push(assessmentId)
         continue
       }
-      const weight = assessmentWeight(category, assessmentId)
       weightedSum += mark.percentage * weight
-      weightSum += weight
+      gradedAssessmentWeight += weight
       includedAssessmentIds.push(assessmentId)
     }
 
-    const included = weightSum > 0
-    return {
+    const included = gradedAssessmentWeight > 0
+    const score = included ? round2(weightedSum / gradedAssessmentWeight) : null
+    // The category's configured weight, prorated by the fraction of its own
+    // assessment weight that carries a published mark.
+    const earnedWeight =
+      categoryAssessmentWeight > 0
+        ? (category.weight * gradedAssessmentWeight) / categoryAssessmentWeight
+        : 0
+
+    completedWeightRaw += earnedWeight
+    if (score !== null) weightedPercentageSum += score * earnedWeight
+
+    categories.push({
       id: category.id,
       name: category.name,
       weight: category.weight,
-      score: included ? round2(weightedSum / weightSum) : null,
+      score,
       included,
       assessmentIds: [...category.assessmentIds],
       includedAssessmentIds,
       missingAssessmentIds,
-    }
-  })
+    })
+  }
 
-  const includedCategories = categories.filter((category) => category.included)
-  const completedWeight = round2(
-    includedCategories.reduce((sum, category) => sum + category.weight, 0),
-  )
+  const completedWeight = round2(completedWeightRaw)
   const configuredTotal = totalWeight(config)
 
   let percentage: number | null = null
-  if (completedWeight > 0) {
-    const weighted = includedCategories.reduce(
-      (sum, category) => sum + (category.score ?? 0) * category.weight,
-      0,
-    )
-    percentage = round2(weighted / completedWeight)
+  if (completedWeightRaw > 0) {
+    percentage = round2(weightedPercentageSum / completedWeightRaw)
   }
 
   const excludedUnpublishedInConfig = resolved.excludedUnpublishedAssessmentIds.filter(
@@ -192,7 +211,13 @@ export function computeFinalGrade(
     percentage,
     completedWeight,
     totalWeight: configuredTotal,
-    incomplete: completedWeight < configuredTotal || excludedUnpublishedInConfig.length > 0,
+    // An empty configuration is the no-assessments export state (TN-54): there is
+    // nothing complete about it, so it reports `incomplete` rather than the
+    // `0 < 0` a bare weight comparison would produce.
+    incomplete:
+      config.categories.length === 0 ||
+      completedWeight < configuredTotal ||
+      excludedUnpublishedInConfig.length > 0,
     categories,
   }
 }

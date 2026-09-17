@@ -37,6 +37,23 @@ export function teacherOwnsAssessment(
   return assessment.createdById === staffId || assessment.offering?.teacherId === staffId
 }
 
+/**
+ * The assessment types whose work a rubric can actually grade (TN-43).
+ *
+ * A rubric scores a `Submission`, and the only types that produce one from the
+ * student text-submission route are `ASSIGNMENT` and `DESCRIPTIVE`. A `QUIZ` is
+ * auto-scored by the attempt pipeline, a `CODE` task is scored by the sandbox
+ * pipeline, and a `GROUP_PROJECT` is marked through the gradebook — none of them
+ * ever creates a `Submission` a rubric could score. Offering a rubric for them
+ * was a control that could not work, so authoring is limited to this set and the
+ * picker only lists these assessments.
+ */
+export const RUBRIC_ELIGIBLE_ASSESSMENT_TYPES = ["ASSIGNMENT", "DESCRIPTIVE"] as const
+
+export function isRubricEligibleAssessmentType(type: string): boolean {
+  return (RUBRIC_ELIGIBLE_ASSESSMENT_TYPES as readonly string[]).includes(type)
+}
+
 async function loadOwnedAssessment(
   user: AuthUser,
   assessmentId: string,
@@ -66,18 +83,21 @@ async function loadOwnedAssessment(
   }
 }
 
-function toSummary(assessment: {
-  id: string
-  title: string
-  type: string
-  maxMarks: number
-  dueDate: Date
-  offering: {
-    course: { code: string; name: string }
-    classRoom: { name: string; section: string | null }
-  }
-  rubric: RubricResponse | null
-}): TeacherAssessmentSummary {
+function toSummary(
+  assessment: {
+    id: string
+    title: string
+    type: string
+    maxMarks: number
+    dueDate: Date
+    offering: {
+      course: { code: string; name: string }
+      classRoom: { name: string; section: string | null }
+    }
+    rubric: RubricResponse | null
+  },
+  locked: boolean,
+): TeacherAssessmentSummary {
   const section = assessment.offering.classRoom.section
   return {
     id: assessment.id,
@@ -89,7 +109,48 @@ function toSummary(assessment: {
     courseName: assessment.offering.course.name,
     className: `${assessment.offering.classRoom.name}${section ? ` ${section}` : ""}`,
     rubric: assessment.rubric,
+    // TN-44: the freeze is a state the caller can see, not a surprise thrown at
+    // Save time. A rubric is locked only once it exists *and* a published grade
+    // was produced against it; a manual mark on a rubric-less assessment does not
+    // freeze the rubric the teacher has not authored yet.
+    locked,
   }
+}
+
+/**
+ * Assessment ids whose rubric is frozen (TN-44).
+ *
+ * A rubric is frozen only when a grade was published **at or after** the rubric
+ * was created, i.e. the mark was produced against it. A manual mark that
+ * pre-dates the rubric was not produced against it, so it must not freeze a
+ * rubric the teacher authors afterwards. This is the same rule the write path
+ * enforces, so the `locked` flag and the 409 cannot disagree.
+ */
+async function lockedRubricAssessmentIds(
+  assessments: readonly { id: string; rubric: { createdAt: Date } | null }[],
+): Promise<Set<string>> {
+  const withRubric = assessments.filter(
+    (assessment): assessment is { id: string; rubric: { createdAt: Date } } =>
+      assessment.rubric !== null,
+  )
+  if (withRubric.length === 0) return new Set()
+
+  const rows = await prisma.grade.groupBy({
+    by: ["assessmentId"],
+    where: {
+      assessmentId: { in: withRubric.map((assessment) => assessment.id) },
+      publishedAt: { not: null },
+    },
+    _max: { publishedAt: true },
+  })
+  const lastPublished = new Map(rows.map((row) => [row.assessmentId, row._max.publishedAt]))
+
+  const locked = new Set<string>()
+  for (const assessment of withRubric) {
+    const publishedAt = lastPublished.get(assessment.id)
+    if (publishedAt && publishedAt >= assessment.rubric.createdAt) locked.add(assessment.id)
+  }
+  return locked
 }
 
 const assessmentInclude = {
@@ -102,11 +163,24 @@ const assessmentInclude = {
   rubric: { include: { criteria: { orderBy: { order: "asc" as const } } } },
 } satisfies Prisma.AssessmentInclude
 
-/** Every assessment the teacher owns, with its rubric when one exists. */
+/**
+ * Every assessment the teacher owns that a rubric can be authored for, with its
+ * rubric when one exists.
+ *
+ * TN-43: filtered to the types that produce a gradeable `Submission`. Listing a
+ * quiz or code task here was a control that could not work — the quiz write path
+ * refuses a rubric with a 409 and the other two accepted one nothing could ever
+ * consume.
+ */
 export async function listRubricsForTeacher(user: AuthUser): Promise<TeacherAssessmentSummary[]> {
   const staffId = await resolveTeacherStaffId(user)
   const assessments = await prisma.assessment.findMany({
-    where: { OR: [{ createdById: staffId }, { offering: { teacherId: staffId } }] },
+    where: {
+      AND: [
+        { OR: [{ createdById: staffId }, { offering: { teacherId: staffId } }] },
+        { type: { in: [...RUBRIC_ELIGIBLE_ASSESSMENT_TYPES] } },
+      ],
+    },
     select: {
       id: true,
       title: true,
@@ -118,11 +192,15 @@ export async function listRubricsForTeacher(user: AuthUser): Promise<TeacherAsse
     orderBy: { dueDate: "desc" },
     take: 200,
   })
+  const lockedIds = await lockedRubricAssessmentIds(assessments)
   return assessments.map((assessment) =>
-    toSummary({
-      ...assessment,
-      rubric: assessment.rubric ? serializeRubric(assessment.rubric) : null,
-    }),
+    toSummary(
+      {
+        ...assessment,
+        rubric: assessment.rubric ? serializeRubric(assessment.rubric) : null,
+      },
+      assessment.rubric !== null && lockedIds.has(assessment.id),
+    ),
   )
 }
 
@@ -143,10 +221,14 @@ export async function getRubricForAssessment(
       ...assessmentInclude,
     },
   })
-  return toSummary({
-    ...assessment,
-    rubric: assessment.rubric ? serializeRubric(assessment.rubric) : null,
-  })
+  const lockedIds = await lockedRubricAssessmentIds([assessment])
+  return toSummary(
+    {
+      ...assessment,
+      rubric: assessment.rubric ? serializeRubric(assessment.rubric) : null,
+    },
+    assessment.rubric !== null && lockedIds.has(assessment.id),
+  )
 }
 
 export type UpsertRubricResult = {
@@ -176,20 +258,46 @@ export async function upsertRubricForTeacher(
   if (owned.type === "QUIZ") {
     throw new RubricGradingError(409, "A quiz is auto-scored and cannot have a rubric.")
   }
+  // TN-43: `CODE` and `GROUP_PROJECT` were accepted here even though neither
+  // produces a `Submission` a rubric can score, so the authored rubric was dead
+  // on arrival. The same eligibility rule the picker uses is enforced on the
+  // write path, so a hidden type cannot be reached by id either.
+  if (!isRubricEligibleAssessmentType(owned.type)) {
+    throw new RubricGradingError(
+      409,
+      `A ${owned.type === "CODE" ? "code task" : "group project"} does not produce a submission a rubric can grade; only written assessments can carry a rubric.`,
+    )
+  }
 
   const coherence = validateRubricCoherence(request, { assessmentMaxMarks: owned.maxMarks })
 
   // A published grade was produced against a specific rubric, so that rubric is
   // frozen. This also keeps the AI suggestion buckets stable: replacing criteria
   // would orphan their suggestions into a second, label-keyed bucket.
-  const publishedGrades = await prisma.grade.count({
-    where: { assessmentId: request.assessmentId, publishedAt: { not: null } },
+  //
+  // TN-44: the freeze only applies to an *existing* rubric, and only to a grade
+  // published against it. A manual mark left on a rubric-less assessment was not
+  // produced against a rubric, so it must not permanently block authoring one —
+  // which is exactly what counting published grades unconditionally did.
+  // Creating the first rubric is always allowed; editing a rubric afterwards is
+  // what a grade published since its creation freezes.
+  const existingRubric = await prisma.rubric.findUnique({
+    where: { assessmentId: request.assessmentId },
+    select: { id: true, createdAt: true },
   })
-  if (publishedGrades > 0) {
-    throw new RubricGradingError(
-      409,
-      "Cannot edit a rubric after a grade has been published for this assessment.",
-    )
+  if (existingRubric) {
+    const publishedGrades = await prisma.grade.count({
+      where: {
+        assessmentId: request.assessmentId,
+        publishedAt: { gte: existingRubric.createdAt },
+      },
+    })
+    if (publishedGrades > 0) {
+      throw new RubricGradingError(
+        409,
+        "Cannot edit a rubric after a grade has been published for this assessment.",
+      )
+    }
   }
 
   const saved = await prisma.$transaction(async (tx) => {

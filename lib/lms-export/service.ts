@@ -25,13 +25,14 @@ import {
   type GradeCandidateInput,
   type ResolvedMarks,
 } from "./final-grade"
+import { LtiConfigurationError } from "./errors"
 import {
   AGS_LINE_ITEM_CONTENT_TYPE,
   AGS_RESULT_CONTENT_TYPE,
   AGS_SCORE_CONTENT_TYPE,
+  AGS_SCOPES,
   buildAgsLineItemPayload,
   buildAgsScorePayload,
-  requireLtiAgsConfig,
   validateLtiAgsConfig,
 } from "./lti"
 import { createDryRunLtiAgsClient, type DryRunLtiAgsClient } from "./lti-client"
@@ -183,38 +184,54 @@ async function loadExportContext(
   }
 
   /*
-   * Resolution order, most specific first:
-   *
-   * 1. `options.config` — a config supplied with the request. An explicit, one-off
-   *    calculation. Still honoured, and still validated below.
-   * 2. the offering's stored policy (`CourseOffering.gradingConfig`), resolved against
-   *    this offering's assessments. This is the course's own configuration, which is
-   *    what makes the weights persist instead of living for one request.
-   * 3. `defaultFinalGradeConfig` — equal weighting in one category.
-   *
-   * (3) is reached only when the offering has fewer than two assessments, so there is no
-   * CAT/FAT shape to express; `resolveFinalGradeConfig` returns `null` for that case rather
-   * than inventing a split.
+   * TN-54: an offering with no assessments is a legitimate export state, not a
+   * configuration error. There is no weight to assign and no category can be
+   * valid, so the export proceeds with an empty configuration — every student
+   * reports `incomplete` with no final grade, i.e. "nothing published yet" —
+   * instead of failing with "Category \"All assessments\" must contain at least
+   * one assessment." A request config is ignored here because there is no
+   * assessment it could validly reference; the export client round-trips the
+   * empty config it was given, so validating that back would just re-break the
+   * flow.
    */
-  const stored = resolveGradingPolicy(offering.gradingConfig)
-  /*
-   * A stored policy is applied **only when one is actually stored**. Otherwise this falls back
-   * to equal weighting, which is what every offering did before the column existed.
-   *
-   * Applying the default CAT 40 / FAT 60 split to an unconfigured offering was the tempting
-   * reading of "let there be a default way to assign weights", and it is wrong here for the same
-   * reason the platform refuses to guess an exported letter grade: the FAT is identified by due
-   * date, so the default would silently put 60% of a course's weight on whichever assessment
-   * happens to fall due last — and the LMS export is an institutional record. A default that
-   * disagrees with the result sheet is worse than no default.
-   *
-   * So the default is *offered* rather than applied: the policy editor prefills it and the
-   * teacher confirms it, which is what makes it theirs. Until then nothing changes.
-   */
-  const storedConfig =
-    stored.source === "stored" ? resolveFinalGradeConfig(stored.config, assessments) : null
-  const config = options.config ?? storedConfig ?? defaultFinalGradeConfig(assessments)
-  validateFinalGradeConfig(config, { knownAssessmentIds: assessments.map((a) => a.id) })
+  let config: FinalGradeConfig
+  if (assessments.length === 0) {
+    config = { categories: [] }
+  } else {
+    /*
+     * Resolution order, most specific first:
+     *
+     * 1. `options.config` — a config supplied with the request. An explicit, one-off
+     *    calculation. Still honoured, and still validated below.
+     * 2. the offering's stored policy (`CourseOffering.gradingConfig`), resolved against
+     *    this offering's assessments. This is the course's own configuration, which is
+     *    what makes the weights persist instead of living for one request.
+     * 3. `defaultFinalGradeConfig` — equal weighting in one category.
+     *
+     * (3) is reached only when the offering has fewer than two assessments, so there is no
+     * CAT/FAT shape to express; `resolveFinalGradeConfig` returns `null` for that case rather
+     * than inventing a split.
+     */
+    const stored = resolveGradingPolicy(offering.gradingConfig)
+    /*
+     * A stored policy is applied **only when one is actually stored**. Otherwise this falls back
+     * to equal weighting, which is what every offering did before the column existed.
+     *
+     * Applying the default CAT 40 / FAT 60 split to an unconfigured offering was the tempting
+     * reading of "let there be a default way to assign weights", and it is wrong here for the same
+     * reason the platform refuses to guess an exported letter grade: the FAT is identified by due
+     * date, so the default would silently put 60% of a course's weight on whichever assessment
+     * happens to fall due last — and the LMS export is an institutional record. A default that
+     * disagrees with the result sheet is worse than no default.
+     *
+     * So the default is *offered* rather than applied: the policy editor prefills it and the
+     * teacher confirms it, which is what makes it theirs. Until then nothing changes.
+     */
+    const storedConfig =
+      stored.source === "stored" ? resolveFinalGradeConfig(stored.config, assessments) : null
+    config = options.config ?? storedConfig ?? defaultFinalGradeConfig(assessments)
+    validateFinalGradeConfig(config, { knownAssessmentIds: assessments.map((a) => a.id) })
+  }
 
   return {
     offering,
@@ -280,9 +297,27 @@ function toLmsAssessments(context: ExportContext): LmsAssessment[] {
   }))
 }
 
+/**
+ * The LTI configuration status a teacher sees.
+ *
+ * TN-50: the persisted registration is the source of truth the live path uses,
+ * so a saved active registration means "configured" even when the `LTI_*`
+ * environment variables are absent (only the private key is env-backed, and a
+ * dry run never needs it). Reading the environment alone reported "not
+ * configured" while `/lti/registration` returned an active registration.
+ */
 export function ltiConfigStatus(
+  registration: { scopes: string[] } | null = null,
   env: Record<string, string | undefined> = process.env,
 ): LtiConfigStatus {
+  if (registration) {
+    return {
+      configured: true,
+      missing: [],
+      message: null,
+      scopes: registration.scopes.length > 0 ? registration.scopes : [...AGS_SCOPES],
+    }
+  }
   const status = validateLtiAgsConfig(env)
   if (!status.configured) {
     return { configured: false, missing: status.missing, message: status.message, scopes: [] }
@@ -372,13 +407,16 @@ export async function getTeacherGradeExport(
   options: { offeringId: string; config?: FinalGradeConfig },
 ): Promise<TeacherGradeExport> {
   const offering = await loadOwnedOffering(user, options.offeringId)
-  const context = await loadExportContext(offering, { config: options.config })
+  const [context, registration] = await Promise.all([
+    loadExportContext(offering, { config: options.config }),
+    getActiveLtiRegistration(),
+  ])
   return {
     offering: toLmsOffering(context.offering),
     config: context.config,
     assessments: toLmsAssessments(context),
     students: context.students.map((student) => buildStudentFinalGrade(context, student)),
-    lti: ltiConfigStatus(),
+    lti: ltiConfigStatus(registration),
     generatedAt: context.generatedAt,
   }
 }
@@ -432,7 +470,10 @@ export async function getStudentGradeExport(
   const student = await resolveStudentProfile(user)
   await assertActiveEnrollment(student.studentId, options.offeringId)
   const offering = await loadOfferingMeta(options.offeringId)
-  const context = await loadExportContext(offering, { studentId: student.studentId })
+  const [context, registration] = await Promise.all([
+    loadExportContext(offering, { studentId: student.studentId }),
+    getActiveLtiRegistration(),
+  ])
   return {
     offering: toLmsOffering(context.offering),
     config: context.config,
@@ -441,7 +482,7 @@ export async function getStudentGradeExport(
       fullName: student.fullName,
       registerNumber: student.registerNumber,
     }),
-    lti: ltiConfigStatus(),
+    lti: ltiConfigStatus(registration),
     generatedAt: context.generatedAt,
   }
 }
@@ -495,20 +536,32 @@ export async function dryRunAgsPublishForTeacher(
 ): Promise<AgsDryRunResponse> {
   const offering = await loadOwnedOffering(user, options.offeringId)
   const env = options.env ?? process.env
-  // Throws an actionable 422 when the registration env is incomplete.
-  const ltiConfig = requireLtiAgsConfig(env)
+
+  /*
+   * TN-50: the persisted registration is the source of truth the live path
+   * uses, so a saved active registration is enough for the dry run to proceed.
+   * The environment is only a fallback for a deployment that has not saved one.
+   * A dry run makes no network calls, so the env-backed private key is not
+   * required to build the payloads — requiring it here is what produced the
+   * factually wrong 422 ("there are no LTI models") while `/lti/registration`
+   * returned an active registration.
+   */
+  const registration = await getActiveLtiRegistration()
+  const envStatus = validateLtiAgsConfig(env)
+  if (!registration && !envStatus.configured) {
+    throw new LtiConfigurationError(envStatus.message)
+  }
 
   const context = await loadExportContext(offering, { config: options.config })
   const client: DryRunLtiAgsClient = options.client ?? createDryRunLtiAgsClient()
 
-  // A persisted registration is the durable source of the non-secret config
-  // (issuer/client/deployment/key id/line-items URL/scopes). The private key is
-  // never stored; it is still read from the environment through `privateKeyRef`
-  // by `requireLtiAgsConfig` above.
-  const registration = await getActiveLtiRegistration()
   const persistedLtiUserIds = await resolveLtiUserIds(context.students.map((student) => student.id))
   const scopes =
-    registration && registration.scopes.length > 0 ? registration.scopes : ltiConfig.scopes
+    registration && registration.scopes.length > 0
+      ? registration.scopes
+      : envStatus.configured
+        ? envStatus.config.scopes
+        : [...AGS_SCOPES]
 
   const lineItemPayloads: AgsLineItemPayload[] = []
   const scorePayloads: AgsScorePayload[] = []

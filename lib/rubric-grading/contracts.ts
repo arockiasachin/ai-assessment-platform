@@ -90,6 +90,12 @@ export const teacherAssessmentSummarySchema = z.object({
   courseName: z.string(),
   className: z.string(),
   rubric: rubricResponseSchema.nullable(),
+  /**
+   * True when this assessment already has a rubric *and* a published grade was
+   * produced against it, so the rubric can no longer be edited (TN-44). The
+   * editor can therefore show the state before Save is attempted.
+   */
+  locked: z.boolean(),
 })
 export type TeacherAssessmentSummary = z.infer<typeof teacherAssessmentSummarySchema>
 

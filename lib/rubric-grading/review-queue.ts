@@ -14,6 +14,7 @@ import {
   serializeSuggestion,
 } from "./serialize"
 import { resolveTeacherStaffId, teacherOwnsAssessment } from "./rubric-service"
+import { GRADEABLE_SUBMISSION_STATUSES } from "./submission-status"
 
 /**
  * Teacher-scoped read models for the review queue.
@@ -295,6 +296,10 @@ export async function listEvaluationCandidatesForTeacher(
       assessment: {
         AND: [ownershipFilter(staffId), { rubric: { isNot: null } }],
       },
+      // TN-35: only work the student actually handed in is a candidate. Without
+      // this a `DRAFT` was offered, evaluated, and published (see
+      // `./submission-status`).
+      status: { in: [...GRADEABLE_SUBMISSION_STATUSES] },
     },
     select: {
       id: true,

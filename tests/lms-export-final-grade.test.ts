@@ -122,6 +122,62 @@ describe("computeFinalGrade", () => {
     expect(final.percentage).toBeNull()
     expect(final.completedWeight).toBe(0)
   })
+
+  it("prorates completed weight by the marked share of a category (TN-53)", () => {
+    // DEMO-0004's shape: one 100-weight category of five equally-weighted
+    // assessments, with one published mark. The student is one fifth of the way
+    // through the term, not complete.
+    const five: FinalGradeConfig = {
+      categories: [
+        {
+          id: "all-assessments",
+          name: "All assessments",
+          weight: 100,
+          assessmentIds: ["a1", "a2", "a3", "a4", "a5"],
+        },
+      ],
+    }
+    const final = computeFinalGrade(
+      five,
+      resolveMarks([{ assessmentId: "a1", modern: pub(0, 10) }]),
+    )
+    expect(final.percentage).toBe(0)
+    expect(final.completedWeight).toBe(20)
+    expect(final.totalWeight).toBe(100)
+    expect(final.incomplete).toBe(true)
+  })
+
+  it("prorates by relative assessment weight when a category weights its assessments", () => {
+    // Category weight 40 over a1(1) and a2(3); only the weight-3 assessment is
+    // marked, so three quarters of the category's weight is accounted for.
+    const weighted: FinalGradeConfig = {
+      categories: [
+        {
+          id: "coursework",
+          name: "Coursework",
+          weight: 40,
+          assessmentIds: ["a1", "a2"],
+          assessmentWeights: { a1: 1, a2: 3 },
+        },
+      ],
+    }
+    const final = computeFinalGrade(
+      weighted,
+      resolveMarks([{ assessmentId: "a2", modern: pub(30, 40) }]),
+    )
+    expect(final.percentage).toBe(75)
+    expect(final.completedWeight).toBe(30)
+    expect(final.incomplete).toBe(true)
+  })
+
+  it("marks an empty configuration incomplete rather than done (TN-54)", () => {
+    const final = computeFinalGrade({ categories: [] }, resolveMarks([]))
+    expect(final.percentage).toBeNull()
+    expect(final.completedWeight).toBe(0)
+    expect(final.totalWeight).toBe(0)
+    expect(final.incomplete).toBe(true)
+    expect(final.categories).toEqual([])
+  })
 })
 
 function pub(points: number, maxPoints: number, publishedAt: Date | null = new Date()) {

@@ -192,6 +192,44 @@ describe("weighted final grade service", () => {
       }),
     ).rejects.toMatchObject({ status: 400 })
   })
+
+  it("exports an offering with no assessments as an incomplete empty state (TN-54)", async () => {
+    const fixture = await createLmsExportFixture(prisma, { studentCount: 2 })
+    const teacher = lmsTeacherSession(fixture)
+    const emptyOffering = await prisma.courseOffering.create({
+      data: {
+        courseId: fixture.course.id,
+        classId: fixture.classroom.id,
+        teacherId: fixture.teacher.staffProfile!.id,
+        term: "Term-Empty",
+        academicYear: 2026,
+      },
+    })
+    await prisma.enrollment.create({
+      data: {
+        studentId: fixture.students[0].profileId,
+        offeringId: emptyOffering.id,
+        status: "active",
+      },
+    })
+
+    const result = await getTeacherGradeExport(teacher, { offeringId: emptyOffering.id })
+    expect(result.assessments).toEqual([])
+    expect(result.config.categories).toEqual([])
+    expect(result.students).toHaveLength(1)
+    expect(result.students[0]).toMatchObject({
+      percentage: null,
+      completedWeight: 0,
+      incomplete: true,
+    })
+
+    // The CSV download is produced too, rather than failing on an empty category.
+    const csv = await getTeacherOneRosterCsv(teacher, {
+      offeringId: emptyOffering.id,
+      file: "lineItems",
+    })
+    expect(csv.csv.split("\n")[0]).toContain("sourcedId")
+  })
 })
 
 describe("LMS export scoping", () => {
@@ -410,5 +448,44 @@ describe("LTI AGS dry run service", () => {
     await expect(
       dryRunAgsPublishForTeacher(teacher, { offeringId: fixture.offering.id, env: {} }),
     ).rejects.toMatchObject({ status: 422 })
+  })
+
+  it("runs from a persisted registration when the environment is empty (TN-50)", async () => {
+    const fixture = await createLmsExportFixture(prisma, { studentCount: 1 })
+    const [a1] = fixture.assessments
+    const student = fixture.students[0]
+    const teacher = lmsTeacherSession(fixture)
+    await publishModernGrade(prisma, {
+      assessmentId: a1.id,
+      studentId: student.profileId,
+      points: 8,
+      maxPoints: 10,
+    })
+    await prisma.ltiRegistration.create({
+      data: {
+        platformIssuer: "https://lms.example",
+        clientId: "client-reg",
+        deploymentId: "deployment-reg",
+        keyId: "key-reg",
+        privateKeyRef: "LTI_PRIVATE_KEY",
+        lineItemsUrl: "https://lms.example/ags/lineitems",
+        scopes: ["https://purl.imsglobal.org/spec/lti-ags/scope/score"],
+        isActive: true,
+        name: "Registered LMS",
+      },
+    })
+
+    const result = await dryRunAgsPublishForTeacher(teacher, {
+      offeringId: fixture.offering.id,
+      env: {},
+    })
+    expect(result.mode).toBe("dry-run")
+    expect(result.lineItems).toHaveLength(3)
+    expect(result.scores).toHaveLength(1)
+    expect(result.scopes).toEqual(["https://purl.imsglobal.org/spec/lti-ags/scope/score"])
+    // The badge a teacher sees must agree with the dry run, not read env alone.
+    expect(
+      (await getTeacherGradeExport(teacher, { offeringId: fixture.offering.id })).lti,
+    ).toMatchObject({ configured: true })
   })
 })
