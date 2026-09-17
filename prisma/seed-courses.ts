@@ -176,6 +176,251 @@ const COURSE_IDS = [
   DAA_LAB_COURSE_ID,
 ]
 
+// ---------------------------------------------------------------------------
+// Calendar events
+// ---------------------------------------------------------------------------
+
+/**
+ * The deadline event for an assessment, with a **fixed derived id**.
+ *
+ * The ids are enumerated rather than left to `@default(cuid())` for the reason spelled out in
+ * `prisma/seed-demo.ts`: all three of `CalendarEvent`'s links (`classId`, `offeringId`,
+ * `assessmentId`) are `onDelete: SetNull`, so deleting an assessment or an offering does not
+ * delete its events — it nulls the link and leaves the row. A row whose links are all null is
+ * indistinguishable from a deliberately institution-wide event, so it would be shown on **every**
+ * student's calendar (see `INSTITUTION_WIDE` in `lib/calendar.ts`). Deleting by an explicit id
+ * list is the only teardown that removes the row rather than orphaning it.
+ *
+ * The ids are prefixed `courses-` rather than `demo-`, so this seed's teardown never touches the
+ * demo seed's events and vice versa.
+ */
+function deadlineEventId(assessmentIdValue: string): string {
+  return `courses-event-due-${assessmentIdValue}`
+}
+
+/** A lecture or lab session. Every one is a span, so it carries a duration. */
+type ClassSessionSeed = {
+  id: string
+  offeringId: string
+  classId: string
+  title: string
+  description: string | null
+  /** Days from now, at `hourUtc`; negative is in the past. */
+  dayOffset: number
+  hourUtc: number
+  durationMinutes: number
+}
+
+const CLASS_SESSION_SEEDS: readonly ClassSessionSeed[] = [
+  // MCSE501L — DSA theory, section A. Lectures, not lab sessions.
+  {
+    id: "courses-event-dsa-la-lecture-growth",
+    offeringId: OFFERING_DSA_L_A,
+    classId: DSA_CLASS_A_ID,
+    title: "Lecture — Growth of functions",
+    description: "Asymptotic notation: Big-O, Omega and Theta.",
+    dayOffset: -49,
+    hourUtc: 9,
+    durationMinutes: 90,
+  },
+  {
+    id: "courses-event-dsa-la-lecture-sorting",
+    offeringId: OFFERING_DSA_L_A,
+    classId: DSA_CLASS_A_ID,
+    title: "Lecture — Sorting and searching",
+    description: null,
+    dayOffset: -21,
+    hourUtc: 9,
+    durationMinutes: 90,
+  },
+  {
+    id: "courses-event-dsa-la-lecture-graphs",
+    offeringId: OFFERING_DSA_L_A,
+    classId: DSA_CLASS_A_ID,
+    title: "Lecture — Graph algorithms",
+    description: "Breadth-first and depth-first traversal; topological sort.",
+    dayOffset: 7,
+    hourUtc: 9,
+    durationMinutes: 90,
+  },
+  // MCSE501L — DSA theory, section B.
+  {
+    id: "courses-event-dsa-lb-lecture-linear",
+    offeringId: OFFERING_DSA_L_B,
+    classId: DSA_CLASS_B_ID,
+    title: "Lecture — Elementary data structures",
+    description: null,
+    dayOffset: -50,
+    hourUtc: 11,
+    durationMinutes: 90,
+  },
+  {
+    id: "courses-event-dsa-lb-lecture-advanced-trees",
+    offeringId: OFFERING_DSA_L_B,
+    classId: DSA_CLASS_B_ID,
+    title: "Lecture — Advanced trees",
+    description: "Red-black trees and augmenting data structures.",
+    dayOffset: -14,
+    hourUtc: 11,
+    durationMinutes: 90,
+  },
+  {
+    id: "courses-event-dsa-lb-lecture-heaps",
+    offeringId: OFFERING_DSA_L_B,
+    classId: DSA_CLASS_B_ID,
+    title: "Lecture — Heaps and hashing",
+    description: null,
+    dayOffset: 14,
+    hourUtc: 11,
+    durationMinutes: 90,
+  },
+  // MCSE502L — DAA theory, section A.
+  {
+    id: "courses-event-daa-la-lecture-greedy",
+    offeringId: OFFERING_DAA_L_A,
+    classId: DAA_CLASS_A_ID,
+    title: "Lecture — Greedy and divide & conquer",
+    description: null,
+    dayOffset: -48,
+    hourUtc: 14,
+    durationMinutes: 90,
+  },
+  {
+    id: "courses-event-daa-la-lecture-dp",
+    offeringId: OFFERING_DAA_L_A,
+    classId: DAA_CLASS_A_ID,
+    title: "Lecture — Dynamic programming",
+    description: "Matrix-chain multiplication and longest common subsequence.",
+    dayOffset: -7,
+    hourUtc: 14,
+    durationMinutes: 90,
+  },
+  {
+    id: "courses-event-daa-la-lecture-network-flow",
+    offeringId: OFFERING_DAA_L_A,
+    classId: DAA_CLASS_A_ID,
+    title: "Lecture — Network flow",
+    description: null,
+    dayOffset: 21,
+    hourUtc: 14,
+    durationMinutes: 90,
+  },
+  // MCSE501P — DSA lab, section A. Lab sessions, not lectures.
+  {
+    id: "courses-event-dsa-pa-lab-graph-traversals",
+    offeringId: OFFERING_DSA_P_A,
+    classId: DSA_CLASS_A_ID,
+    title: "Lab session — Graph traversals (Experiment 9)",
+    description: "Implement BFS and DFS over an adjacency list.",
+    dayOffset: -35,
+    hourUtc: 14,
+    durationMinutes: 120,
+  },
+  {
+    id: "courses-event-dsa-pa-lab-heaps-hashing",
+    offeringId: OFFERING_DSA_P_A,
+    classId: DSA_CLASS_A_ID,
+    title: "Lab session — Heaps and hashing (Experiment 12)",
+    description: null,
+    dayOffset: 3,
+    hourUtc: 14,
+    durationMinutes: 120,
+  },
+  // MCSE501P — DSA lab, section B.
+  {
+    id: "courses-event-dsa-pb-lab-tree-traversals",
+    offeringId: OFFERING_DSA_P_B,
+    classId: DSA_CLASS_B_ID,
+    title: "Lab session — Binary trees and traversals (Experiment 5)",
+    description: null,
+    dayOffset: -34,
+    hourUtc: 14,
+    durationMinutes: 120,
+  },
+  {
+    id: "courses-event-dsa-pb-lab-mst",
+    offeringId: OFFERING_DSA_P_B,
+    classId: DSA_CLASS_B_ID,
+    title: "Lab session — Minimum spanning trees (Experiment 11)",
+    description: "Kruskal and Prim on a small graph.",
+    dayOffset: 4,
+    hourUtc: 14,
+    durationMinutes: 120,
+  },
+  // MCSE502P — DAA lab, section A.
+  {
+    id: "courses-event-daa-pa-lab-knapsack",
+    offeringId: OFFERING_DAA_P_A,
+    classId: DAA_CLASS_A_ID,
+    title: "Lab session — 0-1 knapsack (Experiment 3)",
+    description: "Dynamic programming over items and capacity.",
+    dayOffset: -33,
+    hourUtc: 14,
+    durationMinutes: 120,
+  },
+  {
+    id: "courses-event-daa-pa-lab-string-matching",
+    offeringId: OFFERING_DAA_P_A,
+    classId: DAA_CLASS_A_ID,
+    title: "Lab session — String matching (Experiment 6)",
+    description: null,
+    dayOffset: 10,
+    hourUtc: 14,
+    durationMinutes: 120,
+  },
+]
+
+/**
+ * An institution-wide event: no offering, no class, no assessment.
+ *
+ * `listStudentCalendar` deliberately shows an unscoped event to **everyone**, including a student
+ * enrolled in nothing (see `INSTITUTION_WIDE`), so this row is the fixture for that path. It is
+ * also the only event whose derived `location` is null — a holiday has no class room.
+ *
+ * Note the interaction with the demo seed: its teardown sweeps every event whose three links are
+ * all null (its anti-orphan guard). Running `prisma:seed:demo` after this seed therefore removes
+ * this row; running this seed again restores it. Both seeds' id-scoped events survive each other.
+ */
+const HOLIDAY_EVENT_ID = "courses-event-holiday-mid-semester"
+
+/** Reminders: an instant on an offering, with no duration. */
+const REMINDER_SEEDS = [
+  {
+    id: "courses-event-dsa-la-reminder-fat",
+    offeringId: OFFERING_DSA_L_A,
+    classId: DSA_CLASS_A_ID,
+    title: "FAT revision list published",
+    description: "The revision list for the final assessment is on the course page.",
+    dayOffset: 24,
+    hourUtc: 9,
+  },
+  {
+    id: "courses-event-daa-la-reminder-fat",
+    offeringId: OFFERING_DAA_L_A,
+    classId: DAA_CLASS_A_ID,
+    title: "FAT revision list published",
+    description: "The revision list for the final assessment is on the course page.",
+    dayOffset: 24,
+    hourUtc: 9,
+  },
+] as const
+
+/**
+ * Every calendar event this seed owns. The teardown deletes exactly this set, by id.
+ *
+ * One deadline event per assessment (21: four theory assessments across three offerings, three lab
+ * assessments across three), fifteen class sessions (three lectures per theory offering, two lab
+ * sessions per lab offering), one institution-wide holiday and two reminders. The assessment
+ * events are derived from `ASSESSMENT_IDS` so an assessment added above cannot silently lose its
+ * deadline.
+ */
+export const COURSES_CALENDAR_EVENT_IDS: string[] = [
+  ...ASSESSMENT_IDS.map(deadlineEventId),
+  ...CLASS_SESSION_SEEDS.map((seed) => seed.id),
+  HOLIDAY_EVENT_ID,
+  ...REMINDER_SEEDS.map((seed) => seed.id),
+]
+
 /** The term this seed chooses; the handbook states no semester. */
 const ACADEMIC_YEAR = 2026
 const TERM = "Semester-1"
@@ -281,6 +526,7 @@ export const COURSES_IDS = {
   assessmentIds: ASSESSMENT_IDS,
   materialIds: MATERIAL_IDS,
   codeTaskIds: CODE_TASK_IDS,
+  calendarEventIds: COURSES_CALENDAR_EVENT_IDS,
 } as const
 
 export const COURSES_ACCOUNTS = {
@@ -304,6 +550,7 @@ export type CoursesSeedSummary = {
   assessments: number
   releasedAssessments: number
   unpublishedAssessments: number
+  calendarEvents: number
   publishedGrades: number
   materials: number
   materialChunks: number
@@ -376,6 +623,17 @@ function daaLabDescription(): string {
  */
 async function deleteCoursesData(): Promise<void> {
   const userIds = [TEACHER_DSA_USER_ID, TEACHER_DAA_USER_ID, ...STUDENT_USER_IDS]
+
+  // Calendar events go **first**, and by explicit id. Every one of their three links is
+  // `onDelete: SetNull`, so deleting the assessments and offerings they hang off would strip the
+  // links and leave the rows behind — and a row with all three links null is indistinguishable
+  // from a deliberately institution-wide event, so the calendar reader would show it to every
+  // student as a course-less, location-less duplicate. This is why the ids are enumerated rather
+  // than the teardown relying on a cascade; see `deadlineEventId` and `prisma/seed-demo.ts`.
+  //
+  // Deleting by id (rather than sweeping every unscoped event) is also what keeps this seed's
+  // teardown from touching the demo seed's rows.
+  await prisma.calendarEvent.deleteMany({ where: { id: { in: COURSES_CALENDAR_EVENT_IDS } } })
 
   const [grades, suggestions, reviews] = await Promise.all([
     prisma.grade.findMany({
@@ -723,6 +981,8 @@ async function createMaterials(): Promise<number> {
 
 type AssessmentSeed = {
   id: string
+  /** The assessment's suffix within its offering, e.g. `cat-quiz` or `fat`. */
+  suffix: string
   offeringId: string
   courseId: string
   classId: string
@@ -734,7 +994,8 @@ type AssessmentSeed = {
   releasedAt: Date | null
 }
 
-async function createAssessments(): Promise<void> {
+/** Returns the rows so the calendar can build one deadline event per assessment. */
+async function createAssessments(): Promise<AssessmentSeed[]> {
   const rows: AssessmentSeed[] = []
 
   const theoryRows = (input: {
@@ -746,6 +1007,7 @@ async function createAssessments(): Promise<void> {
   }): AssessmentSeed[] => [
     {
       id: assessmentId(input.offeringId, "cat-quiz"),
+      suffix: "cat-quiz",
       offeringId: input.offeringId,
       courseId: input.courseId,
       classId: input.classId,
@@ -758,6 +1020,7 @@ async function createAssessments(): Promise<void> {
     },
     {
       id: assessmentId(input.offeringId, "cat-assignment"),
+      suffix: "cat-assignment",
       offeringId: input.offeringId,
       courseId: input.courseId,
       classId: input.classId,
@@ -770,6 +1033,7 @@ async function createAssessments(): Promise<void> {
     },
     {
       id: assessmentId(input.offeringId, "cat-descriptive"),
+      suffix: "cat-descriptive",
       offeringId: input.offeringId,
       courseId: input.courseId,
       classId: input.classId,
@@ -782,6 +1046,7 @@ async function createAssessments(): Promise<void> {
     },
     {
       id: assessmentId(input.offeringId, "fat"),
+      suffix: "fat",
       offeringId: input.offeringId,
       courseId: input.courseId,
       classId: input.classId,
@@ -829,6 +1094,7 @@ async function createAssessments(): Promise<void> {
   }): AssessmentSeed[] => [
     {
       id: assessmentId(input.offeringId, "cat-lab"),
+      suffix: "cat-lab",
       offeringId: input.offeringId,
       courseId: input.courseId,
       classId: input.classId,
@@ -843,6 +1109,7 @@ async function createAssessments(): Promise<void> {
       // The handbook's second lab component, the Mid-Term Lab, is not dropped: the platform has
       // one CAT pool, so it is seeded as a CAT assessment. See the file docblock.
       id: assessmentId(input.offeringId, "cat-midterm-code"),
+      suffix: "cat-midterm-code",
       offeringId: input.offeringId,
       courseId: input.courseId,
       classId: input.classId,
@@ -855,6 +1122,7 @@ async function createAssessments(): Promise<void> {
     },
     {
       id: assessmentId(input.offeringId, "fat"),
+      suffix: "fat",
       offeringId: input.offeringId,
       courseId: input.courseId,
       classId: input.classId,
@@ -892,8 +1160,127 @@ async function createAssessments(): Promise<void> {
   )
 
   for (const row of rows) {
-    await prisma.assessment.create({ data: row })
+    // `suffix` is seed metadata used to build the calendar events below; it is not a column, so
+    // the persisted fields are listed explicitly rather than spreading the row.
+    await prisma.assessment.create({
+      data: {
+        id: row.id,
+        offeringId: row.offeringId,
+        courseId: row.courseId,
+        classId: row.classId,
+        createdById: row.createdById,
+        title: row.title,
+        type: row.type,
+        dueDate: row.dueDate,
+        maxMarks: row.maxMarks,
+        releasedAt: row.releasedAt,
+      },
+    })
   }
+
+  return rows
+}
+
+/**
+ * The sentence each deadline event carries.
+ *
+ * A calendar row with an empty description renders an em dash; a real sentence is what the demo
+ * seed's review asked for, and the same applies here. Keyed by the assessment suffix, so the text
+ * is chosen by what the assessment *is* rather than by which offering it belongs to.
+ */
+const DEADLINE_DETAIL: Record<string, string> = {
+  "cat-quiz": "In-class quiz covering the modules taught so far.",
+  "cat-assignment": "Written assignment; submit it through the course page.",
+  "cat-descriptive": "Descriptive response analysing an algorithm's design and its complexity.",
+  fat: "Final assessment. The seating plan is published separately.",
+  "cat-lab": "The lab record and exercises are checked in the session.",
+  "cat-midterm-code": "Lab code task, submitted through the code-eval surface.",
+}
+
+/**
+ * The calendar rows for the two courses.
+ *
+ * Three things shape this function:
+ *
+ * - **One deadline event per assessment**, built from the assessment rows rather than restated by
+ *   hand, so the title is literally `Due: <assessment title>` and cannot drift from the demo's
+ *   convention. The release rule is exercised by the data: the six FAT assessments carry
+ *   `releasedAt: null`, so their events are hidden from students by `listStudentCalendar` while
+ *   remaining visible to their teachers. The fifteen CAT assessments are released, so their events
+ *   are the visible half of the asymmetry.
+ * - **Every class session is a real span** (`endAt` set) with a derived location, and the labs get
+ *   lab-session events rather than lectures. Deadlines and reminders are instants (`endAt: null`).
+ * - **One institution-wide holiday** with all three links null, which is the row
+ *   `listStudentCalendar` shows even to a student enrolled in nothing, and the only row whose
+ *   derived location is null.
+ *
+ * `isUpcoming` is set honestly (`startAt >= now`), even though `lib/calendar.ts` does not read it
+ * and `lib/calendar-view.ts` derives upcomingness from `startAt` — a fixture that writes a flag
+ * the code ignores should still not lie.
+ */
+async function createCalendarEvents(assessments: AssessmentSeed[]): Promise<void> {
+  await prisma.calendarEvent.createMany({
+    data: assessments.map((assessment) => ({
+      id: deadlineEventId(assessment.id),
+      classId: assessment.classId,
+      offeringId: assessment.offeringId,
+      assessmentId: assessment.id,
+      title: `Due: ${assessment.title}`,
+      description: DEADLINE_DETAIL[assessment.suffix] ?? null,
+      eventType: "ASSESSMENT" as const,
+      startAt: assessment.dueDate,
+      // A deadline is an instant, not a span.
+      endAt: null,
+      isUpcoming: assessment.dueDate.getTime() >= NOW.getTime(),
+    })),
+  })
+
+  await prisma.calendarEvent.createMany({
+    data: CLASS_SESSION_SEEDS.map((seed) => {
+      const startAt = fromNow(seed.dayOffset, seed.hourUtc)
+      return {
+        id: seed.id,
+        classId: seed.classId,
+        offeringId: seed.offeringId,
+        title: seed.title,
+        description: seed.description,
+        eventType: "CLASS" as const,
+        startAt,
+        endAt: new Date(startAt.getTime() + seed.durationMinutes * 60 * 1000),
+        isUpcoming: seed.dayOffset >= 0,
+      }
+    }),
+  })
+
+  await prisma.calendarEvent.createMany({
+    data: [
+      {
+        id: HOLIDAY_EVENT_ID,
+        classId: null,
+        offeringId: null,
+        assessmentId: null,
+        title: "Mid-semester break",
+        description: "No classes for the postgraduate CSE cohort this week.",
+        eventType: "HOLIDAY" as const,
+        startAt: fromNow(17, 0),
+        endAt: fromNow(21, 0),
+        isUpcoming: true,
+      },
+      ...REMINDER_SEEDS.map((seed) => ({
+        id: seed.id,
+        classId: seed.classId,
+        offeringId: seed.offeringId,
+        assessmentId: null,
+        title: seed.title,
+        description: seed.description,
+        eventType: "REMINDER" as const,
+        startAt: fromNow(seed.dayOffset, seed.hourUtc),
+        // A reminder is an instant, not a span.
+        endAt: null,
+        isUpcoming: seed.dayOffset >= 0,
+      })),
+    ],
+  })
 }
 
 /**
@@ -1510,6 +1897,7 @@ async function countSummary(): Promise<CoursesSeedSummary> {
     inactiveEnrollments,
     assessments,
     releasedAssessments,
+    calendarEvents,
     publishedGrades,
     materials,
     materialChunks,
@@ -1532,6 +1920,7 @@ async function countSummary(): Promise<CoursesSeedSummary> {
     prisma.assessment.count({
       where: { id: { in: ASSESSMENT_IDS }, releasedAt: { not: null } },
     }),
+    prisma.calendarEvent.count({ where: { id: { in: COURSES_CALENDAR_EVENT_IDS } } }),
     prisma.grade.count({
       where: { assessmentId: { in: ASSESSMENT_IDS }, publishedAt: { not: null } },
     }),
@@ -1557,6 +1946,7 @@ async function countSummary(): Promise<CoursesSeedSummary> {
     assessments,
     releasedAssessments,
     unpublishedAssessments: assessments - releasedAssessments,
+    calendarEvents,
     publishedGrades,
     materials,
     materialChunks,
@@ -1583,7 +1973,8 @@ export async function seedCourses(): Promise<CoursesSeedSummary> {
   await createPeople(passwordHash)
   await createCoursesAndOfferings()
   await createMaterials()
-  await createAssessments()
+  const assessmentRows = await createAssessments()
+  await createCalendarEvents(assessmentRows)
   await configureGrading()
   await createCodeTasks()
   await publishMarks()

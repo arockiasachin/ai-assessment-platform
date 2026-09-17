@@ -2,8 +2,14 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest"
 
 import { resolveRegimeForCourse } from "@/lib/analytics/grading-bands"
 import { gatherRegimeInputs } from "@/lib/analytics/grading-regime"
+import { listStudentCalendar, listTeacherCalendar } from "@/lib/calendar"
 import { evaluateFatGateForStudent } from "@/lib/grading/offering-config-service"
-import { COURSES_IDS, seedCourses, type CoursesSeedSummary } from "@/prisma/seed-courses"
+import {
+  COURSES_ACCOUNTS,
+  COURSES_IDS,
+  seedCourses,
+  type CoursesSeedSummary,
+} from "@/prisma/seed-courses"
 
 import { disconnectTestDatabase, prisma as db, truncateAll } from "./helpers/db"
 
@@ -285,5 +291,230 @@ describe("seeded MCSE501 / MCSE502 courses", () => {
     // Re-running replaces rather than duplicating, and produces the same counts.
     const secondSummary = await seedCourses()
     expect(secondSummary).toEqual(firstSummary)
+  })
+
+  /**
+   * The calendar half of the dataset.
+   *
+   * Every visibility assertion goes through the **real reader** — `listStudentCalendar` and
+   * `listTeacherCalendar` — rather than through a `CalendarEvent` query. A test that read the
+   * table itself would pass while the release filter was broken, which is the exact failure the
+   * release concept exists to prevent: `offeringId`, `classId` and `assessmentId` are all
+   * `onDelete: SetNull`, so the reader's scoping and release rules are the only things standing
+   * between an unreleased deadline and every student's calendar.
+   */
+  describe("calendar events", () => {
+    const CALENDAR_IDS = COURSES_IDS.calendarEventIds
+
+    const studentUser = (index: number) => ({
+      id: COURSES_IDS.studentUserIds[index],
+      email: COURSES_ACCOUNTS.students[index].email,
+      role: "student" as const,
+    })
+    const dsaTeacherUser = {
+      id: COURSES_IDS.teacherDsaUserId,
+      email: COURSES_ACCOUNTS.teacherDsa.email,
+      role: "teacher" as const,
+    }
+    const daaTeacherUser = {
+      id: COURSES_IDS.teacherDaaUserId,
+      email: COURSES_ACCOUNTS.teacherDaa.email,
+      role: "teacher" as const,
+    }
+
+    /** The deadline event id the seed derives for an assessment. */
+    const deadlineEventIdFor = (offeringId: string, suffix: string) =>
+      `courses-event-due-${assessmentIdFor(offeringId, suffix)}`
+
+    it("seeds every event kind, with one deadline event per assessment", async () => {
+      const rows = await db.calendarEvent.findMany({
+        where: { id: { in: CALENDAR_IDS } },
+        select: { eventType: true },
+      })
+      expect(rows).toHaveLength(firstSummary.calendarEvents)
+
+      const counts = new Map<string, number>()
+      for (const row of rows) counts.set(row.eventType, (counts.get(row.eventType) ?? 0) + 1)
+
+      expect(counts.get("ASSESSMENT")).toBe(COURSES_IDS.assessmentIds.length)
+      expect(counts.get("CLASS")).toBe(15)
+      expect(counts.get("HOLIDAY")).toBe(1)
+      expect(counts.get("REMINDER")).toBe(2)
+    })
+
+    it("links every deadline event to its assessment and titles it `Due: <title>`", async () => {
+      const events = await db.calendarEvent.findMany({
+        where: { id: { in: CALENDAR_IDS }, eventType: "ASSESSMENT" },
+        select: {
+          assessmentId: true,
+          offeringId: true,
+          classId: true,
+          title: true,
+          endAt: true,
+          assessment: { select: { title: true } },
+        },
+      })
+
+      expect(events).toHaveLength(COURSES_IDS.assessmentIds.length)
+      for (const event of events) {
+        expect(event.assessmentId).not.toBeNull()
+        expect(event.offeringId).not.toBeNull()
+        expect(event.classId).not.toBeNull()
+        expect(event.title).toBe(`Due: ${event.assessment?.title}`)
+        // A deadline is an instant, not a span.
+        expect(event.endAt).toBeNull()
+      }
+      // One deadline per assessment, not several.
+      expect(new Set(events.map((event) => event.assessmentId)).size).toBe(
+        COURSES_IDS.assessmentIds.length,
+      )
+    })
+
+    it("gives class-like events a duration and leaves deadlines and reminders as instants", async () => {
+      const rows = await db.calendarEvent.findMany({
+        where: { id: { in: CALENDAR_IDS } },
+        select: { eventType: true, startAt: true, endAt: true },
+      })
+
+      for (const row of rows) {
+        const isSpan = row.eventType === "CLASS" || row.eventType === "HOLIDAY"
+        if (isSpan) {
+          expect(row.endAt, `${row.eventType} should carry an endAt`).not.toBeNull()
+          expect(row.endAt!.getTime()).toBeGreaterThan(row.startAt.getTime())
+        } else {
+          expect(row.endAt, `${row.eventType} should be an instant`).toBeNull()
+        }
+      }
+    })
+
+    it("keeps every event inside the seeded term window", async () => {
+      const offering = await db.courseOffering.findUniqueOrThrow({
+        where: { id: OFFERINGS.dsaTheoryA },
+        select: { startsOn: true, endsOn: true },
+      })
+      const rows = await db.calendarEvent.findMany({
+        where: { id: { in: CALENDAR_IDS } },
+        select: { startAt: true, endAt: true },
+      })
+
+      for (const row of rows) {
+        expect(row.startAt.getTime()).toBeGreaterThanOrEqual(offering.startsOn!.getTime())
+        expect(row.startAt.getTime()).toBeLessThanOrEqual(offering.endsOn!.getTime())
+        if (row.endAt) {
+          expect(row.endAt.getTime()).toBeLessThanOrEqual(offering.endsOn!.getTime())
+        }
+      }
+    })
+
+    it("hides an unreleased assessment's deadline from a student while its teacher sees it", async () => {
+      const studentIds = new Set(
+        (await listStudentCalendar(studentUser(0))).map((event) => event.id),
+      )
+      const teacherIds = new Set(
+        (await listTeacherCalendar(dsaTeacherUser)).map((event) => event.id),
+      )
+
+      const released = deadlineEventIdFor(OFFERINGS.dsaTheoryA, "cat-quiz")
+      const unreleased = deadlineEventIdFor(OFFERINGS.dsaTheoryA, "fat")
+
+      // Same offering, same student, same teacher; only the release state differs.
+      expect(studentIds.has(released)).toBe(true)
+      expect(teacherIds.has(released)).toBe(true)
+      expect(studentIds.has(unreleased)).toBe(false)
+      expect(teacherIds.has(unreleased)).toBe(true)
+    })
+
+    it("hides all six unreleased FAT deadlines from students, each visible to its teacher", async () => {
+      const dsaTeacherIds = new Set(
+        (await listTeacherCalendar(dsaTeacherUser)).map((event) => event.id),
+      )
+      const daaTeacherIds = new Set(
+        (await listTeacherCalendar(daaTeacherUser)).map((event) => event.id),
+      )
+
+      // Each case names a student enrolled in that offering, so the deadline is
+      // hidden *by release*, not because the student is outside the offering.
+      const cases = [
+        { offeringId: OFFERINGS.dsaTheoryA, studentIndex: 0, teacherIds: dsaTeacherIds },
+        { offeringId: OFFERINGS.dsaLabA, studentIndex: 0, teacherIds: dsaTeacherIds },
+        { offeringId: OFFERINGS.dsaTheoryB, studentIndex: 9, teacherIds: dsaTeacherIds },
+        { offeringId: OFFERINGS.dsaLabB, studentIndex: 9, teacherIds: dsaTeacherIds },
+        { offeringId: OFFERINGS.daaTheoryA, studentIndex: 0, teacherIds: daaTeacherIds },
+        { offeringId: OFFERINGS.daaLabA, studentIndex: 0, teacherIds: daaTeacherIds },
+      ]
+      expect(cases).toHaveLength(6)
+
+      const studentCache = new Map<number, Set<string>>()
+      for (const entry of cases) {
+        if (!studentCache.has(entry.studentIndex)) {
+          const events = await listStudentCalendar(studentUser(entry.studentIndex))
+          studentCache.set(entry.studentIndex, new Set(events.map((event) => event.id)))
+        }
+        const studentIds = studentCache.get(entry.studentIndex)!
+        const id = deadlineEventIdFor(entry.offeringId, "fat")
+
+        expect(studentIds.has(id), `${id} must be hidden from student ${entry.studentIndex}`).toBe(
+          false,
+        )
+        expect(entry.teacherIds.has(id), `${id} must be visible to its teacher`).toBe(true)
+      }
+    })
+
+    it("shows the institution-wide holiday to a student with no active enrolment", async () => {
+      // Indices 30 and 31 hold only inactive enrolments (`dropped` / `withdrawn`),
+      // so the reader finds no active offering or class for them. The unscoped
+      // holiday is the one row that must still reach them.
+      const holiday = await db.calendarEvent.findFirstOrThrow({
+        where: { id: { in: CALENDAR_IDS }, eventType: "HOLIDAY" },
+        select: { id: true },
+      })
+
+      expect((await listStudentCalendar(studentUser(30))).map((event) => event.id)).toEqual([
+        holiday.id,
+      ])
+      expect((await listStudentCalendar(studentUser(31))).map((event) => event.id)).toEqual([
+        holiday.id,
+      ])
+    })
+
+    it("derives location from the class room, and leaves it null for the holiday", async () => {
+      const events = await listStudentCalendar(studentUser(0))
+
+      const holiday = events.find((event) => event.kind === "HOLIDAY")
+      expect(holiday).toBeDefined()
+      expect(holiday?.location).toBeNull()
+      expect(holiday?.courseCode).toBeNull()
+
+      const room = await db.classRoom.findUniqueOrThrow({
+        where: { id: COURSES_IDS.classIds.dsaA },
+        select: { name: true },
+      })
+      const lecture = events.find(
+        (event) =>
+          event.kind === "CLASS" && event.courseCode === "MCSE501L" && event.location === room.name,
+      )
+      expect(lecture, "a DSA section A lecture with a derived location").toBeDefined()
+      expect(lecture?.endAt).not.toBeNull()
+    })
+
+    it("is idempotent: a re-run leaves the same events, with no orphaned rows", async () => {
+      const allBefore = await db.calendarEvent.count()
+      const scopedBefore = await db.calendarEvent.count({ where: { id: { in: CALENDAR_IDS } } })
+
+      const summary = await seedCourses()
+
+      expect(await db.calendarEvent.count({ where: { id: { in: CALENDAR_IDS } } })).toBe(
+        scopedBefore,
+      )
+      expect(await db.calendarEvent.count()).toBe(allBefore)
+      expect(summary.calendarEvents).toBe(scopedBefore)
+      // The teardown deletes by id, so nothing is orphaned into the all-null shape
+      // (the holiday is the only legitimate all-null event).
+      expect(
+        await db.calendarEvent.count({
+          where: { id: { in: CALENDAR_IDS }, offeringId: null, classId: null },
+        }),
+      ).toBe(1)
+    })
   })
 })
