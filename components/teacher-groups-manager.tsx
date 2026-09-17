@@ -26,6 +26,7 @@ import { SUCCESS_TEXT } from "@/components/ui/tone"
 import type {
   FormationResultValue,
   MilestoneResponse,
+  ProjectAssessmentOption,
   RosterStudent,
   TeacherOfferingSummary,
 } from "@/lib/contracts/groups"
@@ -202,12 +203,16 @@ export function GroupGradeSuggestionForm({
 export function GroupFormationPanel({
   offeringId,
   roster,
+  projectAssessments,
 }: {
   offeringId: string
   roster: RosterStudent[]
+  /** The offering's `GROUP_PROJECT` assessments, for the optional link (TN-49). */
+  projectAssessments: ProjectAssessmentOption[]
 }) {
   const router = useRouter()
   const [newGroupName, setNewGroupName] = useState("")
+  const [newGroupAssessmentId, setNewGroupAssessmentId] = useState("")
   const [selectedStudentIds, setSelectedStudentIds] = useState<string[]>([])
   const [teamSize, setTeamSize] = useState("3")
   const [criteriaJson, setCriteriaJson] = useState(DEFAULT_CRITERIA)
@@ -241,11 +246,13 @@ export function GroupFormationPanel({
           offeringId,
           name: newGroupName.trim(),
           studentIds: selectedStudentIds,
+          ...(newGroupAssessmentId !== "" ? { assessmentId: newGroupAssessmentId } : {}),
         }),
       })
       const { ok, data } = await readJson<unknown>(response)
       if (!ok) throw new Error(data.message ?? "Unable to create the group.")
       setNewGroupName("")
+      setNewGroupAssessmentId("")
       setSelectedStudentIds([])
       setNotice("Group created.")
       router.refresh()
@@ -341,6 +348,35 @@ export function GroupFormationPanel({
           value={newGroupName}
           onChange={(event) => setNewGroupName(event.target.value)}
         />
+        <div className="space-y-1">
+          <Label htmlFor="new-group-project">Project assessment (optional)</Label>
+          <Select
+            value={newGroupAssessmentId === "" ? "__none__" : newGroupAssessmentId}
+            onValueChange={(value: string | null) =>
+              setNewGroupAssessmentId(!value || value === "__none__" ? "" : value)
+            }
+          >
+            <SelectTrigger
+              id="new-group-project"
+              className="w-full"
+              aria-label="Project assessment"
+            >
+              <SelectValue placeholder="No project assessment" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__none__">No project assessment</SelectItem>
+              {projectAssessments.map((assessment) => (
+                <SelectItem key={assessment.id} value={assessment.id}>
+                  {assessment.title}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <p className="text-xs text-muted-foreground">
+            Links the team to the GROUP_PROJECT assessment it is for (TN-49). Leave it unset when
+            the offering has no project assessment.
+          </p>
+        </div>
         <div className="max-h-48 space-y-1 overflow-y-auto rounded-md border border-border p-2">
           {roster.length === 0 && (
             <p className="text-sm text-muted-foreground">No active students in this offering.</p>

@@ -1,6 +1,7 @@
 export * from "./errors"
 export * from "./dimensions"
 export * from "./storage"
+export * from "./assessment-link"
 export * from "./formation"
 export * from "./formation-profile"
 export * from "./adjustment"

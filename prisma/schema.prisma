@@ -312,6 +312,7 @@ model Assessment {
   finalGrades        Grade[]
   similarityChecks   SimilarityCheck[]
   retakeRequests     RetakeRequest[]
+  groups             Group[]
 
   @@index([offeringId, dueDate])
   @@index([courseId, classId])
@@ -892,11 +893,31 @@ model Group {
   offeringId         String
   name               String
   projectTitle       String?
+  // The `GROUP_PROJECT` assessment this team exists to do, once it is linked to one.
+  //
+  // Null means "not linked", which is the honest reading for the teams that predate this
+  // column and for a team formed for an offering with no project assessment: a team is
+  // offering-scoped first (TN-49). Non-null makes the group attributable to the exact
+  // assessment it belongs to, which a JSON field cannot enforce or query.
+  //
+  // `onDelete: Restrict`, deliberately. The alternatives both lose information silently:
+  //   - `SetNull` would unscope a project team the moment its assessment was deleted,
+  //     leaving a row indistinguishable from a team that never had a project — the same
+  //     orphan-promotion shape as the `CalendarEvent` defect, which twice promoted a
+  //     parentless row to a wider scope.
+  //   - `Cascade` would delete the team and, through it, its members, milestones, peer
+  //     evaluations and contribution evidence. That student work is not the assessment's
+  //     to destroy.
+  // `Restrict` refuses the delete instead, so an assessment with linked teams cannot be
+  // removed until they are unlinked or deleted — an explicit teacher decision rather than
+  // an invisible side effect.
+  assessmentId       String?
   status             GroupStatus         @default(FORMING)
   metadata           Json?
   createdAt          DateTime            @default(now())
   updatedAt          DateTime            @updatedAt
   offering           CourseOffering      @relation(fields: [offeringId], references: [id], onDelete: Cascade)
+  assessment         Assessment?         @relation(fields: [assessmentId], references: [id], onDelete: Restrict)
   members            GroupMember[]
   peerEvaluations    PeerEvaluation[]
   contributionEvents ContributionEvent[]
@@ -904,6 +925,7 @@ model Group {
 
   @@unique([offeringId, name])
   @@index([offeringId, status])
+  @@index([assessmentId])
 }
 
 model GroupMember {

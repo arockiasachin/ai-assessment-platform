@@ -147,6 +147,12 @@ export const createGroupRequestSchema = z.object({
   offeringId: nonEmptyString,
   name: nonEmptyString.max(120),
   projectTitle: z.string().trim().max(200).optional(),
+  /**
+   * The `GROUP_PROJECT` assessment this team is for. Optional: a team can be formed
+   * without one, and the server refuses an id that is not an owned `GROUP_PROJECT`
+   * assessment of the same offering.
+   */
+  assessmentId: nonEmptyString.optional(),
   studentIds: z.array(nonEmptyString).min(1).max(50),
 })
 export type CreateGroupRequest = z.infer<typeof createGroupRequestSchema>
@@ -155,6 +161,8 @@ export const updateGroupRequestSchema = z
   .object({
     name: nonEmptyString.max(120).optional(),
     projectTitle: z.string().trim().max(200).nullable().optional(),
+    /** `null` clears the link; an id links the team to that owned project assessment. */
+    assessmentId: nonEmptyString.nullable().optional(),
     status: groupStatusSchema.optional(),
     addStudentIds: z.array(nonEmptyString).min(1).max(50).optional(),
     removeStudentIds: z.array(nonEmptyString).min(1).max(50).optional(),
@@ -163,6 +171,7 @@ export const updateGroupRequestSchema = z
     (value) =>
       value.name !== undefined ||
       value.projectTitle !== undefined ||
+      value.assessmentId !== undefined ||
       value.status !== undefined ||
       value.addStudentIds !== undefined ||
       value.removeStudentIds !== undefined,
@@ -219,6 +228,13 @@ export const groupSummarySchema = z.object({
   offeringId: z.string(),
   name: z.string(),
   projectTitle: z.string().nullable(),
+  /**
+   * The `GROUP_PROJECT` assessment the team is linked to (TN-49), or `null` for a team
+   * with no project assessment. `assessmentTitle` is carried alongside so the reader
+   * can show what the team is for without a second lookup.
+   */
+  assessmentId: z.string().nullable(),
+  assessmentTitle: z.string().nullable(),
   status: groupStatusSchema,
   createdAt: z.string(),
   updatedAt: z.string(),
@@ -246,6 +262,16 @@ export const rosterStudentSchema = z.object({
   availability: z.array(z.string()).nullable(),
 })
 export type RosterStudent = z.infer<typeof rosterStudentSchema>
+
+/**
+ * One `GROUP_PROJECT` assessment a team can be linked to (TN-49). A minimal shape: the
+ * groups surface only needs to name the projects it can attach a team to.
+ */
+export const projectAssessmentOptionSchema = z.object({
+  id: z.string(),
+  title: z.string(),
+})
+export type ProjectAssessmentOption = z.infer<typeof projectAssessmentOptionSchema>
 
 export const rosterResponseSchema = z.object({
   success: z.literal(true),

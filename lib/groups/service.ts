@@ -8,6 +8,7 @@ import {
   type GroupSummary,
   type MilestoneResponse,
   type PeerEvaluationPair,
+  type ProjectAssessmentOption,
   type RosterStudent,
 } from "@/lib/contracts/groups"
 import type { Prisma } from "@/lib/generated/prisma/client"
@@ -44,10 +45,12 @@ import {
   serializePeerEvaluationPairs,
 } from "./serialize"
 import { readStoredRatings } from "./storage"
+import { groupsForAssessmentWhere } from "./assessment-link"
 
 const groupDetailInclude = {
   members: { include: { student: true } },
   milestones: true,
+  assessment: { select: { id: true, title: true } },
 } as const
 
 type GroupWithDetail = Prisma.GroupGetPayload<{ include: typeof groupDetailInclude }>
@@ -80,9 +83,38 @@ async function assertUniqueGroupName(offeringId: string, name: string, excluding
     throw new GroupError(409, `A group named "${name}" already exists in this offering.`)
 }
 
+/**
+ * A team may only link to a `GROUP_PROJECT` assessment the teacher owns and that belongs to
+ * the same offering (TN-49). This is what makes `Group.assessmentId` more than a free-text
+ * pointer: a quiz, another offering's assessment, or another teacher's assessment is refused
+ * with one rule and one message, whether the link arrives on create or on update.
+ */
+async function assertLinkableGroupProjectAssessment(
+  user: AuthUser,
+  offeringId: string,
+  assessmentId: string,
+): Promise<void> {
+  const staffId = await resolveTeacherStaffId(user)
+  const assessment = await prisma.assessment.findFirst({
+    where: {
+      id: assessmentId,
+      offeringId,
+      type: "GROUP_PROJECT",
+      offering: { teacherId: staffId },
+    },
+    select: { id: true },
+  })
+  if (!assessment) {
+    throw new GroupValidationError(
+      "A group can only be linked to a GROUP_PROJECT assessment of the same offering.",
+    )
+  }
+}
+
 const groupListInclude = {
   members: { include: { student: true } },
   milestones: true,
+  assessment: { select: { id: true, title: true } },
 } as const
 
 export type TeacherOffering = {
@@ -122,6 +154,23 @@ export async function listTeacherOfferings(user: AuthUser): Promise<TeacherOffer
       academicYear: offering.academicYear,
       groupCount: offering._count.groups,
     }
+  })
+}
+
+/**
+ * The owned offering's `GROUP_PROJECT` assessments, so the groups surface can offer the
+ * project a team is for (TN-49). This is the reverse of the link: without it the write path
+ * could accept an `assessmentId` that no screen could supply.
+ */
+export async function listGroupProjectAssessmentsForTeacher(
+  user: AuthUser,
+  offeringId: string,
+): Promise<ProjectAssessmentOption[]> {
+  await loadOwnedOffering(user, offeringId)
+  return prisma.assessment.findMany({
+    where: { offeringId, type: "GROUP_PROJECT" },
+    select: { id: true, title: true },
+    orderBy: [{ dueDate: "asc" }, { title: "asc" }],
   })
 }
 
@@ -195,16 +244,27 @@ export async function saveFormationProfilesForTeacher(
   return listOfferingRosterForTeacher(user, request.offeringId)
 }
 
-/** Every group on every offering the signed-in teacher owns. */
+/**
+ * Every group on every offering the signed-in teacher owns.
+ *
+ * `offeringId` narrows to one owned offering; `assessmentId` narrows to the teams linked to
+ * one `GROUP_PROJECT` assessment (TN-49), which is the direction that did not exist while a
+ * group carried no assessment. The filter lives in `groupsForAssessmentWhere` so the
+ * analysis reader cannot drift from it.
+ */
 export async function listGroupsForTeacher(
   user: AuthUser,
   offeringId?: string,
+  assessmentId?: string,
 ): Promise<GroupSummary[]> {
   const staffId = await resolveTeacherStaffId(user)
   let where: Prisma.GroupWhereInput = { offering: { teacherId: staffId } }
   if (offeringId) {
     await loadOwnedOffering(user, offeringId)
     where = { offeringId }
+  }
+  if (assessmentId) {
+    where = { ...where, ...groupsForAssessmentWhere(assessmentId) }
   }
   const groups = await prisma.group.findMany({
     where,
@@ -290,6 +350,9 @@ export async function createGroupForTeacher(user: AuthUser, input: unknown): Pro
     throw new GroupValidationError("Every group member must be actively enrolled in the offering.")
   }
   await assertStudentsNotAlreadyGrouped(request.offeringId, uniqueStudentIds)
+  if (request.assessmentId) {
+    await assertLinkableGroupProjectAssessment(user, request.offeringId, request.assessmentId)
+  }
 
   const groupId = await prisma.$transaction(async (tx) => {
     const group = await tx.group.create({
@@ -297,6 +360,7 @@ export async function createGroupForTeacher(user: AuthUser, input: unknown): Pro
         offeringId: request.offeringId,
         name: request.name,
         projectTitle: request.projectTitle ?? null,
+        assessmentId: request.assessmentId ?? null,
         status: "FORMING",
         metadata: { source: "manual", createdByUserId: user.id },
       },
@@ -312,6 +376,7 @@ export async function createGroupForTeacher(user: AuthUser, input: unknown): Pro
       after: {
         offeringId: request.offeringId,
         name: request.name,
+        assessmentId: request.assessmentId ?? null,
         memberCount: uniqueStudentIds.length,
       },
     })
@@ -352,6 +417,9 @@ export async function updateGroupForTeacher(
       excludeGroupId: groupId,
     })
   }
+  if (request.assessmentId !== undefined && request.assessmentId !== null) {
+    await assertLinkableGroupProjectAssessment(user, group.offeringId, request.assessmentId)
+  }
 
   await prisma.$transaction(async (tx) => {
     await tx.group.update({
@@ -359,6 +427,7 @@ export async function updateGroupForTeacher(
       data: partialUpdate(request, {
         name: true,
         projectTitle: true,
+        assessmentId: true,
         status: true,
       }),
     })
@@ -542,9 +611,12 @@ export type OfferingAnalysis = {
 }
 
 /**
- * Assemble the instructor analysis for every group in an offering: both
+ * Assemble the instructor analysis for the groups in an offering: both
  * adjustment factors, free-rider signals, contribution evidence and milestone
- * progress. When a `groupGrade` (or an owned GROUP_PROJECT assessment whose
+ * progress. When `options.assessmentId` names an owned `GROUP_PROJECT`
+ * assessment, only that assessment's linked teams are analysed (TN-49), which is
+ * what makes a project assessment's group view its own rather than the
+ * offering's. When a `groupGrade` (or an owned GROUP_PROJECT assessment whose
  * members all carry the same mark) is available, per-student suggestions are
  * returned but never published.
  */
@@ -553,8 +625,14 @@ export async function getOfferingAnalysisForTeacher(
   options: { offeringId: string; assessmentId?: string; groupGrade?: number },
 ): Promise<OfferingAnalysis> {
   const offering = await loadOwnedOffering(user, options.offeringId)
+  // When the caller names a GROUP_PROJECT assessment, analyse that assessment's teams rather
+  // than every team in the offering (TN-49). The filter is the same single definition the
+  // teacher's group list uses, so a team cannot appear in one and not the other.
   const groups = await prisma.group.findMany({
-    where: { offeringId: offering.id },
+    where: {
+      offeringId: offering.id,
+      ...(options.assessmentId ? groupsForAssessmentWhere(options.assessmentId) : {}),
+    },
     include: groupDetailInclude,
     orderBy: { name: "asc" },
   })

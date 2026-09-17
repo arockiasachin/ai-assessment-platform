@@ -1275,6 +1275,9 @@ async function createGroupProject() {
       offeringId: ACTIVE_OFFERING_ID,
       name: "Team Alpha",
       projectTitle: "Model the cost of a school trip",
+      // The team is for the group-project assessment below, and the link is the honest state:
+      // before `Group.assessmentId` existed a team carried no assessment at all (TN-49).
+      assessmentId: GROUP_ASSESSMENT_ID,
       status: "ACTIVE",
       metadata: { source: "manual", createdByUserId: TEACHER_USER_ID },
     },

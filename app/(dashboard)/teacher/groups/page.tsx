@@ -32,12 +32,14 @@ import type {
   GroupSummary,
   MilestoneResponse,
   PeerEvaluationPair,
+  ProjectAssessmentOption,
   RosterStudent,
 } from "@/lib/contracts/groups"
 import {
   MIN_RATERS_FOR_DISCLOSURE,
   PEER_EVALUATION_DIMENSIONS,
   getOfferingAnalysisForTeacher,
+  listGroupProjectAssessmentsForTeacher,
   listGroupsForTeacher,
   listMilestonesForTeacher,
   listOfferingRosterForTeacher,
@@ -63,6 +65,8 @@ type PageSearchParams = {
   offeringId?: string | string[]
   groupId?: string | string[]
   groupGrade?: string | string[]
+  /** Narrow the Teams table to one GROUP_PROJECT assessment's teams (TN-49). */
+  assessmentId?: string | string[]
 }
 
 function firstParam(value: string | string[] | undefined): string | undefined {
@@ -214,6 +218,7 @@ export default async function TeacherGroupsPage({
   const params = await searchParams
   const requestedOfferingId = firstParam(params.offeringId)
   const requestedGroupId = firstParam(params.groupId)
+  const requestedAssessmentId = firstParam(params.assessmentId)
   const groupGradeParam = firstParam(params.groupGrade)
   let groupGrade: number | undefined
   if (groupGradeParam !== undefined) {
@@ -229,19 +234,24 @@ export default async function TeacherGroupsPage({
   let roster: RosterStudent[] = []
   let analysis: GroupAnalysisResponse[] = []
   let milestones: MilestoneResponse[] = []
+  let projectAssessments: ProjectAssessmentOption[] = []
 
   if (selectedOffering) {
-    const [groupList, rosterList, offeringAnalysis, milestoneList] = await Promise.all([
-      listGroupsForTeacher(user, selectedOffering.id),
-      listOfferingRosterForTeacher(user, selectedOffering.id),
-      getOfferingAnalysisForTeacher(user, {
-        offeringId: selectedOffering.id,
-        ...(groupGrade !== undefined ? { groupGrade } : {}),
-      }),
-      listMilestonesForTeacher(user, { offeringId: selectedOffering.id }),
-    ])
+    const [groupList, rosterList, offeringAnalysis, milestoneList, assessmentList] =
+      await Promise.all([
+        listGroupsForTeacher(user, selectedOffering.id, requestedAssessmentId),
+        listOfferingRosterForTeacher(user, selectedOffering.id),
+        getOfferingAnalysisForTeacher(user, {
+          offeringId: selectedOffering.id,
+          ...(requestedAssessmentId !== undefined ? { assessmentId: requestedAssessmentId } : {}),
+          ...(groupGrade !== undefined ? { groupGrade } : {}),
+        }),
+        listMilestonesForTeacher(user, { offeringId: selectedOffering.id }),
+        listGroupProjectAssessmentsForTeacher(user, selectedOffering.id),
+      ])
     groups = groupList
     roster = rosterList
+    projectAssessments = assessmentList
     analysis = offeringAnalysis.groups.map((entry) =>
       serializeGroupAnalysis(
         entry.analysis,
@@ -303,6 +313,25 @@ export default async function TeacherGroupsPage({
           </p>
         </div>
       ),
+    },
+    {
+      id: "assessment",
+      header: "Project assessment",
+      hideBelow: "lg",
+      cell: (group) =>
+        group.assessmentId ? (
+          <Link
+            href={{
+              pathname: "/teacher/groups",
+              query: { offeringId: group.offeringId, assessmentId: group.assessmentId },
+            }}
+            className="underline-offset-4 hover:underline"
+          >
+            {group.assessmentTitle ?? "Linked assessment"}
+          </Link>
+        ) : (
+          <span className="text-muted-foreground">Not linked</span>
+        ),
     },
     {
       id: "state",
@@ -580,6 +609,25 @@ export default async function TeacherGroupsPage({
               />
             </div>
 
+            {requestedAssessmentId !== undefined && (
+              <Callout
+                tone="info"
+                titleAs="h2"
+                title="Showing one project assessment's teams"
+                bodyClassName="text-muted-foreground"
+              >
+                {projectAssessments.find((assessment) => assessment.id === requestedAssessmentId)
+                  ?.title ?? "Linked assessment"}{" "}
+                — {groups.length} team{groups.length === 1 ? "" : "s"} linked.{" "}
+                <Link
+                  href={{ pathname: "/teacher/groups", query: { offeringId: selectedOffering.id } }}
+                  className="underline underline-offset-4"
+                >
+                  Show every team
+                </Link>
+              </Callout>
+            )}
+
             <SectionCard
               title="Teams"
               description={`Contribution is measured from commit, pull-request and review evidence, plus the CATME peer round. ${teamsAwaitingEvaluation.length} team${
@@ -627,7 +675,7 @@ export default async function TeacherGroupsPage({
             ) : (
               <SectionCard
                 title={`Team detail — ${selectedGroup.name}`}
-                description={`${selectedGroup.projectTitle ?? "No project title"} · ${selectedGroup.memberCount} members · milestones ${selectedGroup.milestoneProgress.completed}/${selectedGroup.milestoneProgress.total}`}
+                description={`${selectedGroup.assessmentTitle ? `Project: ${selectedGroup.assessmentTitle} · ` : ""}${selectedGroup.projectTitle ?? "No project title"} · ${selectedGroup.memberCount} members · milestones ${selectedGroup.milestoneProgress.completed}/${selectedGroup.milestoneProgress.total}`}
                 action={<StatusPill status={GROUP_STATE_TO_STATUS[selectedGroup.status]} dot />}
               >
                 <PageTabs
@@ -874,6 +922,7 @@ export default async function TeacherGroupsPage({
                     key={selectedOffering.id}
                     offeringId={selectedOffering.id}
                     roster={roster}
+                    projectAssessments={projectAssessments}
                   />
                 </div>
               </SectionCard>

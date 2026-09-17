@@ -61,7 +61,17 @@ export function serializeMilestone(milestone: Milestone): MilestoneResponse {
   }
 }
 
-export type GroupWithMembers = Group & { members: GroupMemberWithStudent[] }
+export type GroupAssessmentRef = { id: string; title: string } | null
+
+export type GroupWithMembers = Group & {
+  members: GroupMemberWithStudent[]
+  /**
+   * The linked `GROUP_PROJECT` assessment (TN-49), when the reader selected it. Optional so a
+   * caller that only needs the roster — none today, but the type should not force a join —
+   * can omit it; the serializer then reports `null`, the same as an unlinked team.
+   */
+  assessment?: GroupAssessmentRef
+}
 
 export function serializeGroupSummary(
   group: GroupWithMembers,
@@ -74,6 +84,8 @@ export function serializeGroupSummary(
     offeringId: group.offeringId,
     name: group.name,
     projectTitle: group.projectTitle ?? null,
+    assessmentId: group.assessmentId ?? null,
+    assessmentTitle: group.assessment?.title ?? null,
     status: group.status,
     createdAt: group.createdAt.toISOString(),
     updatedAt: group.updatedAt.toISOString(),
