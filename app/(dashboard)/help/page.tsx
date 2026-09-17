@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation"
+import Script from "next/script"
 
 import { AppShell } from "@/components/shell/app-shell"
 import { PageHeader } from "@/components/shell/page-header"
@@ -75,11 +76,22 @@ export default async function HelpPage() {
       </div>
 
       {configured ? (
-        <script
+        /*
+         * `next/script`, not a raw `<script>` tag.
+         *
+         * The shell that wraps this page is a client component, so a bare script
+         * tag is handed to React as a child and React refuses to execute it during
+         * a client render — it logs "Encountered a script tag while rendering React
+         * component" and the widget never loads. It appeared to work when the page
+         * was opened by a full page load, because the server-rendered HTML still
+         * contained the tag; navigating to /help *within* the app did not load the
+         * widget at all.
+         */
+        <Script
           src={`${deskUrl}/widget.js`}
           data-public-key={publicKey}
           data-token-url="/api/support/presign"
-          defer
+          strategy="afterInteractive"
         />
       ) : null}
     </AppShell>
