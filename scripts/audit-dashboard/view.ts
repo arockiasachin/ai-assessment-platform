@@ -99,6 +99,13 @@ select { font: inherit; padding: 4px 6px; border: 1px solid var(--line); border-
 ul.findings { list-style: none; margin: 0; padding: 0; }
 ul.findings li { padding: 6px 0; border-bottom: 1px dashed var(--line); }
 ul.findings li:last-child { border-bottom: 0; }
+/* A resolved finding is struck through so the list reads as a record of what was
+   found and what was done about it, rather than a list of open work. Fixed rows are
+   struck; wontfix rows are dimmed but not struck, because the finding is still true —
+   we chose not to act on it, which is a different statement. */
+ul.findings li.is-fixed { text-decoration: line-through; text-decoration-thickness: 1px; opacity: 0.55; }
+ul.findings li.is-fixed code { text-decoration: line-through; }
+ul.findings li.is-wontfix { opacity: 0.6; font-style: italic; }
 footer { margin-top: 32px; color: var(--muted); font-size: 12.5px; }
 code { font-family: var(--mono); font-size: 12.5px; background: #f0f1f3; padding: 1px 4px; border-radius: 4px; }
 </style>
@@ -355,7 +362,8 @@ code { font-family: var(--mono); font-size: 12.5px; background: #f0f1f3; padding
     if (findings.length === 0) return el("p", "muted small", emptyText)
     var list = el("ul", "findings")
     findings.forEach(function (finding) {
-      var item = el("li")
+      var cls = finding.status === "fixed" ? "is-fixed" : finding.status === "wontfix" ? "is-wontfix" : ""
+      var item = el("li", cls)
       item.appendChild(el("span", sevClass(finding.severity), finding.severity))
       item.appendChild(document.createTextNode(" "))
       item.appendChild(el("code", null, finding.id))

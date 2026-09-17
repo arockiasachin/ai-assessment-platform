@@ -312,7 +312,89 @@ asset.
 
 ---
 
-## Appendix — Track 1 detail
+## 8. Audit remediation — the plan of record
+
+Added after the programme plan above, because the decisions that shape the audit work were
+made separately. This is the plan the remediation follows.
+
+### 8.1 The decisions
+
+| Decision                    | Answer                                                    | Consequence                                                                                                     |
+| --------------------------- | --------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| **Scope**                   | **Fix defects _and_ build the missing write paths**       | The number that matters is not "bugs" — many findings are features that were never built, and they are in scope |
+| **Latent findings**         | **Every finding counts as real**                          | A latent defect is still a defect; nothing is dismissed as "not exploitable"                                    |
+| **`wontfix`**               | **Permitted, with a written reason**, reviewed at the end | A finding may be declined, but never silently dropped                                                           |
+| **Cadence**                 | **Chunk by chunk**, blockers first                        | Check in after each chunk rather than running to completion                                                     |
+| **The desk's future shape** | Captured in a separate scratchpad                         | See §8.4                                                                                                        |
+
+### 8.2 The actual size
+
+The audit reports **129 rows**, which are **124 distinct findings** (5 are duplicates found
+independently by two groups). By severity and category:
+
+| Severity | Rows                             |
+| -------- | -------------------------------- |
+| Blocker  | 10 rows → **8 distinct defects** |
+| Major    | 58                               |
+| Minor    | 61                               |
+
+| Category                 | Count | What it usually means                                |
+| ------------------------ | ----- | ---------------------------------------------------- |
+| `inconsistency`          | 34    | Two views of one fact that disagree                  |
+| `broken-flow`            | 25    | A path that cannot be completed                      |
+| `fabricated-number`      | 16    | A figure that is wrong or invented                   |
+| `partial-implementation` | 13    | Started, not finished                                |
+| `missing-write-path`     | 10    | A capability with no way to reach it                 |
+| `dead-control`           | 10    | A control that cannot work                           |
+| `missing-empty-state`    | 10    | Nothing is shown where something should be explained |
+| `unreachable-ui`         | 7     | Built, no caller                                     |
+| `confidentiality-leak`   | 4     | Data visible to someone who should not see it        |
+
+**The scope is larger than the word "bug" implies.** `missing-write-path` and
+`partial-implementation` together are 23 findings that require _building something_, not
+correcting it. That is the honest headline: this is a remediation programme, not a bug-fix
+sprint.
+
+### 8.3 Chunks
+
+Ordered so that each chunk leaves the system in a state worth testing, and so that the
+highest-consequence work lands first.
+
+| Chunk  | Contents                                                                                                                                                               | Why here                                                                                                                |
+| ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| **1a** | Teacher-side blockers: `TN-1`/`TN-31` release UI, `TN-32` export                                                                                                       | The app is unusable end-to-end without a release path; export is a demonstrated failure                                 |
+| **1b** | Student-side blockers: `SN-1`/`SN-28` practice 404, `SN-3` draft loss, `SL-1` quiz autosave, `SN-2` resume scope, `SN-27` sandbox false success, `SN-29` metadata leak | Silent loss of a student's work, and two misreports. Independently found by two groups, which is evidence they are real |
+| **2**  | Majors, clustered by subsystem — teacher authoring, analytics and metrics, student assessment, collaboration and code eval, data and seed accuracy                     | Clustering keeps related fixes in one context, and many majors share a cause                                            |
+| **3**  | Minors, clustered the same way                                                                                                                                         | Usually display and copy, but 61 of them                                                                                |
+| **4**  | Re-run the audit; reconcile the count                                                                                                                                  | The only honest way to know what remains. The first pass found 124; a second will find things the first missed          |
+| **5**  | Review the `wontfix` list                                                                                                                                              | Every decline is read and accepted or reversed                                                                          |
+
+**Chunks 1a and 1b are independent** — teacher and student surfaces, different files — so they
+run in parallel. Beyond that the work is sequential, because later chunks touch code earlier
+ones restructure.
+
+### 8.4 The scratchpad
+
+Two things must be captured as they are learned rather than reconstructed later:
+
+1. **What the support desk's agents learned.** The LangChain audit runs surfaced how an
+   autonomous agent behaves against this API — where it succeeded, where it stalled, and what
+   the API made awkward. That is direct evidence for the agent design and would be expensive
+   to re-derive.
+2. **Ideas for the desk**, including its intended shape: **standalone first, attachable
+   second.** A support desk that needs no host at all — where the requester is a person typing
+   into a form or sending an email, rather than a host-minted identity — and that _also_
+   attaches to any host application when one exists. The assessment platform is the test
+   harness for the attachable path, not the reason the desk exists.
+
+The second point is a constraint on the desk regardless of when it is built: **the desk must
+never depend on the assessment platform.** Anything that only works because a host exists is
+a defect against that requirement.
+
+Kept in `docs/plans/support-desk-scratchpad.md` so it accumulates while the audit work runs,
+and can be handed over as a brief afterwards.
+
+# Appendix — Track 1 detail
 
 The 8 distinct blockers with their reasoning, so the workstream is actionable without
 re-reading the audit reports.
