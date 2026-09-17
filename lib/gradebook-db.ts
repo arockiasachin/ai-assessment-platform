@@ -971,15 +971,27 @@ export async function deleteAssessmentForSessionUser(
 ): Promise<{ id: string; title: string }> {
   const assessment = await loadOwnedAssessmentForWrite(sessionUser, assessmentId)
 
-  const [gradeCount, submissionCount, attemptCount] = await Promise.all([
+  const [gradeCount, submissionCount, attemptCount, groupCount] = await Promise.all([
     prisma.grade.count({ where: { assessmentId } }),
     prisma.submission.count({ where: { assessmentId } }),
     prisma.quizAttempt.count({ where: { assessmentId } }),
+    prisma.group.count({ where: { assessmentId } }),
   ])
   if (gradeCount > 0 || submissionCount > 0 || attemptCount > 0) {
     throw new AssessmentWriteError(
       409,
       "This assessment has student work or marks and cannot be deleted. Archive it by leaving it unreleased.",
+    )
+  }
+  // A group links to its `GROUP_PROJECT` assessment with `onDelete: Restrict` (TN-49), so
+  // deleting an assessment that still has teams would otherwise fail in the database and
+  // surface as a 500. Naming it here turns that into the 409 the other guards give, and
+  // says what to do — the teams are not the assessment's to destroy, but they are the
+  // teacher's to unlink.
+  if (groupCount > 0) {
+    throw new AssessmentWriteError(
+      409,
+      `This assessment is linked to ${groupCount} project team${groupCount === 1 ? "" : "s"} and cannot be deleted. Unlink the teams first, or leave the assessment unreleased.`,
     )
   }
 

@@ -183,4 +183,43 @@ describe("assessment registry write path", () => {
     )
     expect(await prisma.assessment.findUnique({ where: { id: f.assessment.id } })).not.toBeNull()
   })
+
+  /**
+   * A group links to its `GROUP_PROJECT` assessment with `onDelete: Restrict` (TN-49), so the
+   * database refuses the delete. Without a guard here that surfaces as a raw foreign-key
+   * violation — a 500 — for a situation whose correct answer is a 409 with advice. The teams are
+   * not the assessment's to destroy; they are the teacher's to unlink.
+   */
+  it("refuses to delete an assessment that still has linked project teams", async () => {
+    const f = await createSpineFixture(prisma)
+    const actor = teacherSession(f.teacher)
+    await prisma.group.create({
+      data: { offeringId: f.offering.id, name: "Team Alpha", assessmentId: f.assessment.id },
+    })
+
+    const error = await deleteAssessmentForSessionUser(actor, f.assessment.id).catch((e) => e)
+    expect(error).toBeInstanceOf(AssessmentWriteError)
+    expect((error as InstanceType<typeof AssessmentWriteError>).status).toBe(409)
+    expect((error as Error).message).toMatch(/project team/i)
+
+    // Nothing is deleted, and the team survives.
+    expect(await prisma.assessment.findUnique({ where: { id: f.assessment.id } })).not.toBeNull()
+    expect(await prisma.group.count({ where: { assessmentId: f.assessment.id } })).toBe(1)
+  })
+
+  it("deletes the assessment once the team is unlinked", async () => {
+    const f = await createSpineFixture(prisma)
+    const actor = teacherSession(f.teacher)
+    const group = await prisma.group.create({
+      data: { offeringId: f.offering.id, name: "Team Alpha", assessmentId: f.assessment.id },
+    })
+
+    await prisma.group.update({ where: { id: group.id }, data: { assessmentId: null } })
+
+    const removed = await deleteAssessmentForSessionUser(actor, f.assessment.id)
+    expect(removed.id).toBe(f.assessment.id)
+    // The team is left intact, with no assessment — the unlink is the teacher's decision, not a
+    // side effect of deleting the assessment.
+    expect(await prisma.group.findUnique({ where: { id: group.id } })).not.toBeNull()
+  })
 })
