@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react"
 
+import { AssessmentReleaseControl } from "@/components/assessment-release-control"
 import { DataTable, type Column } from "@/components/ui/data-table"
 import { EmptyState } from "@/components/ui/empty-state"
 import { FilterBar } from "@/components/ui/filter-bar"
@@ -171,20 +172,16 @@ export function TeacherPlannerView({
     {
       id: "release",
       header: "Release",
-      cell: (row) =>
-        row.released ? (
-          <div className="space-y-1">
-            <StatusPill status="published" label="Released" dot />
-            <p className="text-xs text-muted-foreground">
-              {row.releasedAt === null ? "—" : formatDateTime(row.releasedAt)}
-            </p>
-          </div>
-        ) : (
-          <div className="space-y-1">
-            <StatusPill status="draft" label="Not released" dot />
-            <p className="text-xs text-muted-foreground">Hidden from students</p>
-          </div>
-        ),
+      // The pill used to be read-only, which is how an assessment could stay invisible
+      // to every student with no way to change it (TN-1 / TN-31). It is now the control.
+      cell: (row) => (
+        <AssessmentReleaseControl
+          assessmentId={row.id}
+          assessmentTitle={row.title}
+          released={row.released}
+          releasedAt={row.releasedAt}
+        />
+      ),
     },
   ]
 

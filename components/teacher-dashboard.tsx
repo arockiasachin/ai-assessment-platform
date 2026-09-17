@@ -4,6 +4,7 @@ import Link from "next/link"
 import { ClipboardCheck, TrendingUp, TriangleAlert, Users, type LucideIcon } from "lucide-react"
 
 import { TrendChart } from "@/components/charts"
+import { AssessmentReleaseControl } from "@/components/assessment-release-control"
 import { StatCard } from "@/components/stat-card"
 import { buttonVariants } from "@/components/ui/button"
 import { DataTable, type Column } from "@/components/ui/data-table"
@@ -87,6 +88,9 @@ export function TeacherDashboard({
     : "No offering"
 
   const assessmentIds = overview.assessments.map((assessment) => assessment.id)
+  // The progress rows carry `released` but not the instant; the deadline reader has both,
+  // so the release control's "since" line comes from here rather than a second read.
+  const releasedAtById = new Map(deadlines.map((deadline) => [deadline.id, deadline.releasedAt]))
   const attention = attentionForOffering(reviewQueue, assessmentIds)
   const progressRows = buildAssessmentProgressRows(overview.assessments, deadlines)
   const kpis = teacherDashboardKpis({
@@ -203,14 +207,17 @@ export function TeacherDashboard({
     {
       id: "state",
       header: "State",
+      // Read-only pill replaced by the release control (TN-1 / TN-31): the dashboard is
+      // where a teacher first sees which assessments are still hidden from students.
       cell: (row) =>
         row.released === null ? (
           <span className="text-muted-foreground">—</span>
         ) : (
-          <StatusPill
-            status={row.released ? "published" : "draft"}
-            label={row.released ? "Released" : "Not released"}
-            dot
+          <AssessmentReleaseControl
+            assessmentId={row.id}
+            assessmentTitle={row.title}
+            released={row.released}
+            releasedAt={releasedAtById.get(row.id) ?? null}
           />
         ),
     },
@@ -249,7 +256,7 @@ export function TeacherDashboard({
 
       <SectionCard
         title="Needs your attention"
-        description={`${attention.total} AI suggestion${attention.total === 1 ? " is" : "s are"} waiting on a human decision in this offering. Nothing is released to students until you make it.`}
+        description={`${attention.total} AI suggestion${attention.total === 1 ? " is" : "s are"} waiting on a human decision in this offering. A student's mark stays unpublished until you accept or override it.`}
         action={
           <Link
             href="/teacher/reviews"

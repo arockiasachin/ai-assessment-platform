@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useState } from "react"
+import { useCallback, useRef, useState } from "react"
 import { AlertTriangle, Download, Loader2, RefreshCw, Send } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
@@ -28,6 +28,7 @@ import type {
   LmsOffering,
   TeacherGradeExportResponse,
 } from "@/lib/contracts/lms-export"
+import { exportNeedsReload } from "@/lib/lms-export/selection"
 
 /**
  * Teacher final-grade and LMS-export workspace.
@@ -67,6 +68,62 @@ export function TeacherLmsExport({ offerings, initialOfferingId, initialExport }
   const [lti, setLti] = useState<AgsDryRunResponse | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  /**
+   * The offering the payload above was loaded for. It is what makes the config *derived*
+   * state rather than a one-time seed: TN-32 was exactly the config keeping the initial
+   * offering's assessment ids after the selector moved on, which the server correctly
+   * rejected with a 400.
+   */
+  const [loadedOfferingId, setLoadedOfferingId] = useState(initialExport?.offering.id ?? "")
+  const [reloading, setReloading] = useState(false)
+  /** Guards against an earlier offering's slower response overwriting a later selection. */
+  const requestRef = useRef(0)
+
+  /**
+   * Load the export for a newly selected offering, so the weight configuration in the
+   * textarea always belongs to the offering it will be submitted for. This is the fix for
+   * TN-32: it runs whenever the selector changes, so the derived state follows its input
+   * instead of being seeded once from the initial offering.
+   */
+  const loadOffering = useCallback(async (value: string) => {
+    const requestId = requestRef.current + 1
+    requestRef.current = requestId
+    // Clear the previous offering's rows first: showing offering A's cohort under offering
+    // B's name while B loads would be a misreport, and an unset config is safe to omit.
+    setReloading(true)
+    setError(null)
+    setData(null)
+    setConfigText("")
+    setLti(null)
+    try {
+      const response = await fetch(`/api/teacher/export?offeringId=${encodeURIComponent(value)}`, {
+        cache: "no-store",
+      })
+      const payload = (await response.json()) as TeacherGradeExportResponse & { message?: string }
+      if (!response.ok) {
+        throw new Error(payload.message ?? "Unable to load this offering's export.")
+      }
+      if (requestRef.current !== requestId) return
+      setData(payload)
+      setConfigText(JSON.stringify(payload.config, null, 2))
+      setLoadedOfferingId(value)
+    } catch (loadError) {
+      if (requestRef.current !== requestId) return
+      setError(
+        loadError instanceof Error ? loadError.message : "Unable to load this offering's export.",
+      )
+    } finally {
+      if (requestRef.current === requestId) setReloading(false)
+    }
+  }, [])
+
+  const selectOffering = useCallback(
+    (value: string) => {
+      setOfferingId(value)
+      if (exportNeedsReload(loadedOfferingId, value)) void loadOffering(value)
+    },
+    [loadedOfferingId, loadOffering],
+  )
 
   const parseConfig = useCallback((): FinalGradeConfig | undefined => {
     const trimmed = configText.trim()
@@ -179,7 +236,7 @@ export function TeacherLmsExport({ offerings, initialOfferingId, initialExport }
               >
                 Course offering
               </label>
-              <Select value={offeringId} onValueChange={(value) => setOfferingId(value ?? "")}>
+              <Select value={offeringId} onValueChange={(value) => selectOffering(value ?? "")}>
                 <SelectTrigger id="export-offering">
                   <SelectValue placeholder="Select an offering" />
                 </SelectTrigger>
@@ -192,7 +249,7 @@ export function TeacherLmsExport({ offerings, initialOfferingId, initialExport }
                 </SelectContent>
               </Select>
             </div>
-            <Button type="button" onClick={compute} disabled={busy || !offeringId}>
+            <Button type="button" onClick={compute} disabled={busy || reloading || !offeringId}>
               {busy ? (
                 <Loader2 className="size-4 animate-spin" />
               ) : (
@@ -240,7 +297,7 @@ export function TeacherLmsExport({ offerings, initialOfferingId, initialExport }
                 type="button"
                 variant="outline"
                 size="sm"
-                disabled={busy || !offeringId}
+                disabled={busy || reloading || !offeringId}
                 onClick={() => void download(file)}
               >
                 <Download className="size-4" />
@@ -251,7 +308,7 @@ export function TeacherLmsExport({ offerings, initialOfferingId, initialExport }
               type="button"
               variant="secondary"
               size="sm"
-              disabled={busy || !offeringId}
+              disabled={busy || reloading || !offeringId}
               onClick={() => void runLtiDryRun()}
             >
               <Send className="size-4" />
