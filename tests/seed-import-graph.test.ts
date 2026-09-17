@@ -76,28 +76,41 @@ function localImportGraph(entry: string): Map<string, string[]> {
   return graph
 }
 
+/**
+ * Every runnable seed entry point. Both run under `tsx` and both must therefore have a
+ * `server-only`-free transitive import graph, so the walk is parameterised rather than
+ * duplicated: a second entry added here is covered by the same guard.
+ */
+const SEED_ENTRIES = ["prisma/seed-demo.ts", "prisma/seed-courses.ts"] as const
+
 describe("the seed's import graph", () => {
-  it("contains no `server-only` sentinel, which `tsx` cannot resolve", () => {
-    const entry = path.join(repoRoot, "prisma", "seed-demo.ts")
-    const graph = localImportGraph(entry)
+  it.each(SEED_ENTRIES)(
+    "contains no `server-only` sentinel reachable from %s, which `tsx` cannot resolve",
+    (relativeEntry) => {
+      const entry = path.join(repoRoot, relativeEntry)
+      const graph = localImportGraph(entry)
 
-    // Sanity: the walk found something. A broken resolver would make this test vacuous, which is the
-    // failure mode it would otherwise have.
-    expect(graph.size, "expected to walk more than the entry file").toBeGreaterThan(30)
+      // Sanity: the walk found something. A broken resolver would make this test vacuous, which is the
+      // failure mode it would otherwise have.
+      expect(
+        graph.size,
+        `expected to walk more than the entry file for ${relativeEntry}`,
+      ).toBeGreaterThan(30)
 
-    const offenders: string[] = []
-    for (const file of graph.keys()) {
-      const source = fs.readFileSync(file, "utf8")
-      if (SENTINEL_IMPORT.test(source)) offenders.push(path.relative(repoRoot, file))
-    }
+      const offenders: string[] = []
+      for (const file of graph.keys()) {
+        const source = fs.readFileSync(file, "utf8")
+        if (SENTINEL_IMPORT.test(source)) offenders.push(path.relative(repoRoot, file))
+      }
 
-    expect(
-      offenders,
-      "these modules are reachable from the seed and import the `server-only` sentinel, which `tsx` " +
-        "cannot resolve — the seed will fail with 'Cannot find module server-only'. Remove the " +
-        "sentinel, or stop importing the module from the seed's graph",
-    ).toEqual([])
-  })
+      expect(
+        offenders,
+        `these modules are reachable from ${relativeEntry} and import the \`server-only\` sentinel, ` +
+          "which `tsx` cannot resolve — the seed will fail with 'Cannot find module server-only'. " +
+          "Remove the sentinel, or stop importing the module from the seed's graph",
+      ).toEqual([])
+    },
+  )
 
   it("would catch the sentinel if it were reintroduced", () => {
     // The guard has to be able to fail, or it is decoration. Written to a temp file inside the repo so

@@ -17,6 +17,7 @@
     "prisma:migrate": "prisma migrate dev",
     "prisma:seed": "prisma db seed",
     "prisma:seed:demo": "npx --yes tsx prisma/seed-demo.ts",
+    "prisma:seed:courses": "npx --yes tsx prisma/seed-courses.ts",
     "retention:purge": "npx --yes tsx scripts/retention-purge.ts"
   },
   "dependencies": {
