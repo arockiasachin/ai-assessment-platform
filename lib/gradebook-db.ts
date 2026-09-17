@@ -114,11 +114,13 @@ function toUiQuizzes(
 ): Quiz[] {
   const quizzes: Quiz[] = []
   for (const assessment of assessments) {
-    if (assessment.questions.length === 0) continue
-    if (!quizDeliveryStatus(assessment.questions).deliverable) continue
+    // The published subset is what is served (TN-41); a draft question is not part
+    // of the quiz, so the projection must not include it.
+    const delivery = quizDeliveryStatus(assessment.questions)
+    if (!delivery.deliverable) continue
     quizzes.push({
       assessmentId: assessment.id,
-      questions: [...assessment.questions]
+      questions: [...delivery.questions]
         .sort((a, b) => a.order - b.order)
         .map((question) => ({
           id: question.id,
@@ -516,6 +518,20 @@ export async function upsertAssessmentGrade(
   })
   if (!assessment) throw new Error("Assessment not found")
 
+  // Object-level authorization runs **before** the enrollment check (TN-69).
+  // The enrollment check below answers a distinct 400 for any assessment that
+  // exists, so running it first let a teacher tell "another teacher's real
+  // assessment" apart from "no such assessment" and enumerate ids. A teacher who
+  // does not own the assessment now receives exactly what a missing id does.
+  // This is indistinguishability, not permission: the write is still refused,
+  // but the object it names is not confirmed to exist. Admins may write any.
+  if (actor.role === "teacher") {
+    const staff = await prisma.staffProfile.findUnique({ where: { userId: actor.id } })
+    if (!staff || assessment.offering.teacherId !== staff.id) {
+      throw new Error("Assessment not found")
+    }
+  }
+
   const enrollment = await prisma.enrollment.findUnique({
     where: {
       studentId_offeringId: {
@@ -528,15 +544,6 @@ export async function upsertAssessmentGrade(
 
   if (!enrollment) {
     throw new Error("Student not enrolled in assessment offering")
-  }
-
-  // Object-level authorization: a teacher may only write marks for assessments
-  // in their own offerings. Admins may write any.
-  if (actor.role === "teacher") {
-    const staff = await prisma.staffProfile.findUnique({ where: { userId: actor.id } })
-    if (!staff || assessment.offering.teacherId !== staff.id) {
-      throw new Error("Forbidden")
-    }
   }
 
   if (input.score === null) {
@@ -876,9 +883,12 @@ async function loadOwnedAssessmentForWrite(
       offering: { select: { teacherId: true } },
     },
   })
-  if (!assessment) throw new AssessmentWriteError(404, "Assessment not found")
-  if (!teacherOwnsAssessment(assessment, staff.id)) {
-    throw new AssessmentWriteError(403, "Forbidden")
+  // Existence and ownership answer identically (TN-69). A distinct 403 for a
+  // foreign-but-real id confirms that another teacher's assessment exists, which
+  // a bare id from a URL must not reveal. The write is still refused; only the
+  // confirmation that the row exists is removed.
+  if (!assessment || !teacherOwnsAssessment(assessment, staff.id)) {
+    throw new AssessmentWriteError(404, "Assessment not found")
   }
   return assessment
 }

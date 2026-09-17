@@ -40,7 +40,7 @@ import { evaluateFatGateForStudent } from "@/lib/grading/offering-config-service
 import { assertAnswerShapes } from "./answers"
 import { QuizAttemptError, QuizNotDeliverableError } from "./errors"
 import { evaluateAttemptEligibility, isLateSubmission, resolveMaxAttempts } from "./eligibility"
-import { quizDeliveryStatus } from "./metadata"
+import { quizDeliveryStatus, publishedQuizQuestions } from "./metadata"
 import { retakeStateFrom, type RetakeRequestStatusValue } from "./retake-state"
 import {
   readOptionIds,
@@ -114,11 +114,19 @@ function toScorable(
   })
 }
 
-function assertDeliverable(questions: readonly QuestionWithOptions[]): void {
+/**
+ * Refuse a quiz whose published subset cannot be served, and return that subset.
+ *
+ * The subset is the same one every count derives from (`quizDeliveryStatus`), so
+ * what a student is told they will get and what they are actually served cannot
+ * drift (TN-41). Drafts are held back; a quiz with only drafts is not deliverable.
+ */
+function assertDeliverable(questions: readonly QuestionWithOptions[]): QuestionWithOptions[] {
   const delivery = quizDeliveryStatus(questions)
   if (!delivery.deliverable) {
     throw new QuizNotDeliverableError(delivery.reason ?? "This quiz is not open yet.")
   }
+  return delivery.questions
 }
 
 async function attemptSettings(
@@ -399,7 +407,10 @@ export async function listStudentQuizzes(user: AuthUser): Promise<StudentQuizSum
       title: assessment.title,
       dueDate: assessment.dueDate.toISOString(),
       maxMarks: assessment.maxMarks,
-      questionCount: assessment.questions.length,
+      // The served count is the published subset, from the same predicate the
+      // delivery uses (TN-41). Counting `assessment.questions` here reported 5
+      // while a mixed quiz served 3.
+      questionCount: delivery.questions.length,
       maxAttempts,
       attemptsUsed: used,
       attemptsRemaining: Math.max(0, maxAttempts - used),
@@ -450,7 +461,7 @@ export async function getStudentAttempt(
 ): Promise<QuizAttemptView> {
   const { attempt, studentId } = await loadOwnedAttempt(user, attemptId)
 
-  const [questions, responses, settings] = await Promise.all([
+  const [allQuestions, responses, settings] = await Promise.all([
     prisma.question.findMany({
       where: { assessmentId: attempt.assessmentId },
       orderBy: { order: "asc" },
@@ -469,6 +480,9 @@ export async function getStudentAttempt(
     }),
     attemptSettings(studentId, attempt.assessmentId, attempt.assessment.maxAttempts),
   ])
+  // Serve the published subset only (TN-41). A draft is not part of the quiz, so
+  // it must not appear in the sitting the student reads or the results built from it.
+  const questions = quizDeliveryStatus(allQuestions).questions
 
   const submitted = attempt.status !== "IN_PROGRESS"
   return {
@@ -510,11 +524,14 @@ export async function saveQuizAttemptDraft(
     throw new QuizAttemptError(409, "This attempt has already been submitted.")
   }
 
-  const questions = await prisma.question.findMany({
+  const allQuestions = await prisma.question.findMany({
     where: { assessmentId: attempt.assessmentId },
     orderBy: { order: "asc" },
     include: { options: { orderBy: { order: "asc" } } },
   })
+  // Only the published subset accepts a saved answer (TN-41). A draft is not part
+  // of the quiz, so an answer naming one is an unknown question, not a stored draft.
+  const questions = publishedQuizQuestions(allQuestions)
   assertAnswerShapes(questions, request.answers)
   const questionById = new Map(questions.map((question) => [question.id, question]))
 
@@ -606,7 +623,10 @@ export async function listStudentAttempts(
     where: { id: assessmentId },
     select: {
       id: true,
-      questions: { orderBy: { order: "asc" }, select: { id: true } },
+      questions: {
+        orderBy: { order: "asc" },
+        select: { id: true, status: true, metadata: true },
+      },
       offering: {
         select: {
           enrollments: { where: { studentId, status: "active" }, select: { id: true } },
@@ -629,7 +649,9 @@ export async function listStudentAttempts(
   })
 
   const selection = selectAdaptiveRetakeQuestions({
-    questionIds: assessment.questions.map((question) => question.id),
+    // The retake source is the published subset too (TN-41): a draft is not part
+    // of the quiz, so it cannot be a failed or unanswered question to retake.
+    questionIds: publishedQuizQuestions(assessment.questions).map((question) => question.id),
     responses: latest?.responses ?? [],
   })
   return {
@@ -846,8 +868,9 @@ export async function submitQuizAttempt(
   if (rows.assessment.offering.enrollments.length === 0) {
     throw new QuizAttemptError(403, "You are not enrolled in this assessment offering.")
   }
-  const questions = rows.assessment.questions
-  assertDeliverable(questions)
+  // Score only the published subset (TN-41): `assertDeliverable` returns exactly
+  // the questions a student could have been served, so a draft can never be scored.
+  const questions = assertDeliverable(rows.assessment.questions)
   assertAnswerShapes(questions, request.answers)
 
   const answerByQuestion = new Map(request.answers.map((answer) => [answer.questionId, answer]))

@@ -249,13 +249,10 @@ export async function listStudentAssessments(
       const submittedAt =
         submission !== null ? submission.submittedAt : (attemptSubmission?.submittedAt ?? null)
 
-      // Count only a deliverable question set: a generated draft quiz shows 0
-      // questions until its questions are published, exactly as it did before the
-      // legacy `Quiz` store was retired.
-      const quizQuestionCount =
-        assessment.questions.length > 0 && quizDeliveryStatus(assessment.questions).deliverable
-          ? assessment.questions.length
-          : 0
+      // The count is the same predicate that decides delivery (TN-41): the
+      // published subset. Counting all `assessment.questions` reported 5 beside a
+      // delivery of 3, and a quiz with only drafts still reports 0.
+      const quizQuestionCount = quizDeliveryStatus(assessment.questions).questions.length
 
       const dueTime = assessment.dueDate.getTime()
 

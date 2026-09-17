@@ -112,9 +112,11 @@ describe("grade store unification", () => {
     const otherTeacher: AuthUser = { id: "other", email: "other@test.local", role: "teacher" }
     const student: AuthUser = { id: f.student.id, email: f.student.email, role: "student" }
 
+    // A foreign assessment is refused exactly as a missing one is (TN-69), so the
+    // caller cannot learn that it exists; a student is refused with "Forbidden".
     await expect(
       upsertAssessmentGrade({ studentId, assessmentId: f.assessment.id, score: 10 }, otherTeacher),
-    ).rejects.toThrow("Forbidden")
+    ).rejects.toThrow("Assessment not found")
     await expect(
       upsertAssessmentGrade({ studentId, assessmentId: f.assessment.id, score: 10 }, student),
     ).rejects.toThrow("Forbidden")

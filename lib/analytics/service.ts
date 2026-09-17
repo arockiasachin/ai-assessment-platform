@@ -20,6 +20,7 @@ import {
   type InterventionThresholds,
 } from "./alerts"
 import { FINALIZED_STATUSES, GRADED } from "@/lib/quiz-attempts/kinds"
+import { publishedQuizQuestions } from "@/lib/quiz-attempts/metadata"
 import { getRetakeStateForStudent, type RetakeState } from "@/lib/quiz-attempts/retake-state"
 import {
   buildCohortDistribution,
@@ -486,7 +487,10 @@ export async function listStudentRetakableAssessmentsForStudent(
       offeringId: true,
       maxMarks: true,
       offering: { select: { course: { select: { code: true, name: true } } } },
-      questions: { orderBy: { order: "asc" }, select: { id: true } },
+      questions: {
+        orderBy: { order: "asc" },
+        select: { id: true, status: true, metadata: true },
+      },
       quizAttempts: {
         where: {
           studentId: student.studentId,
@@ -506,7 +510,8 @@ export async function listStudentRetakableAssessmentsForStudent(
   return assessments.map((assessment) => {
     const latest = assessment.quizAttempts.at(-1)
     const selection = selectAdaptiveRetakeQuestions({
-      questionIds: assessment.questions.map((question) => question.id),
+      // A draft is not part of the quiz, so it is never a retakable question (TN-41).
+      questionIds: publishedQuizQuestions(assessment.questions).map((question) => question.id),
       responses: latest?.responses ?? [],
     })
     return {
@@ -588,14 +593,17 @@ export async function getAdaptiveRetakeForStudent(
   }
 
   const latest = assessment.quizAttempts.at(-1)
+  // Drafts are not part of the quiz, so the retake is built and served from the
+  // published subset only (TN-41).
+  const deliverableQuestions = publishedQuizQuestions(assessment.questions)
   const selection = selectAdaptiveRetakeQuestions({
-    questionIds: assessment.questions.map((question) => question.id),
+    questionIds: deliverableQuestions.map((question) => question.id),
     responses: latest?.responses ?? [],
     includeUnanswered: options.includeUnanswered,
   })
 
   const selected = new Set(selection.questionIds)
-  const questions = assessment.questions
+  const questions = deliverableQuestions
     .filter((question) => selected.has(question.id))
     .map((question) => serializeQuestionForStudent(question))
 
