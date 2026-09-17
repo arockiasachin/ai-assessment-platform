@@ -1,5 +1,6 @@
 import "server-only"
 
+import { releasedAssessmentWhere } from "@/lib/assessment-visibility"
 import { toAssessmentScale } from "@/lib/gradebook"
 import { prisma } from "@/lib/prisma"
 import { GRADED } from "@/lib/quiz-attempts/kinds"
@@ -136,13 +137,13 @@ export async function listStudentAssessments(
     where: {
       // Release governs visibility, and this is the assessment-list half of the
       // same rule the gradebook projection applies (`lib/gradebook-db.ts`, the
-      // SN-29 fix) and `listStudentCalendar` already applied (`lib/calendar.ts`).
-      // The predicate shape is deliberately identical — `releasedAt: { not: null }`
-      // — so the three student-facing surfaces cannot drift into disagreeing
-      // about whether an unreleased assessment exists. This is what makes the
-      // planner's "Hidden from students" label true on the student side, where
-      // it was previously false (SN-5 / TN-33).
-      releasedAt: { not: null },
+      // SN-29 fix), `listStudentCalendar` already applied (`lib/calendar.ts`) and
+      // the written-submission route now enforces (`app/api/student/…/submission`).
+      // The predicate is imported rather than retyped so the student-facing
+      // surfaces cannot drift into disagreeing about whether an unreleased
+      // assessment exists. This is what makes the planner's "Hidden from students"
+      // label true on the student side, where it was previously false (SN-5 / TN-33).
+      ...releasedAssessmentWhere(),
       offering: {
         enrollments: {
           some: { studentId: student.id, status: { in: ["active", "waitlisted"] } },

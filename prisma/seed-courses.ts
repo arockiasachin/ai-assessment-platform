@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url"
 import bcrypt from "bcryptjs"
 
 import type { Prisma } from "@/lib/generated/prisma/client"
+import { releasedAssessmentWhere } from "@/lib/assessment-visibility"
 import { toRunEvidenceJson } from "@/lib/code-eval/serialize"
 import type { TestResult } from "@/lib/contracts/code-eval"
 import { setOfferingGradingForTeacher } from "@/lib/grading/offering-config-service"
@@ -1921,7 +1922,7 @@ async function countSummary(): Promise<CoursesSeedSummary> {
     }),
     prisma.assessment.count({ where: { id: { in: ASSESSMENT_IDS } } }),
     prisma.assessment.count({
-      where: { id: { in: ASSESSMENT_IDS }, releasedAt: { not: null } },
+      where: { id: { in: ASSESSMENT_IDS }, ...releasedAssessmentWhere() },
     }),
     prisma.calendarEvent.count({ where: { id: { in: COURSES_CALENDAR_EVENT_IDS } } }),
     prisma.grade.count({

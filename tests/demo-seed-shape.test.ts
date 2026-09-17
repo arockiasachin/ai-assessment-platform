@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
 
+import { releasedAssessmentWhere } from "@/lib/assessment-visibility"
 import { DEMO_IDS, seedDemo } from "@/prisma/seed-demo"
 
 import { disconnectTestDatabase, prisma as db, truncateAll } from "./helpers/db"
@@ -114,7 +115,7 @@ describe("demo seed — shape and legibility", () => {
       // The two branches of assessment visibility. With every assessment released
       // the branches render identically, so a broken visibility filter would demo
       // as working -- and the teacher's view would have nothing to distinguish.
-      const released = await db.assessment.count({ where: { releasedAt: { not: null } } })
+      const released = await db.assessment.count({ where: releasedAssessmentWhere() })
       const unreleased = await db.assessment.count({ where: { releasedAt: null } })
 
       expect(released).toBeGreaterThan(0)
@@ -126,7 +127,7 @@ describe("demo seed — shape and legibility", () => {
       // exists to keep them apart. Assert the seed does not conflate them: the
       // release instant is per assessment, so the four do not share one value.
       const rows = await db.assessment.findMany({
-        where: { releasedAt: { not: null } },
+        where: releasedAssessmentWhere(),
         select: { releasedAt: true },
       })
       const distinct = new Set(rows.map((row) => row.releasedAt?.toISOString()))
@@ -138,7 +139,7 @@ describe("demo seed — shape and legibility", () => {
     it("releases each assessment before its due date", async () => {
       // A release after the deadline would be a different, and wrong, story.
       const rows = await db.assessment.findMany({
-        where: { releasedAt: { not: null } },
+        where: releasedAssessmentWhere(),
         select: { dueDate: true, releasedAt: true },
       })
 

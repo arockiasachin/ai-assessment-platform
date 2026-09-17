@@ -8,6 +8,10 @@ import { afterAll, beforeEach, describe, expect, it, vi } from "vitest"
  * overwrote `GRADED` with `LATE`/`SUBMITTED`) and then `action: "saveDraft"`
  * (which set the status back to `DRAFT` and cleared `submittedAt`) while the
  * attached grade, feedback and `gradedAt` stayed in place.
+ *
+ * The route also carries the **server half of SN-5**: release governs use, not
+ * only visibility. An unreleased assessment is refused at the lookup, so a
+ * student who knows its id cannot create a submission the list never offered.
  */
 const mocks = vi.hoisted(() => ({ getCookies: vi.fn() }))
 
@@ -47,7 +51,7 @@ describe("student submission state guard", () => {
     await disconnectTestDatabase()
   })
 
-  async function seedAssignment() {
+  async function seedAssignment({ released = true }: { released?: boolean } = {}) {
     const f = await createSpineFixture(prisma)
     const studentId = f.student.studentProfile!.id
     const assignment = await prisma.assessment.create({
@@ -60,6 +64,11 @@ describe("student submission state guard", () => {
         dueDate: new Date("2027-01-01T08:00:00.000Z"),
         maxMarks: 20,
         createdById: f.teacher.staffProfile!.id,
+        // Release governs whether the route will touch the assessment at all.
+        // Every test here is about a submission a student is entitled to make, so
+        // the fixture is released by default; the release-guard tests pass
+        // `released: false` to pin the other branch.
+        releasedAt: released ? new Date("2026-09-01T08:00:00.000Z") : null,
       },
     })
     await prisma.enrollment.create({
@@ -137,5 +146,45 @@ describe("student submission state guard", () => {
     })
     expect(after.status).toBe("DRAFT")
     expect(after.submittedAt).toBeNull()
+  })
+
+  it("refuses a submission to an unreleased assessment by id, and writes nothing", async () => {
+    // SN-5's server half. Hiding the assessment from the list closes the UI flow
+    // only; a student who knows the id must not be able to reach it directly. The
+    // refusal is 404 "Assessment not found." on purpose — the route must not
+    // confirm that an assessment it will not show exists.
+    const { assignment, studentId } = await seedAssignment({ released: false })
+
+    const submit = submissionRequest(assignment.id, {
+      contentText: "hidden work",
+      action: "submit",
+    })
+    const response = await POST(submit.request, submit.context)
+
+    expect(response.status).toBe(404)
+    await expect(response.json()).resolves.toEqual({
+      success: false,
+      message: "Assessment not found.",
+    })
+    expect(
+      await prisma.submission.count({ where: { assessmentId: assignment.id, studentId } }),
+    ).toBe(0)
+  })
+
+  it("refuses saving a draft to an unreleased assessment too", async () => {
+    // The guard is on the lookup, not the action, so both `submit` and `saveDraft`
+    // are refused by the same rule.
+    const { assignment, studentId } = await seedAssignment({ released: false })
+
+    const draft = submissionRequest(assignment.id, {
+      contentText: "hidden wip",
+      action: "saveDraft",
+    })
+    const response = await POST(draft.request, draft.context)
+
+    expect(response.status).toBe(404)
+    expect(
+      await prisma.submission.count({ where: { assessmentId: assignment.id, studentId } }),
+    ).toBe(0)
   })
 })

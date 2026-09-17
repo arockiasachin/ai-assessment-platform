@@ -1,5 +1,6 @@
 import "server-only"
 
+import { releasedAssessmentWhere } from "@/lib/assessment-visibility"
 import type { EventType } from "@/lib/generated/prisma/client"
 import { prisma } from "@/lib/prisma"
 import type { AuthUser } from "@/lib/session"
@@ -166,9 +167,11 @@ export async function listStudentCalendar(user: AuthUser): Promise<CalendarEvent
             INSTITUTION_WIDE,
           ],
         },
-        // Anything hanging off an assessment is only visible once released.
+        // Anything hanging off an assessment is only visible once released. The
+        // release predicate is imported, not retyped; the `OR` keeps its separate
+        // fact that an event need not hang off an assessment at all.
         {
-          OR: [{ assessmentId: null }, { assessment: { is: { releasedAt: { not: null } } } }],
+          OR: [{ assessmentId: null }, { assessment: { is: releasedAssessmentWhere() } }],
         },
       ],
     },

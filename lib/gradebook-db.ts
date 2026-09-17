@@ -1,5 +1,6 @@
 import "server-only"
 
+import { releasedAssessmentWhere } from "@/lib/assessment-visibility"
 import type { AssessmentType } from "@/lib/generated/prisma/enums"
 import type { CreateAssessmentRequest } from "@/lib/contracts"
 import { prisma } from "@/lib/prisma"
@@ -324,8 +325,9 @@ export async function getGradebookPayloadForSessionUser(
                 // filtered out of the visible table but present here is still readable in the
                 // page source. The events page hides an unreleased assessment's row correctly;
                 // without this filter its id, title, type, date, marks and class were still in
-                // the payload — the SN-29 leak.
-                where: { releasedAt: { not: null } },
+                // the payload — the SN-29 leak. The predicate is imported from
+                // `lib/assessment-visibility.ts`, the one definition.
+                where: releasedAssessmentWhere(),
                 include: {
                   course: true,
                   questions: {
@@ -408,8 +410,10 @@ export async function getGradebookPayloadForSessionUser(
           // Same release rule as the assessments filter above, applied to events: an event
           // hanging off an unreleased assessment is not a student-facing fact. Without this the
           // due event was the other half of the SN-29 leak — the assessment row was filtered
-          // out, but its calendar event still travelled in the payload.
-          OR: [{ assessmentId: null }, { assessment: { is: { releasedAt: { not: null } } } }],
+          // out, but its calendar event still travelled in the payload. The release predicate
+          // is imported; the `OR` keeps its separate fact that an event may hang off no
+          // assessment at all.
+          OR: [{ assessmentId: null }, { assessment: { is: releasedAssessmentWhere() } }],
         },
         include: {
           assessment: {

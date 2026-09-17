@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 
 import { jsonError, parseJsonBody } from "@/lib/api"
+import { releasedAssessmentWhere } from "@/lib/assessment-visibility"
 import { requireRole } from "@/lib/authz"
 import { submissionRequestSchema } from "@/lib/contracts"
 import { prisma } from "@/lib/prisma"
@@ -38,8 +39,23 @@ export async function POST(
     return jsonError("Add submission content before submitting.", 400)
   }
 
-  const assessment = await prisma.assessment.findUnique({
-    where: { id: assessmentId },
+  /*
+   * Release governs *use*, not only visibility (SN-5).
+   *
+   * The list reader already hides an unreleased assessment, but hiding it there
+   * only closes the UI flow: a student who knows the id could still POST a
+   * submission to it directly and the row was written. The release predicate is
+   * therefore part of the lookup itself, so an unreleased assessment is
+   * indistinguishable from a nonexistent one.
+   *
+   * That is why the refusal is the existing 404 "Assessment not found." rather
+   * than a 403. `lib/assessment-release.ts` states the convention: an object a
+   * caller may not see and an object that does not exist are reported identically,
+   * so the endpoint never confirms that an invisible assessment exists. A 403
+   * would leak exactly the fact SN-29 was about.
+   */
+  const assessment = await prisma.assessment.findFirst({
+    where: { id: assessmentId, ...releasedAssessmentWhere() },
     select: {
       id: true,
       title: true,
