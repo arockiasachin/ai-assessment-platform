@@ -234,6 +234,14 @@ export const DEMO_IDS = {
   codeTaskId: CODE_TASK_ID,
   groupId: GROUP_ID,
   ltiRegistrationId: LTI_REGISTRATION_ID,
+  /**
+   * The seed's one deliberately institution-wide calendar event.
+   *
+   * Exported because it is the row that collides with another seed's unscoped event: with all three
+   * links null it is indistinguishable from an orphan, so anything sweeping that shape would take
+   * it. `tests/seed-coexistence.test.ts` asserts it survives alongside the course seed's holiday.
+   */
+  midtermBreakEventId: "demo-event-midterm-break",
 } as const
 
 export const DEMO_ACCOUNTS = {
@@ -321,13 +329,32 @@ async function deleteDemoData(): Promise<void> {
   // row with no links at all is exactly what an intentionally institution-wide
   // event looks like. The second clause cleans up rows earlier runs already
   // orphaned, which the calendar reader would otherwise show to every student as a
-  // duplicated `Due: …` with no course and no location. Deleting an unscoped event
-  // here is safe because this seed recreates its own (the mid-term break) below.
+  // duplicated `Due: …` with no course and no location.
+  //
+  // **The second clause is scoped by title, not by "all three links are null".** The
+  // unscoped form also matched any deliberately institution-wide event, which was
+  // safe only while this seed was the sole producer of one — and `seed-courses.ts`
+  // is a second, so an unscoped sweep deleted its mid-semester holiday. Scoping to
+  // the deadline shape also narrows it to the shape worth removing: an orphaned
+  // holiday still reads as a holiday, whereas a course-less `Due: …` reads as a
+  // deadline for a course that does not exist.
+  //
+  // What this no longer catches: a pre-stable-id orphan of a *non-deadline* event
+  // (a lecture or a holiday) from a long-lived development database. Those are
+  // harmless — they render as what they are — and a fresh seed clears them anyway,
+  // so the trade is deliberate rather than overlooked.
+  //
+  // This seed recreates its own unscoped event (the mid-term break) below.
   await prisma.calendarEvent.deleteMany({
     where: {
       OR: [
         { id: { in: CALENDAR_EVENT_IDS } },
-        { offeringId: null, classId: null, assessmentId: null },
+        {
+          offeringId: null,
+          classId: null,
+          assessmentId: null,
+          title: { startsWith: "Due: " },
+        },
       ],
     },
   })

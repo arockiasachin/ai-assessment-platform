@@ -395,6 +395,59 @@ define and edit them, and a minimum-CAT gate that applied to anybody.
 - **The create contract is unchanged** (`Quiz | Assignment`). Teachers can weight the kinds that
   exist; authoring descriptive/code/group assessments from the gradebook remains a product decision.
 
+### The MCSE course seed, and a cross-seed teardown defect it exposed
+
+A second seed dataset modelling two real postgraduate courses and their labs from the VIT M.Tech (CSE)
+Big Data Analytics 2023-24 curriculum, built for **grading-regime coverage** — the existing demo is a
+5-student course that can never leave absolute banding.
+
+#### Added
+
+- **`prisma/seed-courses.ts`** (`npm run prisma:seed:courses`) — four `Course` rows (`MCSE501L`/
+  `MCSE502L` theory, `MCSE501P`/`MCSE502P` lab), three classrooms, six offerings, a 32-student shared
+  cohort with 72 active and 4 inactive enrolments, 21 assessments (15 released, 6 unreleased),
+  84 published grades, and 39 calendar events.
+- **`prisma/seed-courses-content.ts`** — 40 course-wide `Material` rows drafted from CLRS 4th ed. and
+  indexed with the mock provider, so retrieval and quiz generation work offline.
+- **`tests/courses-spine.test.ts`** and **`tests/seed-coexistence.test.ts`**.
+
+#### Grading-regime coverage
+
+`resolveRegimeForCourse` checks in order: no category → categorically absolute → `enrolledCount < 11` →
+`publishedTotals.length < 11` → σ = 0 → else relative. The six offerings land on **four** of those
+branches: DSA section A (9) is `small-class`; DSA section B (15, 13 published, σ 17) is **relative**;
+DAA section A (12, 6 published) is `awaiting-base-metrics` with a warning and a `{6, 11}` progress
+indicator; and all three labs are `non-theory-course`. Only σ = 0 is uncovered, which needs a fourth
+theory class. The spine test asserts each through `gatherRegimeInputs` + `resolveRegimeForCourse` —
+the production path — rather than re-deriving the rule, and the release rule is asserted through the
+real `listStudentCalendar` / `listTeacherCalendar` readers, each case naming a student genuinely
+**enrolled in that offering** so a hidden deadline is hidden by _release_ and not by enrolment.
+
+#### Two things the platform cannot express, collapsed and documented
+
+The handbook's lab assessment names three components (`CAT / Mid-Term Lab / FAT`) but the platform
+models one CAT pool and one FAT. And the handbook states **no numbers for assessment at all** — only
+those component strings — so `gradingConfig` is set to CAT 40 / FAT 60 with a 30% minimum-CAT gate and
+the seed says plainly that these are **platform policy, not handbook facts**.
+
+#### Fixed
+
+- **A seed's teardown deleted another seed's data.** `prisma/seed-demo.ts` swept every calendar event
+  whose three links were null — not just the ids it owns — on the reasoning that "this seed recreates
+  its own". That held while it was the only producer of an institution-wide event; `seed-courses.ts`
+  is a second, so re-running the demo deleted the new mid-semester holiday (39 events → 38). The sweep
+  is now scoped to the shape it actually exists to remove — a `Due: …` deadline whose links were nulled
+  — which is also the only shape that is _harmful_: an orphaned holiday still reads as a holiday,
+  whereas a course-less `Due: …` reads as a deadline for a course that does not exist.
+
+  The defect was invisible to both test suites because **each truncates before seeding**, so neither
+  ever ran with the other's rows present. `tests/seed-coexistence.test.ts` seeds both, then re-runs
+  each and asserts the other survives — the only place the overlap is observed. Mutation-tested:
+  restoring the unscoped sweep fails it.
+
+- **`DEMO_IDS.midtermBreakEventId`** is now exported, so the demo's institution-wide event can be
+  asserted without hardcoding its id in a test.
+
 ### The last three items: token contrast, the thresholds UI, and a subtopic vocabulary
 
 The two product decisions and the one unscheduled slice that remained after the gate work.
