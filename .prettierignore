@@ -12,3 +12,7 @@ public
 package-lock.json
 # Nested git worktrees are separate checkouts; the parent gate must not format them.
 .worktrees
+# Generated audit reports: `scripts/audit/run.ts` writes report-<timestamp>.{md,json}
+# on every LangChain run. Formatting generated artifacts is churn, and the next run
+# would rewrite them unformatted anyway, so `format:check` must not police them.
+scripts/audit/report-*

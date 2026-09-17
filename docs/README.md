@@ -199,6 +199,19 @@ the Prisma client, typechecks, lints, checks formatting, runs `npm test` against
 applying the committed migrations, so CI also proves the migration history still builds the schema
 from empty. See [`development-workflow.md`](./development-workflow.md#ci-gates).
 
+## In-flight audits
+
+A completeness audit is running over the teacher and student surfaces: four groups of five agents,
+split by domain and by kind (native Cursor agents and LangChain agents), looking for the places
+where the application does not feel complete or working. It is the operational counterpart to the
+Phase 3 [accessibility and performance audit](./quality/a11y-perf-audit.md), and it follows the same
+severity vocabulary.
+
+Each group records its findings in one Markdown file; [`audit/README.md`](./audit/README.md) is the
+schema, and `npm run audit:dashboard` aggregates the four files into `docs/audit/aggregate.json` and
+the canvas the owner watches. The four files ship with header rows only, so the dashboard's empty
+state is verifiable before any group has run. Nothing in `docs/audit/` is product code.
+
 ## Changelog
 
 [`../CHANGELOG.md`](../CHANGELOG.md) records what actually landed, in Keep a Changelog format.

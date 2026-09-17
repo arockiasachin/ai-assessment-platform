@@ -1,0 +1,38 @@
+{
+  "generatedAt": "2026-09-17T15:21:00.646Z",
+  "baseUrl": "http://localhost:3000",
+  "model": "deepseek-flash",
+  "baseModelUrl": "https://api.deepseek.com",
+  "concurrency": 1,
+  "maxSteps": 4,
+  "groups": [
+    "teacher",
+    "student"
+  ],
+  "summary": {
+    "agents": 1,
+    "completed": 1,
+    "capped": 0,
+    "failed": 0,
+    "toolCalls": 4,
+    "blockedCalls": 0,
+    "findings": 0,
+    "blockers": 0,
+    "majors": 0,
+    "minors": 0
+  },
+  "agentRuns": [
+    {
+      "agentId": "teacher-overview",
+      "agentTitle": "Teacher overview and insight surfaces",
+      "group": "teacher",
+      "status": "completed",
+      "toolCalls": 4,
+      "blockedCalls": 0,
+      "modelTurns": 3,
+      "findings": [],
+      "notes": "I exercised all three routes in my scope against the running dev server. Here is exactly what I was able to observe, and the limits of it.\n\n**What I did**\n\n1. `GET /api/health` → 200, `{\"status\":\"ok\",\"database\":{\"status\":\"ok\",\"latencyMs\":2},\"llm\":{\"provider\":\"mock\",\"mode\":\"offline\"}}`, server clock `2026-09-17T15:20:27Z`. So the shared server was up and I did not start or stop anything.\n2. Logged in as `demo.teacher@school.edu` and fetched `/teacher` → **200 OK** (not a redirect to login). The streamed RSC payload carries real data, not placeholders: 5 seeded students (Demo Student One–Five), 1 course (`DEMO-MATH-101` / Algebra Foundations), 5 assessments (Week 2 practice set max 10, Linear Equations Check-in max 20, essay max 30, code max 10, group project max 20) and a concrete marks map (`student-1:week2=9`, `student-2:week2=4`, `student-3:week2=2`, `student-4:week2=0`, quiz 20/10/5, group project 16/16/16). The marks shown are consistent with the assessment `maxMarks` values I saw in the same payload — nothing I could see contradicted itself, and the `0` for student-4/week2 is a *recorded* zero for a student who does have a row, not a substituted \"no data\".\n3. Logged in as `demo.teacher@school.edu` and fetched `/teacher/analytics` → **200 OK**, title \"Analytics · Rubrix\", page chunked with recharts + a base-ui Select (i.e. the filter control the brief mentions is at least mounted).\n4. Logged in as `dsa.teacher@vit.example.edu` and fetched `/teacher/reports` → **200 OK** (M.Tech dataset), title \"Reports · Rubrix\", teacher sidebar/header rendered fully in the first streamed chunk.\n\n**What I could not verify, and why I am not filing speculation**\n\nEvery one of these responses is a streaming RSC response, and the tool truncated each at ~24 KB of a 85–123 KB body — i.e. I received the document shell, the client chunk graph and the `GradebookProvider` initial payload, but *not* the rendered tiles, charts, filter labels or AI-insight panels that appear later in the stream. I therefore have no first-hand observation of any rendered number, chart, empty state, or control behaviour on these three pages. The controls I can see evidence of (the analytics course/date Select, recharts panels, the \"Upcoming\" events region) all require either the tail of the HTML or a client interaction I could not perform, and I hit my 4-call budget. I deliberately am not filing \"the filter might be a dead control\" or \"the chart might render 0\" style findings, because the brief is explicit that a finding with no observation behind it is speculation. Nothing I *did* observe was an error, a redirect loop, or a self-contradicting figure, so I have nothing I am entitled to report.\n\nTwo notes for whoever picks this channel up next with a larger budget: the pages that most need a full-body fetch (not a 24 KB head) are `/teacher/analytics` and `/teacher/reports`, and the demo dataset's `upcomingEvents` payload contains a past-dated entry (`2026-09-01`, 16 days before the server clock) whose rendered heading I could not confirm — worth re-checking on a second pass rather than filing blind.",
+      "durationMs": 34589
+    }
+  ]
+}

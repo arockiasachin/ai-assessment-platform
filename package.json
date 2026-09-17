@@ -18,7 +18,13 @@
     "prisma:seed": "prisma db seed",
     "prisma:seed:demo": "npx --yes tsx prisma/seed-demo.ts",
     "prisma:seed:courses": "npx --yes tsx prisma/seed-courses.ts",
-    "retention:purge": "npx --yes tsx scripts/retention-purge.ts"
+    "prisma:seed:all": "npm run prisma:seed:demo && npm run prisma:seed:courses",
+    "retention:purge": "npx --yes tsx scripts/retention-purge.ts",
+    "audit:langchain": "npx --yes tsx scripts/audit/run.ts",
+    "audit:langchain:selftest": "npx --yes tsx scripts/audit/selftest.ts",
+    "audit:dashboard": "npx --yes tsx scripts/audit-dashboard/run.ts",
+    "audit:dashboard:serve": "npx --yes tsx scripts/audit-dashboard/server.ts",
+    "audit:dashboard:selftest": "npx --yes tsx scripts/audit-dashboard/selftest.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.5.0",
@@ -40,6 +46,7 @@
     "zod": "^4.6.2"
   },
   "devDependencies": {
+    "@langchain/openai": "^1.5.13",
     "@tailwindcss/postcss": "^4.3.3",
     "@types/bcryptjs": "^2.4.6",
     "@types/node": "^24",
@@ -49,6 +56,7 @@
     "eslint": "^9.39.5",
     "eslint-config-next": "^16.3.4",
     "eslint-config-prettier": "^10.1.8",
+    "langchain": "^1.5.11",
     "pg": "^8.23.0",
     "postcss": "^8.5",
     "prettier": "^3.9.6",

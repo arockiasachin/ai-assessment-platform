@@ -1,0 +1,243 @@
+{
+  "generatedAt": "2026-09-17T15:16:26.926Z",
+  "baseUrl": "http://localhost:3000",
+  "model": "deepseek-flash",
+  "baseModelUrl": "https://api.deepseek.com",
+  "concurrency": 3,
+  "maxSteps": 14,
+  "groups": [
+    "teacher",
+    "student"
+  ],
+  "summary": {
+    "agents": 10,
+    "completed": 2,
+    "capped": 8,
+    "failed": 0,
+    "toolCalls": 154,
+    "findings": 9,
+    "blockers": 1,
+    "majors": 3,
+    "minors": 5
+  },
+  "agentRuns": [
+    {
+      "agentId": "teacher-overview",
+      "agentTitle": "Teacher overview and insight surfaces",
+      "group": "teacher",
+      "status": "capped",
+      "toolCalls": 16,
+      "modelTurns": 6,
+      "findings": [
+        {
+          "title": "/teacher/analytics for DSA Section A shows \"0 attempts\" for every assessment while the same page reports 9 published totals and 18 released marks",
+          "severity": "major",
+          "category": "inconsistency",
+          "location": "/teacher/analytics (offeringId courses-offering-mcse501l-a), components/teacher-analytics-dashboard.tsx:268-288",
+          "evidence": "GET /api/teacher/analytics?offeringId=courses-offering-mcse501l-a as dsa.teacher@vit.example.edu returned 200 with all four assessments at {\"attemptCount\":0,\"average\":null,\"passRate\":null} (incl. \"DSA Section A — FAT (final assessment)\") in the same payload as gradingRegime.publishedCount 9, atRisk.aboveBoundaryCount 7 with two below-boundary students (grandTotal 21.67 and 49.17) and trend.markedCount 18.",
+          "whyItMatters": "The page renders \"No finalized attempts yet.\" for the cohort chart and \"0 attempts / — / —\" down the Assessments table next to an at-risk list and trend for a class that already has published marks, so the teacher cannot tell whether the class is unmarked or the panel is simply not counting the marked work.",
+          "group": "teacher",
+          "agentId": "teacher-overview",
+          "agent": "Teacher overview and insight surfaces"
+        },
+        {
+          "title": "Teacher dashboard silently reports on only the first offering, with no way to switch",
+          "severity": "minor",
+          "category": "partial-implementation",
+          "location": "app/(dashboard)/teacher/page.tsx:50-62 and components/teacher-dashboard.tsx:84-98",
+          "evidence": "GET /teacher as demo.teacher@school.edu returned 200; GET /api/teacher/analytics?offeringId=demo-offering-active reports the same account owns two offerings (demo-offering-active, Term-1 2026, and demo-offering-past, Term-2 2025), while the dashboard page picks offerings[0] and names it in the eyebrow with no selector to change it (dsa.teacher owns four via the same endpoint, and /teacher/analytics is the only surface with a switcher).",
+          "whyItMatters": "Every tile, the review backlog, the trend chart and the assessment-progress table on the landing page describe one course the teacher may not have meant to look at, and the other offerings' cohort and at-risk figures stay invisible until the teacher finds the Analytics selector.",
+          "group": "teacher",
+          "agentId": "teacher-overview",
+          "agent": "Teacher overview and insight surfaces"
+        },
+        {
+          "title": "Intervention alerts panel disappears entirely when no threshold fires, with no all-clear explained",
+          "severity": "minor",
+          "category": "missing-empty-state",
+          "location": "/teacher/analytics, components/teacher-analytics-dashboard.tsx:213-235",
+          "evidence": "GET /api/teacher/analytics?offeringId=courses-offering-mcse501l-a returned 200 with \"alerts\":[] while the thresholds blurb still renders (\"Alerts use thresholds: class average < 60%…\"), and the component renders the \"Intervention alerts\" card only when overview.alerts.length > 0, so nothing on the page confirms that zero alerts fired.",
+          "whyItMatters": "A teacher reading the threshold sentence above an absent panel cannot tell whether the checks ran and found nothing or the alerts feature is missing for this course.",
+          "group": "teacher",
+          "agentId": "teacher-overview",
+          "agent": "Teacher overview and insight surfaces"
+        },
+        {
+          "title": "M.Tech offering labels render a duplicated section token in the /teacher/analytics offering selector",
+          "severity": "minor",
+          "category": "inconsistency",
+          "location": "/teacher/analytics offering Select, components/teacher-analytics-dashboard.tsx:189-193",
+          "evidence": "GET /api/teacher/analytics?offeringId=courses-offering-mcse501l-a returned className values \"M.Tech (CSE) BDA — DSA — Section A A\" and \"M.Tech (CSE) BDA — DSA — Section B B\" for MCSE501L and MCSE501P; the SelectItem renders them as \"{courseCode} · {className} · {term}\", e.g. \"MCSE501L · M.Tech (CSE) BDA — DSA — Section A A · Semester-1\".",
+          "whyItMatters": "The label in the one control that drives the whole analytics page looks like a data-entry bug, and Sections A and B are hard to tell apart at a glance.",
+          "group": "teacher",
+          "agentId": "teacher-overview",
+          "agent": "Teacher overview and insight surfaces"
+        }
+      ],
+      "notes": "I used my full call budget, so here is what I observed and can support first-hand.\n\n**What I did:** checked `/api/health` (200, db ok), then logged in as `demo.teacher@school.edu` and fetched `/teacher`, `/teacher/analytics` and `/teacher/reports` — all 200, no redirect-to-login, no error page, real `TeacherDashboard` / `TeacherAnalyticsDashboard` / `TeacherRatingsReport` components behind them with proper empty states for the trend chart, review queue and assessment-progress table. I then logged in as `dsa.teacher@vit.example.edu` (`/teacher/analytics` 200) and pulled the underlying data endpoints, which return small, fully readable JSON: `/api/teacher/analytics?offeringId=demo-offering-active` and `?offeringId=courses-offering-mcse501l-a`. The demo offering's numbers are internally consistent (4 attempts on the check-in quiz → average 62.5 → pass rate 75; at-risk student with `grandTotal: 0` is correctly separated from the student with `grandTotal: null` / \"no-published-work\"), and the analytics offering `Select` is backed by a real per-offering endpoint, so the one filter on this slice genuinely re-fetches. The problems I found are on the M.Tech offering, where every assessment reports zero attempts while the same payload reports a marked class, and on the dashboard's silent single-offering scope. Tool cap cut off my last two fetches (`lib/teacher-dashboard-view.ts` and `/teacher/reports` as the M.Tech teacher), so I am not reporting anything about the dashboard KPI derivation or the M.Tech ratings rows — I have no observation for them.",
+      "durationMs": 58379
+    },
+    {
+      "agentId": "teacher-structure",
+      "agentTitle": "Classes, offerings, planner and groups",
+      "group": "teacher",
+      "status": "capped",
+      "toolCalls": 16,
+      "modelTurns": 8,
+      "findings": [],
+      "parseError": "no <AUDIT_FINDINGS> block found in the agent's final message",
+      "notes": "Truncation hides page content. Let me enumerate the source files for my four routes so I can target reads precisely.",
+      "durationMs": 25038
+    },
+    {
+      "agentId": "teacher-authoring",
+      "agentTitle": "Assignment, quiz, rubric and code-task authoring",
+      "group": "teacher",
+      "status": "completed",
+      "toolCalls": 14,
+      "modelTurns": 6,
+      "findings": [
+        {
+          "title": "No authoring surface in the teacher workspace exposes a draft/publish control",
+          "severity": "major",
+          "category": "missing-write-path",
+          "location": "/teacher/assignments (and /teacher/quiz-generation, /teacher/rubrics, /teacher/code-tasks; app/(dashboard)/teacher/assignments/page.tsx)",
+          "evidence": "GET /teacher/assignments, /teacher/quiz-generation, /teacher/rubrics and /teacher/code-tasks as demo.teacher@school.edu each returned 200 OK with the rendered teacher shell, so the pages load; list_dir of app/(dashboard)/teacher shows each of those four surfaces is a single page.tsx with no [id] detail route or sub-components. grep -r 'Publish|Unpublish|Save draft|Draft' app/(dashboard)/teacher returns only app/(dashboard)/teacher/offerings/page.tsx:24,25,54, and there the match is resultsPublishedAt / 'Publishing results' — publishing a cohort's marks and starting a retention clock, a different concept from assessing an authored item. No sentence-case draft/publish label reaches any of the four authoring surfaces.",
+          "whyItMatters": "A teacher authoring an assignment, quiz, rubric or code task has no way to mark it as finished or withheld, and no visible state saying which items are live, so an unfinished item is indistinguishable from a published one and the draft-to-published lifecycle this slice is meant to demonstrate cannot be exercised at all.",
+          "group": "teacher",
+          "agentId": "teacher-authoring",
+          "agent": "Assignment, quiz, rubric and code-task authoring"
+        }
+      ],
+      "notes": "I ran out of my tool budget (14 calls). Here is what I can honestly report.\n\n**What I looked at**\n\n- `GET /api/health` → 200, app/db/LLM checks all \"ok\" (mock LLM in offline mode). Dev server was already up; I reused it and started nothing.\n- Logged in as `demo.teacher@school.edu` and fetched all four in-scope routes: `/teacher/assignments`, `/teacher/quiz-generation`, `/teacher/rubrics`, `/teacher/code-tasks`. All four returned **200 OK** with a fully rendered teacher shell (sidebar, header, skip-link, nav with `aria-current=\"page\"` on the active item) — no error boundary, no redirect to login, no crash. The `GradebookProvider` initial payload on `/teacher/assignments` was populated (5 demo students, the demo course, and a long assessment list), so the surfaces are not empty-silent.\n- Because each of these pages is ~100–230 KB of streamed HTML, the fetch responses were truncated at ~24 KB — before the main page body — so I could not read the actual authoring panels, tables, dialog labels or numbers. That is my main coverage gap and I am not going to guess at what those panels contain.\n- I used `list_dir` to confirm the shape of the slice: each of the four authoring surfaces is a single `page.tsx` (no `[id]` detail route, no sub-components, no route-local API), and `app/(dashboard)/teacher/` holds all teacher pages.\n- One repo-wide stub search (`TODO|FIXME|not implemented|Coming soon|alert(|href=\"#\"|onClick={() => {}}`) across `app/` returned only a code-task *prompt* string in `app/mockup/.../code-submissions/page.tsx` — i.e. no obvious \"looks wired up but is a no-op\" placeholder handlers of the crude kind, so any dead control here is subtler than a stub and I did not have the calls left to find it.\n- I deliberately did **not** report the duplicated `AUDIT-*` assessments in the payload (pairs like \"AUDIT-LEAD DOUBLE SUBMIT\" ×2 and two \"AUDIT-A QUIZ\" with identical date/marks). Those titles are clearly artifacts of earlier audit runs' duplicate-submit tests, not a product defect I can attribute.\n- I could not exercise a write path (create → edit → publish, or a quiz generation run) because I ran out of calls before reaching the rendered forms, so nothing below is, or should be read as, a claim about a handler's internals.\n\nThe one thing I can state with first-hand evidence is that the word for the lifecycle the authoring slice is supposed to have does not appear anywhere in the authoring surfaces, while it does appear in a different teacher page for a different concept.",
+      "durationMs": 50326
+    },
+    {
+      "agentId": "teacher-grading",
+      "agentTitle": "Submissions, reviews and marks",
+      "group": "teacher",
+      "status": "completed",
+      "toolCalls": 14,
+      "modelTurns": 5,
+      "findings": [
+        {
+          "title": "Submissions queue's only per-row action, \"Open\", links every row to the same /teacher/assignments page and loses which submission was clicked",
+          "severity": "major",
+          "category": "dead-control",
+          "location": "/teacher/submissions, components/teacher-submissions-table.tsx:261",
+          "evidence": "GET /teacher/submissions as demo.teacher@school.edu returned 200 with real rows (GET /api/teacher/reviews returns 3 PENDING items for the same teacher). The row action in components/teacher-submissions-table.tsx:261-268 is <Link href=\"/teacher/assignments\" ...> — a literal path with no row.id, row.assessmentId or student interpolated — while its aria-label is `Open ${row.studentName}'s submission for ${row.assessmentTitle} in assignments`. The page copy and SectionCard description confirm this queue is read-only and that grading must happen on /teacher/assignments.",
+          "whyItMatters": "A teacher clicking \"Open\" on a specific student's submission is dropped on the generic assignments list with no indication which submission they meant, so the queue's one action cannot be used to reach the grading editor for the row that was clicked; screen-reader users are told a specific submission is being opened when it is not.",
+          "group": "teacher",
+          "agentId": "teacher-grading",
+          "agent": "Submissions, reviews and marks"
+        }
+      ],
+      "notes": "I ran out of budget mid-flow, so here is what I actually verified.\n\n**What I exercised**\n\n- `/api/health` → 200, database ok, so the shared dev server was live and I never started a second one.\n- Logged in as `demo.teacher@school.edu` and fetched all three of my routes: `/teacher/submissions`, `/teacher/reviews`, `/teacher/marks` all returned **200** with the teacher shell rendered (no redirect loop, no error page, no crash on any of the three).\n- Cross-checked the M.Tech dataset by logging in as `dsa.teacher@vit.example.edu` and pulling the same data source the reviews page uses (`GET /api/teacher/reviews` → 200, one item, Pooja Reddy / MCSE501L, PENDING). So both seeded datasets render behind auth and teacher scoping holds.\n- Read the server data behind the queue: `GET /api/teacher/reviews` as the demo teacher returns 3 items, all `review.status: PENDING`, with `grade.publishedAt: null` and `isPublished: false` — i.e. real, browsable rows exist on the submissions and reviews surfaces; nothing is faked at the API layer.\n- Cross-checked the three client components (`teacher-submissions-table.tsx`, `teacher-review-queue.tsx`, `teacher-marks-view.tsx`) for the controls and figures they render. The reviews queue and the submissions table both derive every figure (`items.length`, `filtered.length`, the four stat tiles are all computed from `rows`, and both have real empty states — \"Nothing is waiting for review.\" / \"No submissions match\"), so I found no fabricated numbers there.\n\n**What I found**\n\nThe one concrete defect: on `/teacher/submissions`, the queue's only per-row action is a fixed link. Every row's \"Open\" button (aria-label: \"Open Demo Student One's submission for …\") points at the literal path `/teacher/assignments`, with no row/submission identity interpolated, so the control cannot open the submission it names — the whole \"claim/open a submission, apply a mark\" flow from this queue dead-ends in a generic list. That is the surface where a teacher would most expect to start grading, and the button's accessibility name actively promises something it cannot do.\n\nI was not able to complete the publish-and-reload leg (accept → refresh → confirm the same value the student sees) before hitting my tool cap, so I am not reporting anything about it rather than speculating. The reviews queue does have Accept/Override/Flag/Reject with per-item busy state, error surfacing and `router.refresh()`, so nothing there looked broken from what I saw.",
+      "durationMs": 46598
+    },
+    {
+      "agentId": "teacher-operations",
+      "agentTitle": "Observability and export",
+      "group": "teacher",
+      "status": "capped",
+      "toolCalls": 16,
+      "modelTurns": 7,
+      "findings": [],
+      "parseError": "no <AUDIT_FINDINGS> block found in the agent's final message",
+      "durationMs": 33108
+    },
+    {
+      "agentId": "student-home",
+      "agentTitle": "Student home and events",
+      "group": "student",
+      "status": "capped",
+      "toolCalls": 16,
+      "modelTurns": 9,
+      "findings": [],
+      "parseError": "no <AUDIT_FINDINGS> block found in the agent's final message",
+      "notes": "The HTML dumps are truncated by the sidebar chrome. Let me locate the source for these two pages so I can target my observations.",
+      "durationMs": 25136
+    },
+    {
+      "agentId": "student-courses",
+      "agentTitle": "Courses and resources",
+      "group": "student",
+      "status": "capped",
+      "toolCalls": 17,
+      "modelTurns": 9,
+      "findings": [],
+      "parseError": "no <AUDIT_FINDINGS> block found in the agent's final message",
+      "notes": "I'll start by checking the server health and exploring the route structure.",
+      "durationMs": 18939
+    },
+    {
+      "agentId": "student-assessments",
+      "agentTitle": "Assessments and retakes",
+      "group": "student",
+      "status": "capped",
+      "toolCalls": 15,
+      "modelTurns": 7,
+      "findings": [],
+      "parseError": "no <AUDIT_FINDINGS> block found in the agent's final message",
+      "notes": "Truncation limits what I can read in rendered HTML, so let me confirm the retake write-path wiring with a targeted search.",
+      "durationMs": 41485
+    },
+    {
+      "agentId": "student-quizzes",
+      "agentTitle": "Quiz attempts",
+      "group": "student",
+      "status": "capped",
+      "toolCalls": 15,
+      "modelTurns": 8,
+      "findings": [
+        {
+          "title": "Mid-attempt answers do not survive a refresh (no save path; client resets all answers on reopen)",
+          "severity": "blocker",
+          "category": "broken-flow",
+          "location": "components/student-quiz-attempts.tsx:121,139 / app/api/student/quiz-attempts/",
+          "evidence": "Getting /api/student/quiz-attempts as demo.student1@school.edu returned the demo quiz as canStart with 4 questions; listing app/api/student/quiz-attempts shows only route.ts (list/start), [attemptId]/route.ts (GET), [attemptId]/submit/route.ts and practice/route.ts — there is no save/autosave endpoint, and the rendered attempt UI (components/student-quiz-attempts.tsx) sets every answer to null in startAttempt() and openAttempt() ('setAnswers(Object.fromEntries(body.attempt.questions.map((q) => [q.id, null])))') and clears textAnswers to {}.",
+          "whyItMatters": "A student who answers three of four questions and refreshes, or reopens the in-progress attempt, sees an entirely blank quiz and loses all typed/selections with no warning, because nothing is ever written until Submit.",
+          "group": "student",
+          "agentId": "student-quizzes",
+          "agent": "Quiz attempts"
+        },
+        {
+          "title": "Attempt panel says 'answer all questions, then submit' but Submit quiz silently accepts and scores unanswered questions",
+          "severity": "minor",
+          "category": "inconsistency",
+          "location": "components/student-quiz-attempts.tsx:330-331, 421-430",
+          "evidence": "The rendered in-progress attempt SectionCard description reads 'In progress — answer all questions, then submit.' while the only control is a plain 'Submit quiz' button with no remaining-answer count, no disabled state and no confirmation; the submit payload sends selectedIndex: null for any question the student skipped, and lib/quiz-attempts/service.ts:830-839 persists an unanswered question with isCorrect: null rather than rejecting it.",
+          "whyItMatters": "The copy implies submission requires a complete set of answers, but the button fires immediately with blanks that score zero, so a student can submit a half-answered quiz believing the instruction has been enforced.",
+          "group": "student",
+          "agentId": "student-quizzes",
+          "agent": "Quiz attempts"
+        }
+      ],
+      "notes": "I have reached my tool budget. Here is what I observed.\n\n**What I looked at**\n\n- `GET /api/health` → 200, app up (reused the running server; did not start another).\n- Logged in as `demo.student1@school.edu` and loaded `/student/quizzes` (200) as well as `GET /api/student/quiz-attempts` (200, 9 quizzes). The four stat tiles (9 assigned / 4 open to attempt / 2 attempts used / 2 latest score) all derive from the returned list — no fabricated numbers, and the list is 9 rows, so the tiles don't contradict it. Rows with unopenable quizzes state a `blockedReason` (\"This quiz has no questions yet.\", \"unpublished draft questions\"), and the attempt panel shows \"No attempts yet.\" — empty states are handled.\n- Logged in as `bda.student01@vit.example.edu` and loaded `/student/quizzes` (200) plus its `GET /api/student/quiz-attempts` (200): two M.Tech quizzes (DSA/DAA CAT 1), both with 0 questions and an explicit blocked reason each — absence is explained, so not a finding.\n- Anonymous `GET /student/quizzes` → 307 to `/login`, correct.\n- Examined the attempt surface itself: the route tree under `app/api/student/quiz-attempts/` exposes only list-or-start (`route.ts`), `[attemptId]/route.ts` (GET), `[attemptId]/submit/route.ts` and `practice/route.ts`. There is **no save/patch route**, and `components/student-quiz-attempts.tsx` (the rendered client workspace behind `/student/quizzes`) resets every question's answer to `null` when an attempt is started or reopened (lines 121, 139), so a mid-attempt refresh re-fetches the attempt and renders every radio unchecked and every textarea blank.",
+      "durationMs": 41074
+    },
+    {
+      "agentId": "student-collaboration",
+      "agentTitle": "Peer evaluation and code submissions",
+      "group": "student",
+      "status": "capped",
+      "toolCalls": 15,
+      "modelTurns": 7,
+      "findings": [
+        {
+          "title": "\"Round progress ... Evaluations submitted 3 of 3\" counts the student's own ratings while the results gate counts teammates' ratings, so the round looks complete and still shows no results",
+          "severity": "minor",
+          "category": "inconsistency",
+          "location": "/student/peer-evaluation (components/student-peer-evaluation.tsx:315-333, 427-436)",
+          "evidence": "GET /student/peer-evaluation as demo.student1@school.edu returned 200 and rendered \"Round progress — Team Alpha\" / \"DEMO-MATH-101 · Algebra Foundations\" with the progress line \"Evaluations submitted 3 of 3\"; the same session's GET /api/student/peer-evaluation returns submittedEvaluations:3, expectedEvaluations:3 and received:{withheld:true, ratingCount:2, minRatersRequired:3}, which the component renders as the withheld card \"Ratings received 2 of 3 needed\", directly under the copy \"Results appear only after at least 3 teammates have submitted\".",
+          "whyItMatters": "A student sees the round reported as 3 of 3 submitted yet is told results are not available because only 2 of 3 ratings are in; the two counters share the same denominator but measure different things (my submissions including my self-rating vs ratings received from others), so the page reads as if it contradicts itself.",
+          "group": "student",
+          "agentId": "student-collaboration",
+          "agent": "Peer evaluation and code submissions"
+        }
+      ],
+      "notes": "I exercised both routes with both seeded datasets. What I saw:\n\n- `GET /api/health` → 200, app up (reused the running dev server, started nothing).\n- `demo.student1@school.edu`: `/student/peer-evaluation` → 200, rendered the \"Round progress — Team Alpha\" card for DEMO-MATH-101 together with the five-dimension rating form, Save draft / Submit evaluations buttons, and the Team table; `/student/code-submissions` → 200 with the Task/Results/Runs tabs, KPI tiles and the editor island.\n- `bda.student01@vit.example.edu`: `/student/peer-evaluation` → 200 and correctly shows the empty state \"You are not currently a member of any group project, so there is nothing to evaluate\" (the M.Tech seed has no groups); `/student/code-submissions` → 200 with the M.Tech CODE tasks in the payload.\n- The student API write paths exist: `app/api/student/peer-evaluation/route.ts` exports GET (line 24) and POST (line 36).\n\nLimitations of this run: my tools can only GET, so I could not actually POST a review end-to-end, and the demo student's three evaluations were already SUBMITTED (so no pending-review state existed to observe); the `/student/code-submissions` body streamed past the HTML truncation point for both accounts. I found no error pages, 500s, dead controls or unreachable screens on my two routes; the one thing that reads wrong is purely about how two numbers on the peer-evaluation page relate.",
+      "durationMs": 55592
+    }
+  ]
+}
