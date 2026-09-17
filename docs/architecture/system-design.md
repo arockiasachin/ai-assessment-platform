@@ -708,14 +708,32 @@ escalations. **[planned: P1]** brings it up to the host's standard.
 
 ## 5.3 Testing
 
-|                      | Assessment Platform                                            | Support Desk               |
-| -------------------- | -------------------------------------------------------------- | -------------------------- |
-| Framework            | Vitest 4, node env                                             | Vitest 4, node env         |
-| Database             | `TEST_DATABASE_URL`, name must contain "test"                  | Same guard                 |
-| Parallelism          | Serial (`fileParallelism: false`)                              | Serial                     |
-| Network              | `LLM_PROVIDER=mock` forced                                     | Same                       |
-| Signature convention | **Route-auth tests** asserting 401/403 before the service runs | Route-auth + service tests |
-| Suite size           | (largest)                                                      | **62 tests**               |
+|                      | Assessment Platform                                            | Support Desk                      |
+| -------------------- | -------------------------------------------------------------- | --------------------------------- |
+| Framework            | Vitest 4, node env                                             | Vitest 4, node env                |
+| Database             | `TEST_DATABASE_URL`, name must contain "test"                  | Same guard                        |
+| Parallelism          | Serial (`fileParallelism: false`)                              | Serial                            |
+| Network              | `LLM_PROVIDER=mock` forced                                     | Same                              |
+| Signature convention | **Route-auth tests** asserting 401/403 before the service runs | **None yet** — see the note below |
+| Suite size           | (largest)                                                      | **90 tests**                      |
+
+**The desk has no route-level tests, and that has cost it.** Its four test files
+(`error-envelope`, `tickets`, `queue-order`, `unit`) all exercise services and pure
+functions directly; nothing drives a request through a route handler. Every one of the
+three authority leaks found in the desk was a _route-level_ behaviour:
+
+| Leak                                                       | Would a route test have caught it?                                            |
+| ---------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| A member could reply on and reopen a `CLOSED` ticket       | Yes — `PATCH` and the replies route both accepted it                          |
+| A requester's reply on `PENDING` left the ticket stuck     | Yes, though the service test would also have caught it — it was a service bug |
+| The embed's origin allowlist refused every legitimate host | Yes — the exchange route returned 403                                         |
+
+The host's convention exists precisely for this: assert the _refusal_ at the route, not
+only the success at the service. The desk's suite was written against the rules
+(`CLOSED is terminal`, `only the support team may resolve a ticket`) and proves them at the
+service layer — necessary but not sufficient, because a route that forgets to call the
+service is invisible to it. **[planned: P1]** adds the route-auth suite the host already
+has; `workbook.md` §E3 specifies it as per-phase.
 
 Both services treat a test as the proof of a _rule_, not of a code path — the desk's tests
 are named after the operating-model rules they pin (`CLOSED is terminal`, `only the support
