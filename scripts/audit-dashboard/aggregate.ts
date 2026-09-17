@@ -82,12 +82,14 @@ export function buildGroupReport(parsed: ParsedGroup): GroupReport {
   const duplicates = linkedDuplicateIds(findings).size
 
   const bySeverity = emptyCountMap(SEVERITIES)
+  const bySeverityOpen = emptyCountMap(SEVERITIES)
   const byCategory = emptyCountMap(CATEGORIES)
   const byStatus = emptyCountMap(FINDING_STATUSES)
   const byAgent: Record<string, number> = {}
 
   for (const finding of findings) {
     bySeverity[finding.severity] += 1
+    if (finding.status === "open") bySeverityOpen[finding.severity] += 1
     byCategory[finding.category] += 1
     byStatus[finding.status] += 1
     byAgent[finding.agent] = (byAgent[finding.agent] ?? 0) + 1
@@ -106,6 +108,7 @@ export function buildGroupReport(parsed: ParsedGroup): GroupReport {
     duplicates,
     distinct: findings.length - duplicates,
     bySeverity,
+    bySeverityOpen,
     byCategory,
     byStatus,
     byAgent,
@@ -244,12 +247,15 @@ export function buildAggregate(parsedGroups: ParsedGroup[], generatedAt: string)
     duplicates: groups.reduce((sum, group) => sum + group.duplicates, 0),
     distinct: groups.reduce((sum, group) => sum + group.distinct, 0),
     bySeverity: emptyCountMap(SEVERITIES),
+    bySeverityOpen: emptyCountMap(SEVERITIES),
     byStatus: emptyCountMap(FINDING_STATUSES),
     byCategory: emptyCountMap(CATEGORIES),
   }
 
   for (const group of groups) {
     for (const severity of SEVERITIES) totals.bySeverity[severity] += group.bySeverity[severity]
+    for (const severity of SEVERITIES)
+      totals.bySeverityOpen[severity] += group.bySeverityOpen[severity]
     for (const status of FINDING_STATUSES) totals.byStatus[status] += group.byStatus[status]
     for (const category of CATEGORIES) totals.byCategory[category] += group.byCategory[category]
   }

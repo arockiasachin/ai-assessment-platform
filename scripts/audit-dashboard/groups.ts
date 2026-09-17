@@ -153,6 +153,16 @@ export type GroupReport = {
   /** `total` minus `duplicates`: the number of distinct defects reported. */
   distinct: number
   bySeverity: CountMap<Severity>
+  /**
+   * Of `bySeverity`, how many are still `open`.
+   *
+   * The two answer different questions and are easy to confuse: `bySeverity` is what
+   * was **found** and never falls, while this is what is **left to do**. A dashboard
+   * card that shows the first while reading as the second is a fabricated number — the
+   * exact defect class this audit exists to find, so the distinction is a named field
+   * rather than something each consumer derives.
+   */
+  bySeverityOpen: CountMap<Severity>
   byCategory: CountMap<Category>
   byStatus: CountMap<FindingStatus>
   byAgent: Record<string, number>
@@ -216,6 +226,8 @@ export type AuditAggregate = {
     /** Distinct findings across every group (`findings` minus `duplicates`). */
     distinct: number
     bySeverity: CountMap<Severity>
+    /** Of `bySeverity`, how many are still `open`. See `GroupReport.bySeverityOpen`. */
+    bySeverityOpen: CountMap<Severity>
     byStatus: CountMap<FindingStatus>
     byCategory: CountMap<Category>
   }

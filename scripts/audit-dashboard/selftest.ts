@@ -252,6 +252,12 @@ function teacherTexts(options: { withDupOf: boolean }): Record<string, string> {
       aggregate.totals.byStatus.open === 3 && aggregate.totals.byStatus.fixed === 1,
       "compare: status totals",
     )
+    check(
+      aggregate.totals.bySeverity.minor === 1 &&
+        aggregate.totals.bySeverityOpen.minor === 0 &&
+        aggregate.totals.bySeverityOpen.blocker === 2,
+      "compare: severity keeps fixed rows, severity-open drops them (TN-2 is a fixed minor)",
+    )
   }
 
   const student = aggregate.comparisons.find((comparison) => comparison.domain === "student")

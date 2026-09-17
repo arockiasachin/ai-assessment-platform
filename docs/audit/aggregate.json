@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-09-17T21:51:26.328Z",
+  "generatedAt": "2026-09-17T22:01:43.839Z",
   "source": {
     "convention": "docs/audit/README.md",
     "files": [
@@ -941,6 +941,11 @@
         "major": 33,
         "minor": 34
       },
+      "bySeverityOpen": {
+        "blocker": 0,
+        "major": 23,
+        "minor": 34
+      },
       "byCategory": {
         "broken-flow": 17,
         "dead-control": 5,
@@ -1068,6 +1073,11 @@
         "major": 3,
         "minor": 3
       },
+      "bySeverityOpen": {
+        "blocker": 0,
+        "major": 2,
+        "minor": 3
+      },
       "byCategory": {
         "broken-flow": 0,
         "dead-control": 1,
@@ -1160,8 +1170,8 @@
           "severity": "major",
           "category": "inconsistency",
           "title": "An unreleased assessment is visible and submittable on the student side",
-          "evidence": "demo-assessment-group-project has releasedAt NULL yet appears on demo.student1's /student/assessments and dashboard Due next, while /student/events correctly hides it because lib/student-assessments.ts:96-101 has no release filter. Re-verified 2026-09-17 against the re-seeded database: still reproduces. Fixed 2026-09-18: the reader now scopes `prisma.assessment.findMany` with `releasedAt: { not: null }` (lib/student-assessments.ts), the same predicate shape as the SN-29 fix in the student branch of `lib/gradebook-db.ts` and the calendar filter in `lib/calendar.ts`. Verified against the running app: GET /api/student/assessments and GET /student/assessments as demo.student1 no longer list demo-assessment-group-project (4 assessments, not 5), and /student renders it nowhere, matching the already-correct /student/events. **Server-side half (2026-09-18, second pass):** the _submittable_ half was still open — `app/api/student/assessments/[assessmentId]/submission/route.ts` contained no reference to `releasedAt`, so a student who knew an unreleased assessment's id could POST a submission to it directly and the row was written. The route now folds the release predicate into the assessment lookup itself (`prisma.assessment.findFirst` with the shared `releasedAssessmentWhere()`), so an unreleased assessment is refused exactly as a nonexistent one: HTTP 404 with `{\"success\":false,\"message\":\"Assessment not found.\"}`. A 403 was rejected on purpose: `lib/assessment-release.ts` sets the convention that an object a caller may not see and an object that does not exist are reported identically, and a 403 would confirm the assessment exists — the fact SN-29 protected. Reproduced live against :3000 as demo.student1: before, POST to a temporary unreleased ASSIGNMENT returned 200 and wrote a Submission row (and POST to demo-assessment-group-project returned 409 only because of its type guard), while after the change both return 404 and write nothing, and a released ASSIGNMENT still returns 200; the temporary assessments and their submissions were deleted afterwards (0 rows). The release predicate also now has one definition, `lib/assessment-visibility.ts`, imported by lib/student-assessments.ts, lib/gradebook-db.ts, lib/calendar.ts and prisma/seed-courses.ts, instead of five hand-kept copies. **Reported, not fixed:** the same latent gap exists on the other student write paths that begin from a student-supplied assessment id — `startQuizAttempt`/`startPracticeAttempt` (lib/quiz-attempts/service.ts), `submitCodeForStudent` (lib/code-eval/submissions.ts) and `requestRetake` (lib/quiz-attempts/retake-requests.ts) do not scope on release. They are not reachable in the current seed (no unreleased QUIZ/CODE/APPROVAL assessment exists; their type and policy guards refuse the unreleased GROUP_PROJECT), so they are left open rather than claimed here.",
-          "location": "lib/student-assessments.ts:96-101",
+          "evidence": "demo-assessment-group-project has releasedAt NULL yet appears on demo.student1's /student/assessments and dashboard Due next, while /student/events correctly hides it because lib/student-assessments.ts:96-101 has no release filter. Re-verified 2026-09-17 against the re-seeded database: still reproduces. Fixed 2026-09-18: the reader now scopes `prisma.assessment.findMany` with `releasedAt: { not: null }` (lib/student-assessments.ts), the same predicate shape as the SN-29 fix in the student branch of `lib/gradebook-db.ts` and the calendar filter in `lib/calendar.ts`. Verified against the running app: GET /api/student/assessments and GET /student/assessments as demo.student1 no longer list demo-assessment-group-project (4 assessments, not 5), and /student renders it nowhere, matching the already-correct /student/events. **Server-side half (2026-09-18, second pass):** the _submittable_ half was still open — `app/api/student/assessments/[assessmentId]/submission/route.ts` contained no reference to `releasedAt`, so a student who knew an unreleased assessment's id could POST a submission to it directly and the row was written. The route now folds the release predicate into the assessment lookup itself (`prisma.assessment.findFirst` with the shared `releasedAssessmentWhere()`), so an unreleased assessment is refused exactly as a nonexistent one: HTTP 404 with `{\"success\":false,\"message\":\"Assessment not found.\"}`. A 403 was rejected on purpose: `lib/assessment-release.ts` sets the convention that an object a caller may not see and an object that does not exist are reported identically, and a 403 would confirm the assessment exists — the fact SN-29 protected. Reproduced live against :3000 as demo.student1: before, POST to a temporary unreleased ASSIGNMENT returned 200 and wrote a Submission row (and POST to demo-assessment-group-project returned 409 only because of its type guard), while after the change both return 404 and write nothing, and a released ASSIGNMENT still returns 200; the temporary assessments and their submissions were deleted afterwards (0 rows). The release predicate also now has one definition, `lib/assessment-visibility.ts`, imported by lib/student-assessments.ts, lib/gradebook-db.ts, lib/calendar.ts and prisma/seed-courses.ts, instead of five hand-kept copies. **Sibling write paths (2026-09-18, third pass):** every other student write path that begins from a student-supplied assessment id is now closed. `startQuizAttempt`/`startPracticeAttempt` (`lib/quiz-attempts/service.ts`), `submitCodeForStudent` (`lib/code-eval/authz.ts` — `loadEnrolledCodeTask` is the single student-side loader) and `requestRetake` (`lib/quiz-attempts/retake-requests.ts`) fold the shared `releasedAssessmentWhere()` into their assessment lookup, so an unreleased assessment is refused exactly as a nonexistent one: HTTP 404 `{\"success\":false,\"message\":\"Assessment not found.\"}`, matching the submission route and the `lib/assessment-release.ts` convention that an object a caller may not see and an object that does not exist are reported identically, so a 403 would confirm the object exists. The sibling **list** reads carried the same defect in read form and were filtered too — `listStudentQuizzes` (`lib/quiz-attempts/service.ts`) and `listStudentCodeTasks` (`lib/code-eval/submissions.ts`) — and the scoped `loadEnrolledCodeTask` also covers the `getStudentCodeTask`/`listStudentRuns` reads. The shared spine fixture (`tests/fixtures/spine.ts`, 47 dependent test files) had encoded the bug by creating its assessment with `releasedAt: null`; it is now released in the fixture setup, leaving every assertion unchanged (`tests/assessment-release.test.ts`, whose subject is the release action itself, restores the unreleased precondition in its own setup). Verified live against :3000 as demo.student1 with temporary unreleased probes, then cleaned up (0 remaining rows): the four POSTs above each returned 404 `Assessment not found.` with no QuizAttempt, RetakeRequest, TestRun, Submission or sandbox call written, while an otherwise-identical *released* twin returned 200 with an `IN_PROGRESS` attempt; `GET /api/student/quiz-attempts` omitted the unreleased quiz and `GET /api/student/code-submissions` omitted the unreleased code task. Pinned by `tests/student-write-release-guard.test.ts`.",
+          "location": "lib/student-assessments.ts, lib/quiz-attempts/service.ts, lib/quiz-attempts/retake-requests.ts, lib/code-eval/authz.ts, lib/code-eval/submissions.ts",
           "status": "fixed"
         },
         {
@@ -1761,6 +1771,11 @@
         "major": 22,
         "minor": 22
       },
+      "bySeverityOpen": {
+        "blocker": 0,
+        "major": 17,
+        "minor": 22
+      },
       "byCategory": {
         "broken-flow": 7,
         "dead-control": 4,
@@ -1836,6 +1851,11 @@
       "distinct": 3,
       "bySeverity": {
         "blocker": 1,
+        "major": 0,
+        "minor": 2
+      },
+      "bySeverityOpen": {
+        "blocker": 0,
         "major": 0,
         "minor": 2
       },
@@ -2973,8 +2993,8 @@
           "severity": "major",
           "category": "inconsistency",
           "title": "An unreleased assessment is visible and submittable on the student side",
-          "evidence": "demo-assessment-group-project has releasedAt NULL yet appears on demo.student1's /student/assessments and dashboard Due next, while /student/events correctly hides it because lib/student-assessments.ts:96-101 has no release filter. Re-verified 2026-09-17 against the re-seeded database: still reproduces. Fixed 2026-09-18: the reader now scopes `prisma.assessment.findMany` with `releasedAt: { not: null }` (lib/student-assessments.ts), the same predicate shape as the SN-29 fix in the student branch of `lib/gradebook-db.ts` and the calendar filter in `lib/calendar.ts`. Verified against the running app: GET /api/student/assessments and GET /student/assessments as demo.student1 no longer list demo-assessment-group-project (4 assessments, not 5), and /student renders it nowhere, matching the already-correct /student/events. **Server-side half (2026-09-18, second pass):** the _submittable_ half was still open — `app/api/student/assessments/[assessmentId]/submission/route.ts` contained no reference to `releasedAt`, so a student who knew an unreleased assessment's id could POST a submission to it directly and the row was written. The route now folds the release predicate into the assessment lookup itself (`prisma.assessment.findFirst` with the shared `releasedAssessmentWhere()`), so an unreleased assessment is refused exactly as a nonexistent one: HTTP 404 with `{\"success\":false,\"message\":\"Assessment not found.\"}`. A 403 was rejected on purpose: `lib/assessment-release.ts` sets the convention that an object a caller may not see and an object that does not exist are reported identically, and a 403 would confirm the assessment exists — the fact SN-29 protected. Reproduced live against :3000 as demo.student1: before, POST to a temporary unreleased ASSIGNMENT returned 200 and wrote a Submission row (and POST to demo-assessment-group-project returned 409 only because of its type guard), while after the change both return 404 and write nothing, and a released ASSIGNMENT still returns 200; the temporary assessments and their submissions were deleted afterwards (0 rows). The release predicate also now has one definition, `lib/assessment-visibility.ts`, imported by lib/student-assessments.ts, lib/gradebook-db.ts, lib/calendar.ts and prisma/seed-courses.ts, instead of five hand-kept copies. **Reported, not fixed:** the same latent gap exists on the other student write paths that begin from a student-supplied assessment id — `startQuizAttempt`/`startPracticeAttempt` (lib/quiz-attempts/service.ts), `submitCodeForStudent` (lib/code-eval/submissions.ts) and `requestRetake` (lib/quiz-attempts/retake-requests.ts) do not scope on release. They are not reachable in the current seed (no unreleased QUIZ/CODE/APPROVAL assessment exists; their type and policy guards refuse the unreleased GROUP_PROJECT), so they are left open rather than claimed here.",
-          "location": "lib/student-assessments.ts:96-101",
+          "evidence": "demo-assessment-group-project has releasedAt NULL yet appears on demo.student1's /student/assessments and dashboard Due next, while /student/events correctly hides it because lib/student-assessments.ts:96-101 has no release filter. Re-verified 2026-09-17 against the re-seeded database: still reproduces. Fixed 2026-09-18: the reader now scopes `prisma.assessment.findMany` with `releasedAt: { not: null }` (lib/student-assessments.ts), the same predicate shape as the SN-29 fix in the student branch of `lib/gradebook-db.ts` and the calendar filter in `lib/calendar.ts`. Verified against the running app: GET /api/student/assessments and GET /student/assessments as demo.student1 no longer list demo-assessment-group-project (4 assessments, not 5), and /student renders it nowhere, matching the already-correct /student/events. **Server-side half (2026-09-18, second pass):** the _submittable_ half was still open — `app/api/student/assessments/[assessmentId]/submission/route.ts` contained no reference to `releasedAt`, so a student who knew an unreleased assessment's id could POST a submission to it directly and the row was written. The route now folds the release predicate into the assessment lookup itself (`prisma.assessment.findFirst` with the shared `releasedAssessmentWhere()`), so an unreleased assessment is refused exactly as a nonexistent one: HTTP 404 with `{\"success\":false,\"message\":\"Assessment not found.\"}`. A 403 was rejected on purpose: `lib/assessment-release.ts` sets the convention that an object a caller may not see and an object that does not exist are reported identically, and a 403 would confirm the assessment exists — the fact SN-29 protected. Reproduced live against :3000 as demo.student1: before, POST to a temporary unreleased ASSIGNMENT returned 200 and wrote a Submission row (and POST to demo-assessment-group-project returned 409 only because of its type guard), while after the change both return 404 and write nothing, and a released ASSIGNMENT still returns 200; the temporary assessments and their submissions were deleted afterwards (0 rows). The release predicate also now has one definition, `lib/assessment-visibility.ts`, imported by lib/student-assessments.ts, lib/gradebook-db.ts, lib/calendar.ts and prisma/seed-courses.ts, instead of five hand-kept copies. **Sibling write paths (2026-09-18, third pass):** every other student write path that begins from a student-supplied assessment id is now closed. `startQuizAttempt`/`startPracticeAttempt` (`lib/quiz-attempts/service.ts`), `submitCodeForStudent` (`lib/code-eval/authz.ts` — `loadEnrolledCodeTask` is the single student-side loader) and `requestRetake` (`lib/quiz-attempts/retake-requests.ts`) fold the shared `releasedAssessmentWhere()` into their assessment lookup, so an unreleased assessment is refused exactly as a nonexistent one: HTTP 404 `{\"success\":false,\"message\":\"Assessment not found.\"}`, matching the submission route and the `lib/assessment-release.ts` convention that an object a caller may not see and an object that does not exist are reported identically, so a 403 would confirm the object exists. The sibling **list** reads carried the same defect in read form and were filtered too — `listStudentQuizzes` (`lib/quiz-attempts/service.ts`) and `listStudentCodeTasks` (`lib/code-eval/submissions.ts`) — and the scoped `loadEnrolledCodeTask` also covers the `getStudentCodeTask`/`listStudentRuns` reads. The shared spine fixture (`tests/fixtures/spine.ts`, 47 dependent test files) had encoded the bug by creating its assessment with `releasedAt: null`; it is now released in the fixture setup, leaving every assertion unchanged (`tests/assessment-release.test.ts`, whose subject is the release action itself, restores the unreleased precondition in its own setup). Verified live against :3000 as demo.student1 with temporary unreleased probes, then cleaned up (0 remaining rows): the four POSTs above each returned 404 `Assessment not found.` with no QuizAttempt, RetakeRequest, TestRun, Submission or sandbox call written, while an otherwise-identical *released* twin returned 200 with an `IN_PROGRESS` attempt; `GET /api/student/quiz-attempts` omitted the unreleased quiz and `GET /api/student/code-submissions` omitted the unreleased code task. Pinned by `tests/student-write-release-guard.test.ts`.",
+          "location": "lib/student-assessments.ts, lib/quiz-attempts/service.ts, lib/quiz-attempts/retake-requests.ts, lib/code-eval/authz.ts, lib/code-eval/submissions.ts",
           "status": "fixed"
         },
         {
@@ -3582,6 +3602,11 @@
     "bySeverity": {
       "blocker": 10,
       "major": 58,
+      "minor": 61
+    },
+    "bySeverityOpen": {
+      "blocker": 0,
+      "major": 42,
       "minor": 61
     },
     "byStatus": {

@@ -321,9 +321,9 @@ code { font-family: var(--mono); font-size: 12.5px; background: #f0f1f3; padding
       ["finding rows", totals.findings, ""],
       ["distinct findings", totals.distinct, ""],
       ["linked duplicates", totals.duplicates, "muted"],
-      ["blockers", totals.bySeverity.blocker, "sev-blocker"],
-      ["majors", totals.bySeverity.major, "sev-major"],
-      ["minors", totals.bySeverity.minor, "sev-minor"],
+      ["blockers left", totals.bySeverityOpen.blocker + " of " + totals.bySeverity.blocker, "sev-blocker"],
+      ["majors left", totals.bySeverityOpen.major + " of " + totals.bySeverity.major, "sev-major"],
+      ["minors left", totals.bySeverityOpen.minor + " of " + totals.bySeverity.minor, "sev-minor"],
       ["groups reported", totals.groupsReported + " / " + totals.groups, ""],
       ["agents reported", totals.agentsReported + " / " + totals.agents, ""],
       ["still open", totals.byStatus.open, "sev-blocker"],
@@ -345,6 +345,11 @@ code { font-family: var(--mono); font-size: 12.5px; background: #f0f1f3; padding
       "Finding rows count every row filed. Distinct findings collapse rows linked as duplicates of " +
       "another row in the same group through dupOf (" + totals.duplicates + " linked so far), which " +
       "is the count to use when asking how many defects were found."))
+    box.appendChild(el("p", "muted small",
+      "Severity is split deliberately. A card reading 'N of M' is what is LEFT: N still open out " +
+      "of M ever filed. The total never falls — a fixed blocker is still a defect that was found — " +
+      "so a card showing only the total beside 'still open' would read as outstanding work when " +
+      "there is none. Group-table severity columns are open-scoped for the same reason."))
 
     var used = CATEGORIES.filter(function (category) { return totals.byCategory[category] > 0 })
     if (used.length > 0) {
@@ -455,12 +460,12 @@ code { font-family: var(--mono); font-size: 12.5px; background: #f0f1f3; padding
         group.total,
         group.distinct,
         group.duplicates,
-        group.bySeverity.blocker, group.bySeverity.major, group.bySeverity.minor,
+        group.bySeverityOpen.blocker, group.bySeverityOpen.major, group.bySeverityOpen.minor,
         group.byStatus.open, group.byStatus.fixed
       ]
     })
     box.appendChild(table(
-      ["Group", "Domain", "Kind", "Status", "Agents", "Findings", "Distinct", "Dupes", "Blockers", "Majors", "Minors", "Open", "Fixed"],
+      ["Group", "Domain", "Kind", "Status", "Agents", "Findings", "Distinct", "Dupes", "Open blk", "Open maj", "Open min", "Open", "Fixed"],
       rows,
       {
         align: ["left", "left", "left", "left", "right", "right", "right", "right", "right", "right", "right", "right", "right"],
