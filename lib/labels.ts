@@ -2,6 +2,7 @@ import type { StatusKey } from "@/components/ui/status-pill"
 import type {
   AssessmentType,
   ContributionEventType,
+  CourseCategory,
   GradeReviewStatus,
   GradeSource,
   GroupStatus,
@@ -28,6 +29,35 @@ import type {
  * previously string unions duplicated in `lib/mock/types.ts` — value-identical, but
  * they made the real app depend on the design-reference tree.
  */
+
+/**
+ * VIT's course categories.
+ *
+ * The stored values are the enum; an admin surface must never render them raw, so every
+ * category a write can store has a human label here. The array is the canonical order for a
+ * `<select>`, so option order does not depend on an object's key order.
+ */
+export const COURSE_CATEGORY_VALUES = [
+  "THEORY",
+  "LAB_EMBEDDED_THEORY",
+  "LABORATORY",
+  "PROJECT",
+  "SOFT_SKILLS",
+  "EXTRA_CURRICULAR",
+  "NGCR",
+] as const satisfies readonly CourseCategory[]
+
+export const COURSE_CATEGORY_LABEL: Record<CourseCategory, string> = {
+  THEORY: "Theory",
+  LAB_EMBEDDED_THEORY: "Lab-embedded theory",
+  LABORATORY: "Laboratory",
+  PROJECT: "Project",
+  SOFT_SKILLS: "Soft skills",
+  EXTRA_CURRICULAR: "Extra-curricular",
+  // VIT's acronym for a Non-Graded Credit Course; kept alongside the expansion so the label
+  // still reads as the term the regulations use.
+  NGCR: "Non-graded credit (NGCR)",
+}
 
 export const ASSESSMENT_KIND_LABEL: Record<AssessmentType, string> = {
   QUIZ: "Quiz",

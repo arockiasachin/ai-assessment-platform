@@ -1,26 +1,30 @@
 import { NextResponse } from "next/server"
 
 import { jsonError, parseJsonBody } from "@/lib/api"
-import { setCourseCategoryForTeacher } from "@/lib/analytics/course-category"
+import { setCourseCategoryForAdmin } from "@/lib/analytics/course-category"
+import { AnalyticsError } from "@/lib/analytics/errors"
 import { requireRole } from "@/lib/authz"
 import { updateCourseCategoryRequestSchema } from "@/lib/contracts/courses"
 
 /**
  * Set a course's grading category.
  *
- * `PATCH /api/teacher/courses/[courseId]/category`
+ * `PATCH /api/admin/courses/[courseId]/category`
  *
- * The category decides which of VIT's two grading regimes applies, so this is the action
- * that lets a course stop falling back to absolute bands. Guarded by `requireRole("teacher")`
- * plus object-level ownership in the service: the caller must teach an offering of the
- * course. A course they do not teach reports 404, so the endpoint never confirms another
- * teacher's course exists.
+ * Admin-only, deliberately. The category decides which of VIT's two grading regimes applies,
+ * and it is an institutional fact recorded in the Academic Regulations rather than a
+ * per-course teaching preference — so it belongs to an admin, who sets it for any course
+ * without having to teach it. There is **no object-level ownership check**: an admin is
+ * acting on the institution's record, not on an offering of their own.
+ *
+ * The service writes an audit row naming the previous and the new category, because the
+ * change moves every student's letter in the course.
  */
 export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ courseId: string }> },
 ) {
-  const auth = await requireRole("teacher")
+  const auth = await requireRole("admin")
   if (!auth.authorized) return auth.response
 
   const parsed = await parseJsonBody(request, updateCourseCategoryRequestSchema)
@@ -29,7 +33,7 @@ export async function PATCH(
   const { courseId } = await params
 
   try {
-    const result = await setCourseCategoryForTeacher(auth.user, courseId, parsed.data.category)
+    const result = await setCourseCategoryForAdmin(auth.user, courseId, parsed.data.category)
     if (result.kind === "not-found") {
       return jsonError("Course not found.", 404)
     }
@@ -41,8 +45,8 @@ export async function PATCH(
       gradingEffect: result.gradingEffect,
     })
   } catch (error) {
-    if (error instanceof Error && error.message === "Teacher profile not found.") {
-      return jsonError(error.message, 403)
+    if (error instanceof AnalyticsError) {
+      return jsonError(error.message, error.status)
     }
     console.error("Set course category error:", error)
     return jsonError("Unable to set the course category.", 500)

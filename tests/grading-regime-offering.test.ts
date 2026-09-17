@@ -1,6 +1,6 @@
 import { beforeAll, describe, expect, it } from "vitest"
 
-import { setCourseCategoryForTeacher } from "@/lib/analytics/course-category"
+import { setCourseCategoryForAdmin } from "@/lib/analytics/course-category"
 import { getOfferingGradingRegime } from "@/lib/analytics/grading-regime"
 import type { AuthUser } from "@/lib/session"
 
@@ -22,11 +22,13 @@ import { createSpineFixture } from "./fixtures/spine"
 
 let f: Awaited<ReturnType<typeof createSpineFixture>>
 let teacher: AuthUser
+let admin: AuthUser
 
 beforeAll(async () => {
   await truncateAll()
   f = await createSpineFixture(prisma)
   teacher = { id: f.teacher.id, email: f.teacher.email, role: "teacher" }
+  admin = { id: f.admin.id, email: f.admin.email, role: "admin" }
 })
 
 /**
@@ -195,10 +197,11 @@ describe("getOfferingGradingRegime", () => {
   })
 })
 
-describe("setCourseCategoryForTeacher", () => {
-  it("sets the category for a course the caller teaches", async () => {
-    // The fixture's course belongs to the fixture's offering, which this teacher teaches.
-    const result = await setCourseCategoryForTeacher(teacher, f.course.id, "LABORATORY")
+describe("setCourseCategoryForAdmin", () => {
+  it("sets the category for a course the admin does not teach", async () => {
+    // The fixture's course belongs to the fixture's offering, and the admin teaches nothing.
+    // No ownership check applies; the category is an institutional fact, not a teaching one.
+    const result = await setCourseCategoryForAdmin(admin, f.course.id, "LABORATORY")
     expect(result).toMatchObject({ kind: "updated", category: "LABORATORY" })
 
     const stored = await prisma.course.findUniqueOrThrow({
@@ -208,56 +211,47 @@ describe("setCourseCategoryForTeacher", () => {
     expect(stored.category).toBe("LABORATORY")
   })
 
+  it("records the previous and new category in the audit log", async () => {
+    // The change is the consequential fact — it moves every student's letter — so both sides
+    // of it must be attributable.
+    await setCourseCategoryForAdmin(admin, f.course.id, "PROJECT")
+
+    const audit = await prisma.auditLog.findFirstOrThrow({
+      where: { entityType: "Course", action: "course.category.updated" },
+      orderBy: { createdAt: "desc" },
+    })
+    expect(audit.entityId).toBe(f.course.id)
+    expect(audit.actorId).toBe(f.admin.id)
+    expect(audit.before).toMatchObject({ category: "LABORATORY" })
+    expect(audit.after).toMatchObject({ category: "PROJECT" })
+  })
+
   it("explains the consequence, so a caller need not re-derive the rule", async () => {
-    const absolute = await setCourseCategoryForTeacher(teacher, f.course.id, "PROJECT")
+    const absolute = await setCourseCategoryForAdmin(admin, f.course.id, "PROJECT")
     if (absolute.kind === "updated") {
       expect(absolute.gradingEffect).toContain("Absolute")
     }
 
-    const relative = await setCourseCategoryForTeacher(teacher, f.course.id, "THEORY")
+    const relative = await setCourseCategoryForAdmin(admin, f.course.id, "THEORY")
     if (relative.kind === "updated") {
       expect(relative.gradingEffect).toContain("Relative")
     }
   })
 
-  it("refuses a course the caller does not teach, as not-found", async () => {
-    // Not 403: the endpoint must not confirm that another teacher's course exists.
-    const outsider = await prisma.user.create({
-      data: {
-        email: "category-outsider@spine.test",
-        passwordHash: "test-only-not-a-real-hash",
-        role: "TEACHER",
-        staffProfile: { create: { fullName: "Ola Outsider", empId: "EMP-CAT-9" } },
-      },
-    })
-    const result = await setCourseCategoryForTeacher(
-      { id: outsider.id, email: outsider.email, role: "teacher" },
-      f.course.id,
-      "THEORY",
-    )
+  it("reports a course that does not exist as not-found", async () => {
+    const result = await setCourseCategoryForAdmin(admin, "no-such-course", "THEORY")
     expect(result).toEqual({ kind: "not-found" })
   })
 
-  it("refuses a teacher-shaped user with no staff profile", async () => {
-    const bare = await prisma.user.create({
-      data: {
-        email: "category-nostaff@spine.test",
-        passwordHash: "test-only-not-a-real-hash",
-        role: "TEACHER",
-      },
+  it("refuses a non-admin actor, so the service is safe without the route guard", async () => {
+    await expect(setCourseCategoryForAdmin(teacher, f.course.id, "THEORY")).rejects.toMatchObject({
+      status: 403,
     })
-    await expect(
-      setCourseCategoryForTeacher(
-        { id: bare.id, email: bare.email, role: "teacher" },
-        f.course.id,
-        "THEORY",
-      ),
-    ).rejects.toMatchObject({ status: 403 })
   })
 
   it("feeds the regime resolver once set", async () => {
     // The point of the whole slice: a category that can be set is a regime that can resolve.
-    await setCourseCategoryForTeacher(teacher, f.course.id, "LABORATORY")
+    await setCourseCategoryForAdmin(admin, f.course.id, "LABORATORY")
     const regime = await getOfferingGradingRegime(teacher, f.offering.id)
     expect(regime.category).toBe("LABORATORY")
     expect(regime.decision).toMatchObject({ regime: "absolute", reason: "non-theory-course" })

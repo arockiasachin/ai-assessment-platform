@@ -40,7 +40,7 @@ import { buildCatEligibility, type EligibilityStudent } from "./offering-eligibi
  * A teacher owns *offerings*, so the rule is the offering's `teacherId` matching the caller's
  * staff profile. An offering the caller does not teach reports `not-found` rather than `403`,
  * so the endpoint never confirms that another teacher's offering exists — the same convention
- * `setCourseCategoryForTeacher` and the assessment release action use.
+ * the assessment release action uses.
  *
  * ## Why the final-assessment id is validated on write but tolerated on read
  *

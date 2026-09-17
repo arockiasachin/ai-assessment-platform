@@ -424,6 +424,16 @@ export const NAV_SECTIONS: Record<MockupRole, NavSection[]> = {
           icon: Layers,
           description: "Courses, sections, teachers, and enrolment capacity.",
         },
+        {
+          // No mockup counterpart: the mockup's admin surface did not include the
+          // course-category write path, which was an orphaned teacher API until the
+          // category moved to admin scope.
+          label: "Course grading",
+          href: "/admin/courses",
+          icon: ListChecks,
+          description: "Set each course's category and see which grading regime it resolves to.",
+          appOnly: true,
+        },
       ],
     },
     {

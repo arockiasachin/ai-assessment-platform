@@ -1,7 +1,7 @@
 import { z } from "zod"
 
 /**
- * Contracts for the course-level settings a teacher owns.
+ * Contracts for the course-level settings an admin owns.
  *
  * The category is the only one so far, and it exists because VIT's grading regime is chosen
  * from it: theory and lab-embedded theory are graded relatively above 10 students, every
@@ -21,7 +21,7 @@ export const courseCategorySchema = z.enum([
 export type CourseCategoryValue = z.infer<typeof courseCategorySchema>
 
 /**
- * `PATCH /api/teacher/courses/[courseId]/category` request body.
+ * `PATCH /api/admin/courses/[courseId]/category` request body.
  *
  * Deliberately **not** accepting `null`. Clearing the category is a meaningful action — it
  * returns the course to the fallback — but it should be its own explicit operation rather
