@@ -532,3 +532,84 @@ for gating: a descriptive FAT could not be enforced while there was no submissio
 submission path** — its mark is published by the teacher for every member at once, which is what
 `createGroupProject` in the seed does. There is no student action to refuse, so a gate would be
 vacuous. Building one would mean writing a check around a flow that does not exist.
+
+## 12. The three remaining items, closed
+
+The two product decisions and the one unscheduled slice that were all that remained after §11.
+
+### 1. The token contrast, fixed by splitting the role rather than darkening
+
+§6 recorded this as deferred because "retuning the shared tokens would visibly re-tint charts and
+progress bars" — which was correct, and was the reason it was a design call. `--success` reached 3.40:1
+and `--warning` 2.54:1 on a card, against AA's 4.5:1.
+
+The resolution is that one token cannot serve two roles. `--success` / `--warning` stay the vivid
+**fills**; `--success-text` / `--warning-text` are new tokens carrying text, declared in
+`app/globals.css` with their measurements inline and mapped through `@theme inline` so
+`text-success-text` is a real utility rather than an arbitrary Tailwind literal. The dark theme aliases
+the fills, which are legible there (7.05:1 and 8.70:1).
+
+Contrast was **computed** (OKLCH → sRGB → WCAG luminance) instead of estimated, and measured against the
+`/12`–`/15` tint the copy sits inside because the tint is the harder case. Cross-checked against the
+compiled hex values, both methods agreeing with margin. See the audit for the table.
+
+This also let `SUCCESS_TEXT`, previously an arbitrary `text-[oklch(0.45_0.12_155)] dark:text-success`
+literal the audit could not see, become a plain `text-success-text`.
+
+### 2. The analytics thresholds UI — the route that had no caller
+
+`GET`/`PUT /api/teacher/analytics/settings` shipped in Wave 2 and nothing called it. It was dropped from
+the Wave 3 port deliberately, because the mockup's control was inert and porting it inert would have
+violated the dangling-affordance rule; wiring it is a form, not a port.
+
+`components/analytics-thresholds-panel.tsx` renders it, seeded from the server by
+`app/(dashboard)/teacher/analytics/page.tsx` so it does not fetch on mount. `lib/analytics/settings-view.ts`
+holds the field descriptors that drive **both** the form and its validation, so a field cannot be
+rendered with bounds its validator does not enforce.
+
+The design decision worth recording: every threshold is **optional**, so a blank input means "keep the
+code default" and is **omitted from the payload** rather than sent as `0`. For a field whose valid range
+includes zero that distinction is data loss, and the effective value is shown as the input's
+_placeholder_ so a teacher can see what applies without turning it into an override. Verified live: an
+override of `classAverageBelow` left `minClassSampleSize` at its default 5.
+
+### 3. A controlled vocabulary for `Question.subtopic`
+
+`Question.subtopic` was model-generated free text, and when a teacher supplied no tags the prompt said
+_"choose 2-4 coherent subtopics yourself"_ — so the vocabulary was invented per request. Two generations
+on one course produced disjoint tags, and `slope` / `Slope` / `gradient & intercept` counted as three
+unrelated topics.
+
+`lib/analytics/subtopics.ts` refuses to merge those by string similarity, and that refusal is right:
+merged meaning is invented meaning. The remedy is a **declared** list, so generation stops inventing.
+
+- **`Course.subtopicVocabulary`** (nullable JSON) holds it. Null means undeclared: generation is then
+  unconstrained exactly as before, and the reader reports every tag as outside the vocabulary rather
+  than pretending a list exists.
+- **A request that names tags declares them.** The generation form already took subtopics, so supplying
+  them defines the course's list rather than being a hint the next request cannot see. Without that, the
+  list could only be set through a separate editor and the teacher's own tags would be discarded.
+- **Classification folds case and nothing else.** `Slope` matches a declared `slope`, because case is
+  formatting. Stemming, punctuation folding and synonym matching are refused — each decides meaning, and
+  deciding meaning from string shape is the invented taxonomy the analytics module exists to avoid.
+  Storage does not fold case at all: rewriting a teacher's `Slope` to `slope` would be editing their list.
+- **The reader reports both sides.** Tokens carry `inVocabulary`, and the breakdown carries the
+  vocabulary and the tags outside it, so a curated tag is distinguishable from an invented one — and a
+  course that has declared nothing reads differently from one that has.
+
+### And a regression this found: the seed
+
+Adding the FAT gate made `lib/quiz-attempts/service.ts` import `lib/grading/offering-config-service.ts`,
+which carried `import "server-only"`. That sentinel is **not a real dependency** — Next stubs it and
+vitest aliases it, but `tsx` does not, and the seed runs under `tsx`.
+
+**The seed broke, while `verify`, `npm test` and CI all stayed green**, because nothing in CI runs it.
+The sentinel was also inconsistent: the sibling modules on the seed's own import path
+(`grading/review-service`, `quiz-generation/generation`, `rubric-grading/evaluation`) read Prisma
+without it, and a guarded module cannot be imported by an unguarded one. Removed, with the reasoning
+recorded in the file so it is not helpfully re-added.
+
+`tests/seed-import-graph.test.ts` walks the seed's transitive **local** imports and fails on the
+sentinel, naming the offender. Mutation-tested by injecting the import into a module in that graph.
+The lesson is worth stating: a green suite and a green CI can coexist with a broken tool, and the only
+thing that catches it is running the tool.

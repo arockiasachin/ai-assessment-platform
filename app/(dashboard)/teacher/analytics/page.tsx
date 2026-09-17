@@ -7,11 +7,13 @@ import { findNavItemByAppPath } from "@/components/shell/nav-config"
 import { TeacherAnalyticsDashboard } from "@/components/teacher-analytics-dashboard"
 import { getSessionUser } from "@/lib/auth"
 import {
+  getAnalyticsSettingsForTeacher,
   getAssessmentItemAnalysisForTeacher,
   getTeacherAnalyticsOverview,
   listTeacherOfferingsForAnalytics,
 } from "@/lib/analytics/service"
 import type {
+  AnalyticsSettingsResponse,
   AssessmentItemAnalysisResponse,
   TeacherAnalyticsOverviewResponse,
 } from "@/lib/contracts/analytics"
@@ -43,6 +45,7 @@ export default async function TeacherAnalyticsPage() {
 
   let initialOverview: TeacherAnalyticsOverviewResponse | null = null
   let initialItems: AssessmentItemAnalysisResponse | null = null
+  let initialSettings: AnalyticsSettingsResponse | null = null
 
   if (initialOfferingId) {
     initialOverview = {
@@ -58,6 +61,9 @@ export default async function TeacherAnalyticsPage() {
         ...(await getAssessmentItemAnalysisForTeacher(user, { assessmentId: withData.id })),
       }
     }
+    // The thresholds panel is seeded too, so opening it shows the stored overrides without a fetch —
+    // the same reason the overview and item analysis are seeded rather than fetched on mount.
+    initialSettings = await getAnalyticsSettingsForTeacher(user, initialOfferingId)
   }
 
   return (
@@ -78,6 +84,7 @@ export default async function TeacherAnalyticsPage() {
           initialOfferingId={initialOfferingId}
           initialOverview={initialOverview}
           initialItems={initialItems}
+          initialSettings={initialSettings}
         />
       </AppShell>
     </RoleGuard>

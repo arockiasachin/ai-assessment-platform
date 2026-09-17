@@ -1,6 +1,8 @@
 import { prisma } from "@/lib/prisma"
 import type { AuthUser } from "@/lib/session"
 
+import { parseSubtopicVocabulary, isInVocabulary } from "@/lib/quiz-generation/vocabulary"
+
 import { loadOwnedAssessment } from "./authz"
 
 /**
@@ -21,7 +23,13 @@ import { loadOwnedAssessment } from "./authz"
  * near-duplicates (`slope` / `Slope` / `gradient & intercept`). So this module answers
  * the question the data can support — **"which topics does this assessment cover, and
  * how much of it is each one?"** — and deliberately does not answer "how well did the
- * class do on each", which needs a controlled vocabulary that does not exist yet.
+ * class do on each", which needs a controlled vocabulary.
+ *
+ * **A course can now declare one** (`Course.subtopicVocabulary`, constrained at generation time), and
+ * the token list reports which tags are declared and which the model invented. It remains a token list
+ * rather than a mastery chart: a mastery number needs *every* tag to come from the list, and an
+ * undeclared course — or one whose older questions predate its list — still has tags outside it. What
+ * the vocabulary buys is that the tags stop being invented, so the list is worth grouping at all.
  *
  * ## What it does not do
  *
@@ -60,6 +68,14 @@ export type SubtopicToken = {
   responseCount: number
   /** Total marks available across those questions. */
   totalMarks: number
+  /**
+   * Whether the course's declared vocabulary contains this tag.
+   *
+   * `false` when the course has declared none, because an undeclared course has no controlled list —
+   * reporting its tags as "in vocabulary" would invent the very thing the vocabulary exists to make
+   * explicit. The flag is what lets a reader tell a curated tag from one the model made up.
+   */
+  inVocabulary: boolean
 }
 
 export type SubtopicBreakdown = {
@@ -68,6 +84,10 @@ export type SubtopicBreakdown = {
   untagged: { questionCount: number; responseCount: number }
   /** The number of distinct tags — the honest figure for a "N topics" badge. */
   distinctTags: number
+  /** The course's declared vocabulary, empty when it has none. */
+  vocabulary: string[]
+  /** Distinct tags that are **not** in the vocabulary: the model inventing again. */
+  offVocabularyTags: string[]
 }
 
 /**
@@ -78,7 +98,14 @@ export type SubtopicBreakdown = {
  * order `findMany` happened to return, which makes the page flicker between renders
  * for no reason a reader could perceive.
  */
-export function groupSubtopicTokens(questions: readonly QuestionTagInput[]): SubtopicBreakdown {
+export function groupSubtopicTokens(
+  questions: readonly QuestionTagInput[],
+  /**
+   * The course's declared vocabulary. Defaulted to empty so the existing callers and tests keep
+   * working, and because an undeclared course is the honest default.
+   */
+  vocabulary: readonly string[] = [],
+): SubtopicBreakdown {
   const byTag = new Map<string, SubtopicToken>()
   let untaggedQuestionCount = 0
   let untaggedResponseCount = 0
@@ -102,6 +129,7 @@ export function groupSubtopicTokens(questions: readonly QuestionTagInput[]): Sub
         questionCount: 1,
         responseCount: question.responseCount,
         totalMarks: question.points,
+        inVocabulary: isInVocabulary(question.subtopic, vocabulary),
       })
     }
   }
@@ -114,6 +142,8 @@ export function groupSubtopicTokens(questions: readonly QuestionTagInput[]): Sub
     tokens,
     untagged: { questionCount: untaggedQuestionCount, responseCount: untaggedResponseCount },
     distinctTags: tokens.length,
+    vocabulary: [...vocabulary],
+    offVocabularyTags: tokens.filter((token) => !token.inVocabulary).map((token) => token.subtopic),
   }
 }
 
@@ -132,6 +162,15 @@ export async function listAssessmentSubtopics(
   assessmentId: string,
 ): Promise<SubtopicBreakdown & { assessmentId: string; assessmentTitle: string }> {
   const assessment = await loadOwnedAssessment(user, assessmentId)
+
+  // The vocabulary lives on the course, not the assessment: two generations for two assessments of
+  // one course must share tags for the list to be worth anything. Reached through the offering,
+  // because `OwnedAssessment` carries the offering rather than the course.
+  const offering = await prisma.courseOffering.findUnique({
+    where: { id: assessment.offeringId },
+    select: { course: { select: { subtopicVocabulary: true } } },
+  })
+  const vocabulary = parseSubtopicVocabulary(offering?.course.subtopicVocabulary)
 
   const questions = await prisma.question.findMany({
     where: { assessmentId: assessment.id },
@@ -170,6 +209,7 @@ export async function listAssessmentSubtopics(
         points: Number(question.points),
         responseCount: responsesByQuestion.get(question.id) ?? 0,
       })),
+      vocabulary,
     ),
   }
 }
@@ -197,7 +237,15 @@ export async function listSubtopicBreakdowns(
         assessmentId: true,
         subtopic: true,
         points: true,
-        assessment: { select: { title: true } },
+        // The vocabulary is the **course's**, reached through the offering. Carried per assessment
+        // rather than fetched once, because a teacher's assessments can span several courses and each
+        // has its own list.
+        assessment: {
+          select: {
+            title: true,
+            offering: { select: { course: { select: { subtopicVocabulary: true } } } },
+          },
+        },
       },
     }),
     // Finalised attempts only, matching every other analytics read — a sitting in progress
@@ -216,8 +264,15 @@ export async function listSubtopicBreakdowns(
 
   const byAssessment = new Map<string, QuestionTagInput[]>()
   const titles = new Map<string, string>()
+  const vocabularyByAssessment = new Map<string, string[]>()
   for (const question of questions) {
     titles.set(question.assessmentId, question.assessment.title)
+    if (!vocabularyByAssessment.has(question.assessmentId)) {
+      vocabularyByAssessment.set(
+        question.assessmentId,
+        parseSubtopicVocabulary(question.assessment.offering.course.subtopicVocabulary),
+      )
+    }
     const list = byAssessment.get(question.assessmentId) ?? []
     list.push({
       id: question.id,
@@ -237,7 +292,7 @@ export async function listSubtopicBreakdowns(
   for (const assessmentId of assessmentIds) {
     const rows = byAssessment.get(assessmentId) ?? []
     result.set(assessmentId, {
-      ...groupSubtopicTokens(rows),
+      ...groupSubtopicTokens(rows, vocabularyByAssessment.get(assessmentId) ?? []),
       assessmentTitle: titles.get(assessmentId) ?? "",
     })
   }

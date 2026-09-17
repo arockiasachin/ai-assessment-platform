@@ -48,6 +48,8 @@ describe("groupSubtopicTokens", () => {
       questionCount: 2,
       responseCount: 7,
       totalMarks: 7,
+      // Undeclared by default: no vocabulary was passed, so nothing can be "in" one.
+      inVocabulary: false,
     })
   })
 
@@ -123,7 +125,53 @@ describe("groupSubtopicTokens", () => {
       tokens: [],
       untagged: { questionCount: 0, responseCount: 0 },
       distinctTags: 0,
+      vocabulary: [],
+      offVocabularyTags: [],
     })
+  })
+
+  it("flags declared tags and reports the invented ones", () => {
+    // The reason the vocabulary exists. A tag from the course's declared list is curated; anything
+    // else is the model inventing again, and the reader distinguishes them rather than presenting both
+    // as equally authoritative.
+    const breakdown = groupSubtopicTokens(
+      [
+        question({ id: "q1", subtopic: "slope" }),
+        question({ id: "q2", subtopic: "intercepts" }),
+        question({ id: "q3", subtopic: "gradient & intercept" }),
+      ],
+      ["slope", "intercepts"],
+    )
+
+    expect(breakdown.vocabulary).toEqual(["slope", "intercepts"])
+    // Sorted, not insertion-ordered — compare as a set so the assertion is about the classification
+    // rather than the token ordering, which has its own test.
+    expect(
+      breakdown.tokens
+        .filter((token) => token.inVocabulary)
+        .map((token) => token.subtopic)
+        .sort(),
+    ).toEqual(["intercepts", "slope"])
+    expect(breakdown.offVocabularyTags).toEqual(["gradient & intercept"])
+  })
+
+  it("classifies a differently-cased tag as declared, and keeps its own spelling", () => {
+    // Case is formatting, not meaning: `Slope` is the declared `slope` written differently. The token
+    // still reports the casing that was stored.
+    const breakdown = groupSubtopicTokens([question({ id: "q1", subtopic: "Slope" })], ["slope"])
+
+    expect(breakdown.tokens[0].inVocabulary).toBe(true)
+    expect(breakdown.tokens[0].subtopic).toBe("Slope")
+    expect(breakdown.offVocabularyTags).toEqual([])
+  })
+
+  it("reports every tag as invented when the course declares nothing", () => {
+    // An undeclared course has no controlled list, so claiming its tags are "in vocabulary" would
+    // invent the very thing the vocabulary exists to make explicit.
+    const breakdown = groupSubtopicTokens([question({ id: "q1", subtopic: "slope" })])
+
+    expect(breakdown.vocabulary).toEqual([])
+    expect(breakdown.offVocabularyTags).toEqual(["slope"])
   })
 
   it("keeps a zero-response token, because a tag with no responses is a real fact", () => {

@@ -1,4 +1,16 @@
-import "server-only"
+/*
+ * **Deliberately no `import "server-only"`**, unlike some modules in this directory.
+ *
+ * `lib/quiz-attempts/service.ts` imports `evaluateFatGateForStudent` from here, and that module reads
+ * Prisma without the sentinel — as do its siblings `lib/grading/review-service.ts`,
+ * `lib/quiz-generation/generation.ts` and `lib/rubric-grading/evaluation.ts`. A guarded module cannot
+ * be imported by an unguarded one, and `prisma/seed-demo.ts` imports the attempt service, so adding the
+ * sentinel here breaks the seed under `tsx` (which has no alias for it; Next stubs it and vitest aliases
+ * it, which is why neither caught it).
+ *
+ * Every consumer of this module is server-side — two services and two route handlers — so the guard was
+ * buying nothing it was not already getting from that.
+ */
 
 import type {
   GradingAssessmentOption,

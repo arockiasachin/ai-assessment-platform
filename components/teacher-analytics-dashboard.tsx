@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { AlertTriangle, BarChart3, Loader2 } from "lucide-react"
 
+import { AnalyticsThresholdsPanel } from "@/components/analytics-thresholds-panel"
 import { ClassAverageChart, GradeDistributionChart } from "@/components/charts"
 import { Badge } from "@/components/ui/badge"
 import { Callout } from "@/components/ui/callout"
@@ -28,6 +29,7 @@ import type {
   AssessmentItemAnalysisResponse,
   InterventionAlertValue,
   TeacherAnalyticsOverviewResponse,
+  AnalyticsSettingsResponse,
 } from "@/lib/contracts/analytics"
 
 /**
@@ -44,6 +46,7 @@ type Props = {
   initialOfferingId: string | null
   initialOverview: TeacherAnalyticsOverviewResponse | null
   initialItems: AssessmentItemAnalysisResponse | null
+  initialSettings: AnalyticsSettingsResponse | null
 }
 
 const SEVERITY_VARIANT: Record<
@@ -68,6 +71,7 @@ export function TeacherAnalyticsDashboard({
   initialOfferingId,
   initialOverview,
   initialItems,
+  initialSettings,
 }: Props) {
   const [offeringId, setOfferingId] = useState(initialOfferingId ?? "")
   const [overview, setOverview] = useState<TeacherAnalyticsOverviewResponse | null>(initialOverview)
@@ -160,6 +164,14 @@ export function TeacherAnalyticsDashboard({
   return (
     <div className="space-y-6">
       {overview && <RegimeCallouts overview={overview} />}
+
+      {/*
+       * The thresholds editor. It sits above the charts because it governs them: the alerts and the
+       * item-analysis withholds below are exactly what these numbers decide.
+       */}
+      {offeringId && (
+        <AnalyticsThresholdsPanel offeringId={offeringId} initialPayload={initialSettings} />
+      )}
 
       <Card>
         <CardHeader className="pb-3">

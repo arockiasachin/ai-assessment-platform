@@ -395,6 +395,74 @@ define and edit them, and a minimum-CAT gate that applied to anybody.
 - **The create contract is unchanged** (`Quiz | Assignment`). Teachers can weight the kinds that
   exist; authoring descriptive/code/group assessments from the gradebook remains a product decision.
 
+### The last three items: token contrast, the thresholds UI, and a subtopic vocabulary
+
+The two product decisions and the one unscheduled slice that remained after the gate work.
+
+#### Fixed
+
+- **The token contrast, by splitting the role instead of darkening the token.** `--success` reached
+  3.40:1 and `--warning` 2.54:1 as text on a card, against AA's 4.5:1 — and darkening them to clear it
+  would have re-tinted every chart and progress bar, which is why this had been deferred as a design
+  call. One token cannot serve two roles: `--success` / `--warning` stay the vivid **fills**, and
+  `--success-text` / `--warning-text` are new tokens that carry text. Declared in `app/globals.css` with
+  the measurements beside them, mapped through `@theme inline` so `text-success-text` is a real utility.
+  Contrast was **computed** (OKLCH → sRGB → WCAG luminance), not estimated, and measured against the
+  `/12`–`/15` tint the copy sits inside because the tint is the harder case: 5.43:1 / 4.74:1 and
+  5.62:1 / 4.92:1 on light; the dark theme aliases the fills, which reach 7.05:1 and 8.70:1.
+  Cross-checked against the compiled hex values.
+- **A `server-only` sentinel that broke the demo seed.** Adding the FAT gate made
+  `lib/quiz-attempts/service.ts` import `lib/grading/offering-config-service.ts`, which carried
+  `import "server-only"`. That sentinel is not a real dependency — Next stubs it and vitest aliases it,
+  but **`tsx` does not**, and the seed runs under `tsx`. The seed failed with `Cannot find module
+'server-only'` while `verify`, `npm test` and CI all stayed green, because nothing in CI runs it. The
+  sentinel was also inconsistent with its siblings on the seed's own import path
+  (`grading/review-service`, `quiz-generation/generation`, `rubric-grading/evaluation`), which read
+  Prisma without it — and a guarded module cannot be imported by an unguarded one. Removed, with the
+  reasoning recorded in the file.
+
+#### Added
+
+- **`components/analytics-thresholds-panel.tsx`** — the UI for
+  `GET`/`PUT /api/teacher/analytics/settings`, which shipped in Wave 2 and **had no caller**. It was
+  dropped from the Wave 3 port deliberately, because the mockup's "Analytics settings" control was inert
+  and porting it inert would have broken the dangling-affordance rule; wiring it is a form, not a port.
+  Seeded from the server by the analytics page, so it does not fetch on mount.
+- **`lib/analytics/settings-view.ts`** — the field descriptors that drive both the form and its
+  validation, so a field cannot be rendered with bounds its validator does not enforce. Every threshold
+  is optional, so a blank input means "keep the code default" and is **omitted from the payload** rather
+  than sent as `0` — for a field whose valid range includes zero, that distinction is data loss. The
+  effective value is the input's placeholder, so a teacher sees what applies without overriding it.
+  Verified live: overriding `classAverageBelow` left `minClassSampleSize` at its default 5.
+- **`Course.subtopicVocabulary`** (nullable JSON, migration `20260917120000_course_subtopic_vocabulary`)
+  — the course's controlled topic list. `Question.subtopic` was model-generated free text and, with no
+  tags supplied, the prompt asked the model to _"choose 2-4 coherent subtopics yourself"_, so two
+  generations on one course produced disjoint tags.
+- **`lib/quiz-generation/vocabulary.ts`** — reading, cleaning and classifying against the list. A request
+  that names tags **declares** them, so the generation form's existing subtopic input is how a teacher
+  sets the vocabulary rather than a hint the next request cannot see.
+
+#### Changed
+
+- **Generation is constrained to a declared vocabulary.** When the course has one, the prompt requires
+  every tag to be chosen from it verbatim; when it has none, generation is unconstrained exactly as
+  before.
+- **`lib/analytics/subtopics.ts` reports both sides.** Tokens carry `inVocabulary`, and the breakdown
+  carries the vocabulary and the tags outside it, so a curated tag is distinguishable from an invented
+  one. **Classification folds case and nothing else** — `Slope` matches a declared `slope` because case
+  is formatting, while stemming, punctuation folding and synonym matching are refused, since each decides
+  meaning and deciding meaning from string shape is the invented taxonomy that module exists to avoid.
+- **`SUCCESS_TEXT` / `WARNING_TEXT`** are now thin aliases of the new utilities instead of an arbitrary
+  `text-[oklch(0.45_0.12_155)] dark:text-success` literal the accessibility audit could not see.
+
+#### Notes
+
+- **`tests/seed-import-graph.test.ts`** walks the seed's transitive local imports and fails on the
+  `server-only` sentinel, naming the offender — mutation-tested by injecting it into a module in that
+  graph. The sentinel check is anchored to the start of a line, because the explanatory comment in
+  `offering-config-service.ts` quotes the import it explains the absence of, and a guard that cannot tell
+  prose from code fails on its own documentation.
+
 ### The FAT gate enforced on every path that can produce a final mark
 
 The gate was built and reported on the teacher's offering page, then enforced at the quiz attempt

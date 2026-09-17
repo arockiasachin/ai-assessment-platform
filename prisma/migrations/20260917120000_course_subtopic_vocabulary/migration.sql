@@ -1,0 +1,37 @@
+-- A course's canonical subtopic vocabulary: the controlled list question tags are drawn from.
+--
+-- Additive and nullable, so no backfill and no data migration. **Null means undeclared**, which is the
+-- correct reading for every course that predates this column: generation stays unconstrained exactly
+-- as it was, and the reader reports every existing tag as outside the vocabulary rather than
+-- pretending a list exists. Nothing changes until a teacher declares one.
+--
+-- ## Why this column exists
+--
+-- `Question.subtopic` is model-generated free text. The only constraint is `trim/min(1)/max(200)`
+-- (`lib/quiz-generation/parsing.ts`), and when a teacher supplies no tags the prompt says, verbatim,
+-- *"The teacher did not specify subtopics; choose 2-4 coherent subtopics yourself."* So the vocabulary
+-- is invented per request: two generations on one course yield disjoint tags, and `slope` / `Slope` /
+-- `gradient & intercept` count as three unrelated topics.
+--
+-- `lib/analytics/subtopics.ts` deliberately refuses to merge them — silently merging would invent a
+-- taxonomy the data cannot support — and reports the token list instead of a mastery score. That
+-- leaves a declared vocabulary as the only honest remedy.
+--
+-- ## Why JSON rather than a tag table
+--
+-- The list is read and written whole and has no relations. A join table would buy queryability nothing
+-- asks for, and would need its own lifecycle decisions (rename, delete, merge) that no screen has.
+-- `CourseOffering.analyticsSettings` set this precedent. If grouping by tag ever has to be a query
+-- rather than a fold in application code, that is the trigger to promote it — and the data is a plain
+-- string array, so the promotion is mechanical.
+--
+-- Generated with:
+--   prisma migrate diff \
+--     --from-schema <prisma/schema.prisma at 2059a9f> \
+--     --to-schema prisma/schema.prisma \
+--     --script
+--
+-- Applied with `prisma migrate deploy` (never `migrate dev`, never `db push`).
+
+-- AlterTable
+ALTER TABLE "Course" ADD COLUMN     "subtopicVocabulary" JSONB;

@@ -30,6 +30,14 @@ export type QuizPromptInput = {
   difficulty: QuizGenerationDifficultyTarget
   /** Optional teacher-supplied subtopic tags the questions should cover. */
   subtopics: readonly string[]
+  /**
+   * The course's declared subtopic vocabulary, when it has one.
+   *
+   * Distinct from `subtopics` on purpose. Supplying tags is a **hint** for this request; declaring a
+   * vocabulary is a **constraint** that makes the tags reusable, and the difference decides whether the
+   * model may invent a tag it finds more apt.
+   */
+  vocabulary?: readonly string[]
   /** Retrieved `MaterialChunk`s used as grounding context (may be empty). */
   sources: readonly QuizPromptSource[]
 }
@@ -58,10 +66,18 @@ function renderSources(sources: readonly QuizPromptSource[]): string {
  * deterministic so it can be unit tested and versioned.
  */
 export function buildQuizGenerationPrompt(input: QuizPromptInput): LlmMessage[] {
+  const vocabulary = input.vocabulary ?? []
   const subtopics =
-    input.subtopics.length > 0
-      ? input.subtopics.map((subtopic) => `- ${subtopic}`).join("\n")
-      : "The teacher did not specify subtopics; choose 2-4 coherent subtopics yourself."
+    vocabulary.length > 0
+      ? // A declared vocabulary is a closed list: the whole point is that the tags are reusable across
+        // generations, which only holds if every question uses one of them verbatim.
+        "Choose every `subtopic` from this list, using each tag **exactly as written** and nothing " +
+        "else. Do not invent, rephrase, or introduce a tag that is not here:\n" +
+        vocabulary.map((tag) => `- ${tag}`).join("\n")
+      : input.subtopics.length > 0
+        ? input.subtopics.map((subtopic) => `- ${subtopic}`).join("\n")
+        : // Undeclared: unchanged, and the prompt says so rather than pretending a list exists.
+          "The teacher did not specify subtopics; choose 2-4 coherent subtopics yourself."
 
   const system =
     "You are an experienced university examiner writing a multiple-choice quiz grounded ONLY in the " +

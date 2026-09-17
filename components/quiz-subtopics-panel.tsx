@@ -6,10 +6,14 @@ import type { SubtopicBreakdownValue } from "@/lib/contracts/analytics"
 /**
  * The topics an assessment covers — a **token list**, not a mastery chart.
  *
- * This is decision D4's resolution made visible. `Question.subtopic` is model-generated free text
- * with no controlled vocabulary, so a per-topic *score* would be a number attributed to a label the
- * last model call invented. What the data supports is what this shows: which topics the assessment
- * covers, how many questions each has, and how many responses they have drawn.
+ * This is decision D4's resolution made visible. `Question.subtopic` is model-generated free text,
+ * so a per-topic *score* would be a number attributed to a label the last model call invented. What the
+ * data supports is what this shows: which topics the assessment covers, how many questions each has,
+ * and how many responses they have drawn.
+ *
+ * A course **can** since declare a controlled vocabulary (`Course.subtopicVocabulary`), which
+ * generation is constrained to. Where one exists this marks the tags outside it; where none does it says
+ * so plainly. The two are not the same data and must not read the same.
  *
  * Two properties the presentation deliberately keeps:
  *
@@ -38,9 +42,9 @@ export function QuizSubtopicsPanel({ breakdown }: { breakdown: SubtopicBreakdown
       <CardHeader className="pb-3">
         <CardTitle className="text-base">Topics covered</CardTitle>
         <p className="text-xs text-muted-foreground">
-          Topic tags are written by the generator, so these are the words it chose — not a fixed
-          curriculum list. Tags are matched exactly, which is why near-duplicates may appear side by
-          side.
+          {breakdown.vocabulary.length > 0
+            ? "This course has a declared topic list, and generation is constrained to it. Tags outside it are marked."
+            : "This course has no declared topic list, so these are the words the generator chose. Tags are matched exactly, which is why near-duplicates may appear side by side."}
         </p>
       </CardHeader>
       <CardContent className="space-y-3">
@@ -57,6 +61,15 @@ export function QuizSubtopicsPanel({ breakdown }: { breakdown: SubtopicBreakdown
                   className="inline-flex items-center gap-1.5 rounded-md border border-border bg-background px-2 py-1 text-xs"
                 >
                   <span className="font-medium">{token.subtopic}</span>
+                  {/*
+                    Only marked when the course *has* a list. Flagging every tag as "outside it" on a
+                    course that declared nothing would be noise that says nothing.
+                  */}
+                  {breakdown.vocabulary.length > 0 && !token.inVocabulary && (
+                    <span className="text-muted-foreground" title="Not in this course's topic list">
+                      ·
+                    </span>
+                  )}
                   <span className="text-muted-foreground">
                     {token.questionCount}q · {token.responseCount} responses · {token.totalMarks}{" "}
                     marks
@@ -77,7 +90,16 @@ export function QuizSubtopicsPanel({ breakdown }: { breakdown: SubtopicBreakdown
             <p className="text-xs text-muted-foreground">
               {breakdown.distinctTags} distinct tag
               {breakdown.distinctTags === 1 ? "" : "s"} across this assessment.
+              {breakdown.vocabulary.length > 0 &&
+                ` ${breakdown.distinctTags - breakdown.offVocabularyTags.length} from the course's ${breakdown.vocabulary.length}-tag list; ${breakdown.offVocabularyTags.length} outside it.`}
             </p>
+
+            {breakdown.vocabulary.length === 0 && (
+              <p className="text-xs text-muted-foreground">
+                Naming topics when you generate constrains the tags to them, and the list is kept on
+                the course — so later generations reuse it instead of inventing new wording.
+              </p>
+            )}
           </>
         )}
       </CardContent>

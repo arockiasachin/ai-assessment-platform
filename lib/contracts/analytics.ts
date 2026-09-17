@@ -390,6 +390,12 @@ export const subtopicTokenSchema = z.object({
   questionCount: z.number().int(),
   responseCount: z.number().int(),
   totalMarks: z.number(),
+  /**
+   * Whether the course's declared vocabulary contains this tag. `false` for every tag when the course
+   * has declared none — claiming otherwise would invent the list the vocabulary exists to make
+   * explicit.
+   */
+  inVocabulary: z.boolean(),
 })
 export type SubtopicTokenValue = z.infer<typeof subtopicTokenSchema>
 
@@ -402,6 +408,10 @@ export const subtopicBreakdownSchema = z.object({
     responseCount: z.number().int(),
   }),
   distinctTags: z.number().int(),
+  /** The course's declared vocabulary. Empty when it has none. */
+  vocabulary: z.array(z.string()),
+  /** Distinct tags outside it — the model inventing again. */
+  offVocabularyTags: z.array(z.string()),
 })
 export type SubtopicBreakdownValue = z.infer<typeof subtopicBreakdownSchema>
 

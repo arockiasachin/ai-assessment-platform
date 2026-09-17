@@ -7,8 +7,10 @@
 @theme inline {
   --color-success: var(--success);
   --color-success-foreground: var(--success-foreground);
+  --color-success-text: var(--success-text);
   --color-warning: var(--warning);
   --color-warning-foreground: var(--warning-foreground);
+  --color-warning-text: var(--warning-text);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
   --color-sidebar-ring: var(--sidebar-ring);
@@ -72,10 +74,23 @@
      3.8–4.1:1. 0.52 clears 4.5:1 on those tints and still gives white text
      6.0:1 on the solid destructive fill. */
   --destructive: oklch(0.52 0.22 25);
+  /*
+   * `--success` / `--warning` are **fills**: charts, progress bars, badges. They are not legible as
+   * text on this theme — 3.40:1 and 2.54:1 on a card, measured, below AA's 4.5:1 — so copy uses the
+   * `-text` pair below. Separating the two roles is what lets the fills stay vivid without re-tinting
+   * every chart, which is why simply darkening `--success` was rejected.
+   */
   --success: oklch(0.62 0.15 155);
   --success-foreground: oklch(0.985 0 0);
   --warning: oklch(0.72 0.15 75);
   --warning-foreground: oklch(0.25 0.05 75);
+  /*
+   * Text-safe success/warning: same hue and chroma, lower lightness. Measured on this theme's card
+   * **and** on the `/12`–`/15` tint the copy actually sits inside, since the tint is the harder case —
+   * success 5.43:1 on card / 4.74:1 on tint; warning 5.62:1 / 4.92:1. Both clear AA.
+   */
+  --success-text: oklch(0.5 0.15 155);
+  --warning-text: oklch(0.52 0.15 75);
   --border: oklch(0.9 0.01 275);
   --input: oklch(0.9 0.01 275);
   --ring: oklch(0.52 0.19 276);
@@ -116,6 +131,13 @@
   --success-foreground: oklch(0.17 0.015 275);
   --warning: oklch(0.78 0.14 75);
   --warning-foreground: oklch(0.2 0.03 75);
+  /*
+   * On this theme the fills are already legible as text — success 7.05:1 on card / 5.01:1 on tint,
+   * warning 8.70:1 / 5.87:1 — so the text tokens alias them rather than introducing a second value
+   * that would have to be kept in step.
+   */
+  --success-text: var(--success);
+  --warning-text: var(--warning);
   --border: oklch(1 0 0 / 12%);
   --input: oklch(1 0 0 / 16%);
   --ring: oklch(0.68 0.16 276);
@@ -156,6 +178,13 @@
     --success-foreground: oklch(0.17 0.015 275);
     --warning: oklch(0.78 0.14 75);
     --warning-foreground: oklch(0.2 0.03 75);
+    /*
+     * On this theme the fills are already legible as text — success 7.05:1 on card / 5.01:1 on tint,
+     * warning 8.70:1 / 5.87:1 — so the text tokens alias them rather than introducing a second value
+     * that would have to be kept in step.
+     */
+    --success-text: var(--success);
+    --warning-text: var(--warning);
     --border: oklch(1 0 0 / 12%);
     --input: oklch(1 0 0 / 16%);
     --ring: oklch(0.68 0.16 276);

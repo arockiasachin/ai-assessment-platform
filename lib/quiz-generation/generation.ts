@@ -16,6 +16,7 @@ import { QuizGenerationError } from "./errors"
 import { toQuestionMetadata, type GeneratedQuestionProvenance } from "./metadata"
 import { parseGeneratedQuestions } from "./parsing"
 import { distributePointsAcrossQuestions, pointsSumToMarks } from "./points"
+import { parseSubtopicVocabulary, resolveVocabulary } from "./vocabulary"
 import { QUIZ_GENERATION_PROMPT_VERSION, buildQuizGenerationPrompt } from "./prompt"
 import { retrieveTopicMaterial } from "./retrieval"
 import { serializeQuestionForTeacher } from "./serialize"
@@ -199,11 +200,40 @@ export async function generateQuizDraftsForTeacher(
     { provider: embeddingProvider, limit: request.retrievalLimit },
   )
 
+  /*
+   * Resolve the course's subtopic vocabulary.
+   *
+   * Without one, `Question.subtopic` is invented per request: two generations on the same course
+   * produce disjoint tags, and `slope` / `Slope` / `gradient & intercept` count as three unrelated
+   * topics with nothing recording that they mean one thing. `lib/analytics/subtopics.ts` refuses to
+   * merge them — that would invent a taxonomy — so the remedy is a declared list.
+   *
+   * **Naming tags on the request declares them.** The form already takes subtopics, so a teacher
+   * supplying them is defining the course's vocabulary rather than offering a hint the next request
+   * cannot see. Without this the list could only be set through a separate editor, and the tags they
+   * had already typed would be discarded.
+   */
+  const course = await prisma.course.findUnique({
+    where: { id: owned.courseId },
+    select: { subtopicVocabulary: true },
+  })
+  const { vocabulary, declared } = resolveVocabulary({
+    requested: request.subtopics ?? [],
+    stored: parseSubtopicVocabulary(course?.subtopicVocabulary),
+  })
+  if (declared) {
+    await prisma.course.update({
+      where: { id: owned.courseId },
+      data: { subtopicVocabulary: vocabulary },
+    })
+  }
+
   const messages = buildQuizGenerationPrompt({
     topic: request.topic,
     questionCount: request.questionCount,
     difficulty: request.difficulty,
     subtopics: request.subtopics ?? [],
+    vocabulary,
     sources: retrieval.hits.map((hit) => ({
       chunkId: hit.chunkId,
       materialTitle: hit.materialTitle,

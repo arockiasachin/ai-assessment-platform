@@ -120,22 +120,39 @@ model StaffProfile {
 }
 
 model Course {
-  id          String           @id @default(cuid())
-  code        String           @unique
-  name        String
-  description String?
-  credits     Int              @default(3)
+  id                 String           @id @default(cuid())
+  code               String           @unique
+  name               String
+  description        String?
+  credits            Int              @default(3)
   // Which VIT grading regime this course uses. **Nullable, and null is not "theory".**
   // The platform cannot infer a course's category from its data, so an unset value falls
   // back to absolute bands with a notice asking for it — guessing `THEORY` would silently
   // put a laboratory course on relative bands, which is the failure this column exists to
   // prevent. See `resolveRegimeForCourse`.
-  category    CourseCategory?
-  createdAt   DateTime         @default(now())
-  updatedAt   DateTime         @updatedAt
-  offerings   CourseOffering[]
-  assessments Assessment[]
-  materials   Material[]
+  category           CourseCategory?
+  // The course's **canonical subtopic vocabulary** — the controlled list question tags are drawn
+  // from. A JSON array of strings.
+  //
+  // `Question.subtopic` is model-generated free text with no constraint beyond
+  // `trim/min(1)/max(200)`, so without a list the model invents a fresh set on every request: two
+  // generations on one course produce disjoint tags, and `slope` / `Slope` / `gradient & intercept`
+  // become three separate topics with nothing recording that they mean one thing.
+  // `lib/analytics/subtopics.ts` refuses to merge them — silently merging would invent a taxonomy —
+  // so the remedy has to be a declared vocabulary rather than a normalisation heuristic.
+  //
+  // JSON rather than a tag table because it is read and written whole, has no relations, and a join
+  // table would buy queryability nothing asks for. Same reasoning as
+  // `CourseOffering.analyticsSettings`; needing to group by tag is the trigger to promote it.
+  //
+  // **Null means undeclared.** Generation is then unconstrained, exactly as before, and the reader
+  // reports every tag as outside the vocabulary rather than pretending a list exists.
+  subtopicVocabulary Json?
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
+  offerings          CourseOffering[]
+  assessments        Assessment[]
+  materials          Material[]
 }
 
 model ClassRoom {

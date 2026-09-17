@@ -34,19 +34,38 @@ to `dev` in `ebeaa1a`), or deferred with rationale.
 | P2  | Client fetch on mount         | Medium   | `student-assessments-view.tsx:120`, `teacher-submissions-manager.tsx:121`                                                                                                                                                                                                                                                          | Data is fetched after mount even though the wrapping pages are async Server Components that could pass `initialX` props.                                                                                              | Deferred. Same reason as P1: converting these large stateful views to server-seeded props is a non-trivial refactor.                              | deferred |
 | P3  | Loading/error boundaries      | Medium   | `app/(dashboard)/` had no `loading.tsx` or `error.tsx`                                                                                                                                                                                                                                                                             | Navigating to a slow/erroring dashboard route blocked with no fallback and fell through to the framework error screen.                                                                                                | Added `app/(dashboard)/loading.tsx` (announced placeholder) and `app/(dashboard)/error.tsx` (retry button).                                       | fixed    |
 
-## Deferred: token-level text contrast
+## Resolved: token-level text contrast
 
-`--success` and `--warning` are tuned as **fills** (charts, progress, badges) but are also used as
-**text** in a few places, where they fail AA on the light background:
+**Fixed** by splitting the fill role from the text role, which is what made this a design decision
+rather than a mechanical one. `--success` and `--warning` remain the vivid fills that charts, progress
+bars and badges depend on; two new tokens carry text. See the table below for what was measured.
 
 | Token                         | Usage                                                               | Light contrast               | Verdict |
 | ----------------------------- | ------------------------------------------------------------------- | ---------------------------- | ------- |
 | `--success` (`0.62 0.15 155`) | `text-success` on card (quiz-runner results), `bg-success/12` chips | 3.40:1 (white), 2.9:1 (tint) | fail    |
 | `--warning` (`0.72 0.15 75`)  | `text-warning` on `bg-warning/15` (stat icons)                      | 2.54:1 (white), 2.2:1 (tint) | fail    |
 
-These are used mostly as decorative fills/icons (which are exempt or need only 3:1) or as redundant
-labels, and retuning the shared tokens would visibly re-tint charts and progress bars. Changing them
-is a design decision, not a mechanical fix, so it is deferred — see "needs a human decision".
+**Why not simply darken the tokens.** Dropping `--success` to the lightness that clears AA as text
+would re-tint every chart and progress bar in the app — the two roles genuinely pull in opposite
+directions, so one token cannot serve both.
+
+**The fix.** `--success-text` / `--warning-text` are declared in `app/globals.css` alongside the fills,
+with the measurements recorded inline, and mapped through `@theme inline` so `text-success-text` is a
+real utility. On the light theme they are the same hue and chroma at lower lightness; on the dark theme
+they alias the fills, which are already legible there.
+
+Contrast was **computed** (OKLCH → sRGB → WCAG relative luminance) rather than estimated, and checked
+against the `/12`–`/15` tint the copy actually sits inside, since the tint is the harder case:
+
+| Token                        | On card | On its tint | AA  |
+| ---------------------------- | ------- | ----------- | --- |
+| `--success-text` `0.50 …155` | 5.43:1  | 4.74:1      | ✅  |
+| `--warning-text` `0.52 …75`  | 5.62:1  | 4.92:1      | ✅  |
+| `--success` (dark theme)     | 7.05:1  | 5.01:1      | ✅  |
+| `--warning` (dark theme)     | 8.70:1  | 5.87:1      | ✅  |
+
+Re-measured from the **compiled** hex values as a cross-check (`#007840`, `#8e5e00`): 5.58:1 / 4.86:1
+and 5.60:1 / 4.94:1. Both methods agree with margin.
 
 ## Checked and found acceptable
 
