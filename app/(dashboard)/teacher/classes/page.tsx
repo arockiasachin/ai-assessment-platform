@@ -5,7 +5,7 @@ import { RoleGuard } from "@/components/role-guard"
 import { AppShell, PageHeader } from "@/components/shell"
 import { TeacherRosterTable } from "@/components/teacher-roster-table"
 import { getSessionUser } from "@/lib/auth"
-import { listRosterForTeacher } from "@/lib/teacher-roster"
+import { getRosterContextForTeacher, listRosterForTeacher } from "@/lib/teacher-roster"
 import { initialsFromEmail, roleLabelFromRole } from "@/lib/user-identity"
 
 export const dynamic = "force-dynamic"
@@ -32,7 +32,10 @@ export default async function TeacherClassesPage() {
   const user = await getSessionUser()
   if (!user || user.role !== "teacher") redirect("/login")
 
-  const rows = await listRosterForTeacher(user)
+  const [rows, context] = await Promise.all([
+    listRosterForTeacher(user),
+    getRosterContextForTeacher(user),
+  ])
 
   return (
     <RoleGuard role="teacher">
@@ -51,7 +54,7 @@ export default async function TeacherClassesPage() {
           title="Classes"
           description="The enrolled students in your offerings, with their team, released-mark average and hand-ins. Enrollment limits and registration windows live under Offerings."
         />
-        <TeacherRosterTable rows={rows} />
+        <TeacherRosterTable rows={rows} students={context.students} offerings={context.offerings} />
       </AppShell>
     </RoleGuard>
   )

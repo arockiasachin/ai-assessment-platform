@@ -68,6 +68,45 @@ export type CohortOptions = {
   passThreshold?: number
 }
 
+/**
+ * One assessment's mark population, built from its two possible sources.
+ *
+ * TN-3 / TL-3: a per-assessment summary used to read `QuizAttempt` rows only, so an assessment
+ * whose marks are **manual** (`Grade` rows, no attempt — the seeded M.Tech sets) reported
+ * `attemptCount: 0` and `average: null` on a page that simultaneously reported the released
+ * marks. The two surfaces disagreed about the same class.
+ *
+ * A quiz can have both: a finalized attempt produces a pending `GradeReview`, and the release of
+ * that grade writes a published `Grade` against the same student. The union is by **student**,
+ * and a released `Grade` wins over the attempt percentage, because it is the mark the course
+ * actually awarded — the attempt is the un-released draft behind it.
+ *
+ * Returns one score per distinct student, id-ordered so the result is deterministic.
+ */
+export function mergeAssessmentScorePopulation(input: {
+  /** studentId → percentage from that student's latest finalized graded attempt. */
+  attemptPercentages: ReadonlyMap<string, number>
+  /** studentId → percentage from a published `Grade` on the same assessment. */
+  publishedPercentages: ReadonlyMap<string, number>
+}): CohortScore[] {
+  const studentIds = new Set<string>([
+    ...input.attemptPercentages.keys(),
+    ...input.publishedPercentages.keys(),
+  ])
+  const scores: CohortScore[] = []
+  for (const studentId of [...studentIds].sort()) {
+    // Prefer the released mark, but fall back to the attempt when the grade's own numbers are
+    // unusable (a null `maxPoints` can make it non-finite). A corrupt grade must not erase a
+    // valid attempt from the count.
+    const candidate = input.publishedPercentages.get(studentId)
+    const fallback = input.attemptPercentages.get(studentId)
+    const percentage = candidate !== undefined && Number.isFinite(candidate) ? candidate : fallback
+    if (percentage === undefined || !Number.isFinite(percentage)) continue
+    scores.push({ studentId, percentage })
+  }
+  return scores
+}
+
 export function averagePercentage(scores: readonly CohortScore[]): number | null {
   if (scores.length === 0) return null
   const total = scores.reduce((sum, score) => sum + score.percentage, 0)

@@ -2,11 +2,13 @@ import "server-only"
 
 import { releasedAssessmentWhere } from "@/lib/assessment-visibility"
 import type { AssessmentType } from "@/lib/generated/prisma/enums"
-import type { CreateAssessmentRequest } from "@/lib/contracts"
+import type { CreateAssessmentRequest, UpdateAssessmentRequest } from "@/lib/contracts"
+import { writeAuditLog } from "@/lib/grading/audit"
 import { prisma } from "@/lib/prisma"
 import { recordManualMark } from "@/lib/grading/review-service"
 import { quizDeliveryStatus } from "@/lib/quiz-attempts/metadata"
 import type { AuthUser } from "@/lib/session"
+import { teacherOwnsAssessment } from "@/lib/teacher-staff"
 import {
   markKey,
   toAssessmentScale,
@@ -563,6 +565,34 @@ export async function upsertAssessmentGrade(
   })
 }
 
+/**
+ * The natural key two "identical" create requests share.
+ *
+ * The contract has no idempotency-key field, so identity has to come from the request itself:
+ * the same teacher, offering, title, kind, due date and ceiling. Two concurrent submissions of
+ * the same form are a double-click or a retry; treating them as one assessment is what stops the
+ * indistinguishable duplicate the audit found (TN-55). A teacher who genuinely wants a second
+ * assessment varies one of these (usually the title).
+ */
+function assessmentCreationLockKey(input: {
+  staffId: string
+  offeringId: string
+  title: string
+  type: string
+  date: string
+  maxMarks: number
+}): string {
+  return [
+    "assessment-create",
+    input.staffId,
+    input.offeringId,
+    input.title.trim().toLowerCase(),
+    input.type,
+    input.date,
+    String(input.maxMarks),
+  ].join(":")
+}
+
 export async function createAssessmentForSessionUser(
   input: {
     title: string
@@ -573,7 +603,7 @@ export async function createAssessmentForSessionUser(
     maxMarks: number
   },
   sessionUser: AuthUser,
-) {
+): Promise<Assessment & { created: boolean }> {
   if (sessionUser.role !== "teacher") {
     throw new Error("Forbidden")
   }
@@ -594,13 +624,44 @@ export async function createAssessmentForSessionUser(
     throw new Error("Offering not found or not owned by you.")
   }
 
-  const created = await prisma.$transaction(async (tx) => {
+  const title = input.title.trim()
+  const dueDate = new Date(input.date)
+  const lockKey = assessmentCreationLockKey({
+    staffId: staff.id,
+    offeringId: offering.id,
+    title,
+    type: input.type,
+    date: input.date,
+    maxMarks: input.maxMarks,
+  })
+
+  const result = await prisma.$transaction(async (tx) => {
+    // Serialize identical creates, then check-then-insert inside the lock. Without the
+    // lock the check is a race: two requests both find nothing and both insert, which is
+    // exactly the TN-55 reproduction. The lock is per natural key, so distinct creates
+    // still run in parallel. `hashtextextended` maps the key to the bigint the advisory
+    // lock takes; a hash collision only costs a little serialization.
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${lockKey}, 0))`
+
+    const existing = await tx.assessment.findFirst({
+      where: {
+        offeringId: offering.id,
+        createdById: staff.id,
+        title,
+        type: input.type,
+        dueDate,
+        maxMarks: input.maxMarks,
+      },
+      include: { course: true },
+    })
+    if (existing) return { row: existing, created: false }
+
     const assessment = await tx.assessment.create({
       data: {
-        title: input.title.trim(),
+        title,
         // Identity: the request carries the enum's own vocabulary (see the contract).
         type: input.type,
-        dueDate: new Date(input.date),
+        dueDate,
         maxMarks: input.maxMarks,
         offeringId: offering.id,
         courseId: offering.courseId,
@@ -625,20 +686,316 @@ export async function createAssessmentForSessionUser(
       },
     })
 
-    return assessment
+    await writeAuditLog(tx, {
+      entityType: "Assessment",
+      entityId: assessment.id,
+      action: "assessment.created",
+      actor: { id: sessionUser.id, role: sessionUser.role },
+      after: {
+        offeringId: offering.id,
+        title: assessment.title,
+        type: assessment.type,
+        dueDate: assessment.dueDate.toISOString(),
+        maxMarks: assessment.maxMarks,
+      },
+    })
+
+    return { row: assessment, created: true }
   })
 
   return {
-    id: created.id,
-    title: created.title,
-    courseId: created.courseId,
-    courseName: created.course.name,
-    type: created.type,
-    date: created.dueDate.toISOString().slice(0, 10),
-    maxMarks: created.maxMarks,
-    offeringId: created.offeringId,
-    classId: created.classId,
-  } as Assessment
+    id: result.row.id,
+    title: result.row.title,
+    courseId: result.row.courseId,
+    courseName: result.row.course.name,
+    type: result.row.type,
+    date: result.row.dueDate.toISOString().slice(0, 10),
+    maxMarks: result.row.maxMarks,
+    offeringId: result.row.offeringId,
+    classId: result.row.classId,
+    created: result.created,
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Assessment registry: list, edit and delete (TN-39)
+//
+// The create form produced a bare `Assessment` row and nothing in the app could list, rename or
+// remove one. These three are that missing write path. The row shape carries what each kind's
+// authoring surface needs to link to, plus a completeness signal ("a QUIZ with no questions"),
+// so the page can say what still has to be authored instead of pretending the row is finished.
+// ---------------------------------------------------------------------------
+
+export type TeacherAssessmentRow = {
+  id: string
+  title: string
+  type: AssessmentType
+  dueDate: string
+  maxMarks: number
+  offeringId: string
+  offeringLabel: string
+  courseName: string
+  className: string
+  releasedAt: string | null
+  /** Questions authored on the modern store, drafts and published. */
+  questionCount: number
+  publishedQuestionCount: number
+  hasRubric: boolean
+  hasCodeTask: boolean
+  /** Published marks recorded against this assessment. */
+  gradedCount: number
+  submissionCount: number
+}
+
+const ASSESSMENT_REGISTRY_SELECT = {
+  id: true,
+  title: true,
+  type: true,
+  dueDate: true,
+  maxMarks: true,
+  offeringId: true,
+  releasedAt: true,
+  course: { select: { code: true, name: true } },
+  offering: {
+    select: {
+      term: true,
+      academicYear: true,
+      classRoom: { select: { name: true, section: true } },
+    },
+  },
+  questions: { select: { status: true } },
+  rubric: { select: { id: true } },
+  codeTask: { select: { id: true } },
+  _count: { select: { submissions: true, finalGrades: true } },
+} as const
+
+type AssessmentRegistryRecord = {
+  id: string
+  title: string
+  type: AssessmentType
+  dueDate: Date
+  maxMarks: number
+  offeringId: string
+  releasedAt: Date | null
+  course: { code: string; name: string }
+  offering: {
+    term: string
+    academicYear: number
+    classRoom: { name: string; section: string | null }
+  }
+  questions: Array<{ status: string | null }>
+  rubric: { id: string } | null
+  codeTask: { id: string } | null
+  _count: { submissions: number; finalGrades: number }
+}
+
+function toTeacherAssessmentRow(record: AssessmentRegistryRecord): TeacherAssessmentRow {
+  const room = record.offering.classRoom.section
+    ? `${record.offering.classRoom.name} ${record.offering.classRoom.section}`
+    : record.offering.classRoom.name
+  return {
+    id: record.id,
+    title: record.title,
+    type: record.type,
+    dueDate: record.dueDate.toISOString(),
+    maxMarks: record.maxMarks,
+    offeringId: record.offeringId,
+    offeringLabel: `${record.course.code} · ${record.course.name} — ${room} · ${record.offering.academicYear} ${record.offering.term}`,
+    courseName: record.course.name,
+    className: room,
+    releasedAt: record.releasedAt?.toISOString() ?? null,
+    questionCount: record.questions.length,
+    publishedQuestionCount: record.questions.filter((question) => question.status === "published")
+      .length,
+    hasRubric: record.rubric !== null,
+    hasCodeTask: record.codeTask !== null,
+    gradedCount: record._count.finalGrades,
+    submissionCount: record._count.submissions,
+  }
+}
+
+/** Every assessment the caller created or teaches, with its authoring completeness. */
+export async function listAssessmentsForSessionUser(
+  sessionUser: AuthUser,
+): Promise<TeacherAssessmentRow[]> {
+  if (sessionUser.role !== "teacher") return []
+  const staff = await prisma.staffProfile.findUnique({ where: { userId: sessionUser.id } })
+  if (!staff) return []
+
+  const assessments = await prisma.assessment.findMany({
+    where: {
+      OR: [{ createdById: staff.id }, { offering: { teacherId: staff.id } }],
+    },
+    select: ASSESSMENT_REGISTRY_SELECT,
+    orderBy: { dueDate: "desc" },
+    take: 500,
+  })
+  return assessments.map(toTeacherAssessmentRow)
+}
+
+/** A write-path failure carrying the HTTP status the registry routes return. */
+export class AssessmentWriteError extends Error {
+  constructor(
+    readonly status: 400 | 403 | 404 | 409,
+    message: string,
+  ) {
+    super(message)
+    this.name = "AssessmentWriteError"
+  }
+}
+
+type OwnedAssessmentRecord = {
+  id: string
+  title: string
+  createdById: string
+  offeringId: string
+  offering: { teacherId: string } | null
+}
+
+async function loadOwnedAssessmentForWrite(
+  sessionUser: AuthUser,
+  assessmentId: string,
+): Promise<OwnedAssessmentRecord> {
+  if (sessionUser.role !== "teacher") throw new AssessmentWriteError(403, "Forbidden")
+  const staff = await prisma.staffProfile.findUnique({ where: { userId: sessionUser.id } })
+  if (!staff) throw new AssessmentWriteError(403, "Staff profile missing")
+
+  const assessment = await prisma.assessment.findUnique({
+    where: { id: assessmentId },
+    select: {
+      id: true,
+      title: true,
+      createdById: true,
+      offeringId: true,
+      offering: { select: { teacherId: true } },
+    },
+  })
+  if (!assessment) throw new AssessmentWriteError(404, "Assessment not found")
+  if (!teacherOwnsAssessment(assessment, staff.id)) {
+    throw new AssessmentWriteError(403, "Forbidden")
+  }
+  return assessment
+}
+
+/**
+ * Rename an assessment or move its deadline. `maxMarks` is accepted only while the assessment
+ * has no marks and no submissions: changing the ceiling of a graded assessment would rescale
+ * nothing (each `Grade` stores its own `maxPoints`) while making the column disagree with it.
+ */
+export async function updateAssessmentForSessionUser(
+  sessionUser: AuthUser,
+  assessmentId: string,
+  input: UpdateAssessmentRequest,
+): Promise<TeacherAssessmentRow> {
+  await loadOwnedAssessmentForWrite(sessionUser, assessmentId)
+
+  if (input.maxMarks !== undefined) {
+    const [gradeCount, submissionCount] = await Promise.all([
+      prisma.grade.count({ where: { assessmentId } }),
+      prisma.submission.count({ where: { assessmentId } }),
+    ])
+    if (gradeCount > 0 || submissionCount > 0) {
+      throw new AssessmentWriteError(
+        409,
+        "Max marks cannot change once the assessment has marks or submissions. Create a new assessment instead.",
+      )
+    }
+  }
+
+  await prisma.$transaction(async (tx) => {
+    const before = await tx.assessment.findUniqueOrThrow({
+      where: { id: assessmentId },
+      select: { title: true, dueDate: true, maxMarks: true },
+    })
+    const updated = await tx.assessment.update({
+      where: { id: assessmentId },
+      data: {
+        ...(input.title !== undefined ? { title: input.title.trim() } : {}),
+        ...(input.date !== undefined ? { dueDate: new Date(input.date) } : {}),
+        ...(input.maxMarks !== undefined ? { maxMarks: input.maxMarks } : {}),
+      },
+      select: ASSESSMENT_REGISTRY_SELECT,
+    })
+    // The due calendar event mirrors the deadline. Without this an edited assessment's
+    // event kept the old date, so the planner and the assessment disagreed (the same
+    // shape as TN-25's stale-event family).
+    if (input.date !== undefined) {
+      await tx.calendarEvent.updateMany({
+        where: { assessmentId },
+        data: { startAt: new Date(input.date), title: updated.title },
+      })
+    }
+    await writeAuditLog(tx, {
+      entityType: "Assessment",
+      entityId: assessmentId,
+      action: "assessment.edited",
+      actor: { id: sessionUser.id, role: sessionUser.role },
+      before: {
+        title: before.title,
+        dueDate: before.dueDate.toISOString(),
+        maxMarks: before.maxMarks,
+      },
+      after: {
+        title: updated.title,
+        dueDate: updated.dueDate.toISOString(),
+        maxMarks: updated.maxMarks,
+      },
+    })
+    return updated
+  })
+
+  const refreshed = await prisma.assessment.findUniqueOrThrow({
+    where: { id: assessmentId },
+    select: ASSESSMENT_REGISTRY_SELECT,
+  })
+  return toTeacherAssessmentRow(refreshed)
+}
+
+/**
+ * Delete an assessment the caller owns, with its calendar event.
+ *
+ * Refuses once student work or a released mark exists: the audit's complaint was that a *bare*
+ * row could not be removed, and erasing a graded assessment would destroy the academic record.
+ * A bare row — no questions, rubric, task, submission or grade — deletes cleanly and cascades
+ * its children.
+ */
+export async function deleteAssessmentForSessionUser(
+  sessionUser: AuthUser,
+  assessmentId: string,
+): Promise<{ id: string; title: string }> {
+  const assessment = await loadOwnedAssessmentForWrite(sessionUser, assessmentId)
+
+  const [gradeCount, submissionCount, attemptCount] = await Promise.all([
+    prisma.grade.count({ where: { assessmentId } }),
+    prisma.submission.count({ where: { assessmentId } }),
+    prisma.quizAttempt.count({ where: { assessmentId } }),
+  ])
+  if (gradeCount > 0 || submissionCount > 0 || attemptCount > 0) {
+    throw new AssessmentWriteError(
+      409,
+      "This assessment has student work or marks and cannot be deleted. Archive it by leaving it unreleased.",
+    )
+  }
+
+  const removed = await prisma.$transaction(async (tx) => {
+    // `CalendarEvent.assessmentId` is `onDelete: SetNull`, so a cascade would leave the due
+    // event behind with no assessment and visible to every student. Remove it explicitly.
+    await tx.calendarEvent.deleteMany({ where: { assessmentId } })
+    const row = await tx.assessment.delete({
+      where: { id: assessmentId },
+      select: { id: true, title: true },
+    })
+    await writeAuditLog(tx, {
+      entityType: "Assessment",
+      entityId: assessmentId,
+      action: "assessment.deleted",
+      actor: { id: sessionUser.id, role: sessionUser.role },
+      before: { title: assessment.title, offeringId: assessment.offeringId },
+    })
+    return row
+  })
+
+  return removed
 }
 
 type ParsedQuizQuestion = {

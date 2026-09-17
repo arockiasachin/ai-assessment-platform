@@ -3,8 +3,10 @@ import { redirect } from "next/navigation"
 
 import { RoleGuard } from "@/components/role-guard"
 import { AppShell, PageHeader } from "@/components/shell"
+import { TeacherAssessmentRegistry } from "@/components/teacher-assessment-registry"
 import { TeacherAssignmentsManager } from "@/components/teacher-assignments-manager"
 import { getSessionUser } from "@/lib/auth"
+import { listAssessmentsForSessionUser } from "@/lib/gradebook-db"
 import { listSubmissionsForTeacher } from "@/lib/teacher-submissions"
 import { initialsFromEmail, roleLabelFromRole } from "@/lib/user-identity"
 
@@ -31,7 +33,10 @@ export default async function TeacherAssignmentsPage() {
    * page-level payload — which is why this conversion was deferred while its sibling
    * `student/assessments` was done during the Wave 1 port.
    */
-  const submissionRows = await listSubmissionsForTeacher(user)
+  const [submissionRows, assessmentRows] = await Promise.all([
+    listSubmissionsForTeacher(user),
+    listAssessmentsForSessionUser(user),
+  ])
 
   return (
     <RoleGuard role="teacher">
@@ -50,6 +55,9 @@ export default async function TeacherAssignmentsPage() {
           description="Create assignments manually or import quiz assessments from JSON."
         />
         <TeacherAssignmentsManager submissionRows={submissionRows} />
+        <div className="mt-6">
+          <TeacherAssessmentRegistry rows={assessmentRows} />
+        </div>
       </AppShell>
     </RoleGuard>
   )

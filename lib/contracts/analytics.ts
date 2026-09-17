@@ -199,7 +199,11 @@ export const analyticsAssessmentSummarySchema = z.object({
   type: z.string(),
   dueDate: z.string(),
   maxMarks: z.number(),
-  /** Students with a finalized (submitted or graded) attempt. */
+  /**
+   * Distinct students with a mark for this assessment: a finalized (submitted or graded)
+   * attempt **or** a released `Grade`. A manual mark with no attempt is a mark, so the count
+   * and the average must include it (TN-3 / TL-3).
+   */
   attemptCount: z.number().int(),
   average: z.number().nullable(),
   passRate: z.number().nullable(),

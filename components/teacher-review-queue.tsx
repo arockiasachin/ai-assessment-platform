@@ -4,6 +4,8 @@ import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { Check, Flag, RefreshCw, SlidersHorizontal, Sparkles, X } from "lucide-react"
 
+import { TeacherQuizAttemptEvidence } from "@/components/teacher-quiz-attempt-evidence"
+import { TeacherRubricDetail } from "@/components/teacher-rubric-detail"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -302,6 +304,24 @@ export function TeacherReviewQueue({
                     {item.submission.contentText?.trim() || "No text submitted."}
                   </p>
                 </div>
+
+                {/*
+                  The two orphaned reads (TN-37, TN-52). The rubric detail gives the criterion
+                  descriptors an override is judged against; the attempt evidence gives an
+                  auto-scored quiz's per-question outcome with the answer key. Both fetch on
+                  demand — a twenty-item queue makes no extra request until a teacher opens one.
+                */}
+                <div className="grid gap-2 sm:grid-cols-2">
+                  <TeacherRubricDetail
+                    assessmentId={item.assessment.id}
+                    studentId={item.student.id}
+                  />
+                  <TeacherQuizAttemptEvidence
+                    assessmentId={item.assessment.id}
+                    studentId={item.student.id}
+                  />
+                </div>
+
                 {item.suggestions.length === 0 && (
                   <p className="text-sm text-muted-foreground">
                     No per-criterion suggestions recorded yet.

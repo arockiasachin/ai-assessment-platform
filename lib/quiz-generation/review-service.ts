@@ -184,6 +184,44 @@ export async function editGeneratedQuestionForTeacher(
   return serializeQuestionForTeacher(updated)
 }
 
+/**
+ * Delete a **draft** generated question (TN-42).
+ *
+ * Published questions stay immutable — that rule is deliberate, and reversing it would let a
+ * question's prompt or weight change under attempts that were scored against the old version
+ * (each attempt stores its own `maxScore`, so the divergence would be silent rather than
+ * corrected). A draft has never been delivered and has no responses, so removing one is the
+ * write path the audit found missing: a bad generation can be discarded instead of becoming
+ * permanent. A published question is refused with the reason, not silently ignored.
+ */
+export async function deleteGeneratedQuestionForTeacher(
+  user: AuthUser,
+  questionId: string,
+): Promise<void> {
+  const question = await loadGeneratedQuestion(user, questionId)
+  if (resolveGenerationStatus(question) === "published") {
+    throw new QuizGenerationError(
+      409,
+      "Published questions cannot be deleted. A question students have answered is part of the record.",
+    )
+  }
+
+  await prisma.$transaction(async (tx) => {
+    await tx.question.delete({ where: { id: questionId } })
+    await writeAuditLog(tx, {
+      entityType: "Question",
+      entityId: questionId,
+      action: "quiz_question.deleted",
+      actor: { id: user.id, role: user.role },
+      before: {
+        assessmentId: question.assessmentId,
+        order: question.order,
+        status: "draft",
+      },
+    })
+  })
+}
+
 export type PublishOutcome = {
   published: GeneratedQuestionResponse[]
   alreadyPublished: string[]

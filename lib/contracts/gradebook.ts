@@ -39,6 +39,35 @@ export const createAssessmentRequestSchema = z.object({
 })
 export type CreateAssessmentRequest = z.infer<typeof createAssessmentRequestSchema>
 
+/**
+ * `PATCH /api/gradebook/assessments/[assessmentId]` request body.
+ *
+ * `type` is deliberately not editable. Flipping a QUIZ that already has questions into an
+ * ASSIGNMENT (or a CODE assessment with a code task into a quiz) is not a rename — it changes
+ * what the assessment's children mean. A mis-kinded assessment is deleted and re-created while
+ * it is still bare. `maxMarks` is accepted here but the service refuses it once marks exist,
+ * because a changed ceiling would silently rescale recorded results.
+ */
+export const updateAssessmentRequestSchema = z
+  .object({
+    title: nonEmptyString.optional(),
+    date: parseableDateString.optional(),
+    maxMarks: z.coerce
+      .number()
+      .int()
+      .positive()
+      .max(1_000_000, "Max marks is too large.")
+      .optional(),
+  })
+  .refine(
+    (value) =>
+      value.title !== undefined || value.date !== undefined || value.maxMarks !== undefined,
+    {
+      message: "At least one field must be provided.",
+    },
+  )
+export type UpdateAssessmentRequest = z.infer<typeof updateAssessmentRequestSchema>
+
 /** `PUT /api/teacher/offerings/[offeringId]` request body. */
 export const updateOfferingRequestSchema = z.object({
   studentLimit: z.coerce.number().int().min(1).max(500),

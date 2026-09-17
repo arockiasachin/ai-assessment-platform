@@ -114,8 +114,15 @@ export function TeacherAnalyticsDashboard({
         }
         if (!response.ok) throw new Error(data.message ?? "Unable to load analytics.")
         setOverview(data)
+        // Item analysis reads `Question` rows, so prefer a marked quiz. Since a released
+        // manual `Grade` now counts as data too (TN-3 / TL-3), picking purely on
+        // `attemptCount > 0` could land on a group project with no questions to analyse.
         const firstWithData =
-          data.assessments.find((assessment) => assessment.attemptCount > 0) ?? data.assessments[0]
+          data.assessments.find(
+            (assessment) => assessment.attemptCount > 0 && assessment.type === "QUIZ",
+          ) ??
+          data.assessments.find((assessment) => assessment.attemptCount > 0) ??
+          data.assessments[0]
         if (firstWithData) {
           await loadItems(firstWithData.id)
         } else {

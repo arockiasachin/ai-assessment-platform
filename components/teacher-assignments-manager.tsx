@@ -1,6 +1,7 @@
 "use client"
 
 import { useMemo, useState } from "react"
+import { useRouter } from "next/navigation"
 import { BookOpenCheck, FileUp, ListChecks, PlusCircle, Sparkles } from "lucide-react"
 import { useGradebook } from "@/components/gradebook-provider"
 import { Button } from "@/components/ui/button"
@@ -34,6 +35,8 @@ type QuizImportResponse = {
 type AssignmentCreateResponse = {
   success: boolean
   message?: string
+  /** False when an identical assessment already existed (idempotent create). */
+  created?: boolean
 }
 
 function todayIsoDate() {
@@ -60,6 +63,7 @@ export function TeacherAssignmentsManager({
   submissionRows: TeacherSubmissionRow[]
 }) {
   const { offerings, refresh } = useGradebook()
+  const router = useRouter()
 
   const [offeringId, setOfferingId] = useState("")
   const [assignmentTitle, setAssignmentTitle] = useState("")
@@ -131,11 +135,17 @@ export function TeacherAssignmentsManager({
         return
       }
 
-      setMessage("Assignment created.")
+      setMessage(
+        data.created === false
+          ? "An identical assessment already existed — nothing was duplicated."
+          : "Assessment created. Add its questions, rubric or code task below.",
+      )
       setAssignmentTitle("")
       setAssignmentDate(todayIsoDate())
       setAssignmentMaxMarks("50")
       await refresh()
+      // Re-run the server component so the registry list below reflects the new row.
+      router.refresh()
     } catch {
       setError("Unable to create assignment.")
     } finally {

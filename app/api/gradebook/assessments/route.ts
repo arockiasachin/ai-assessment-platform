@@ -3,7 +3,29 @@ import { NextResponse } from "next/server"
 import { jsonError, parseJsonBody } from "@/lib/api"
 import { requireRole } from "@/lib/authz"
 import { createAssessmentRequestSchema } from "@/lib/contracts"
-import { createAssessmentForSessionUser } from "@/lib/gradebook-db"
+import { createAssessmentForSessionUser, listAssessmentsForSessionUser } from "@/lib/gradebook-db"
+
+export const dynamic = "force-dynamic"
+
+/**
+ * `GET /api/gradebook/assessments` — the caller's assessments, with authoring completeness.
+ *
+ * `POST` — create one. Idempotent on the request's natural key (offering, title, kind, date,
+ * ceiling): two concurrent identical submissions create one row and both return it, rather
+ * than the indistinguishable duplicate TN-55 found.
+ */
+export async function GET() {
+  const auth = await requireRole("teacher")
+  if (!auth.authorized) return auth.response
+
+  try {
+    const assessments = await listAssessmentsForSessionUser(auth.user)
+    return NextResponse.json({ success: true, assessments })
+  } catch (error) {
+    console.error("List assessments error:", error)
+    return jsonError("Unable to list assessments.", 500)
+  }
+}
 
 export async function POST(request: Request) {
   const auth = await requireRole("teacher")
@@ -14,7 +36,7 @@ export async function POST(request: Request) {
 
   try {
     const assessment = await createAssessmentForSessionUser(parsed.data, auth.user)
-    return NextResponse.json({ success: true, assessment })
+    return NextResponse.json({ success: true, assessment, created: assessment.created })
   } catch (error) {
     const message = error instanceof Error ? error.message : ""
     if (message === "Forbidden") return jsonError(message, 403)

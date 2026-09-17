@@ -21,7 +21,12 @@ import {
 } from "./alerts"
 import { FINALIZED_STATUSES, GRADED } from "@/lib/quiz-attempts/kinds"
 import { getRetakeStateForStudent, type RetakeState } from "@/lib/quiz-attempts/retake-state"
-import { buildCohortDistribution, type CohortDistribution, type CohortScore } from "./cohort"
+import {
+  buildCohortDistribution,
+  mergeAssessmentScorePopulation,
+  type CohortDistribution,
+  type CohortScore,
+} from "./cohort"
 import { gatherRegimeInputs } from "./grading-regime"
 import { buildRosterForOffering } from "./at-risk"
 import { buildTrendForOffering } from "./trend"
@@ -157,15 +162,34 @@ export async function getTeacherAnalyticsOverview(
           responses: { select: { questionId: true, isCorrect: true, pointsAwarded: true } },
         },
       },
+      // Manual marks have no `QuizAttempt` at all, and the released `Grade` is the only
+      // record of them. Without this the per-assessment Mean ignored them while the same
+      // payload's trend/at-risk/regime reads counted them (TN-3 / TL-3).
+      finalGrades: {
+        where: { publishedAt: { not: null } },
+        select: { studentId: true, points: true, maxPoints: true },
+      },
     },
   })
 
   const summaries: AnalyticsAssessmentSummary[] = assessments.map((assessment) => {
     const latest = selectLatestAttempts(assessment.quizAttempts)
-    const scores: CohortScore[] = latest.map((attempt) => ({
-      studentId: attempt.studentId,
-      percentage: attemptPercentage(attempt, assessment.maxMarks),
-    }))
+    const attemptPercentages = new Map(
+      latest.map((attempt) => [attempt.studentId, attemptPercentage(attempt, assessment.maxMarks)]),
+    )
+    const publishedPercentages = new Map<string, number>()
+    for (const grade of assessment.finalGrades) {
+      const points = toNumber(grade.points)
+      const maxPoints = toNumber(grade.maxPoints)
+      if (maxPoints <= 0) continue
+      publishedPercentages.set(grade.studentId, round2((points / maxPoints) * 100))
+    }
+    // A student with both a finalized attempt and a released mark contributes once, and
+    // the released mark is the one that counts.
+    const scores: CohortScore[] = mergeAssessmentScorePopulation({
+      attemptPercentages,
+      publishedPercentages,
+    })
     const cohort = buildCohortDistribution(scores)
     return {
       id: assessment.id,
@@ -173,7 +197,9 @@ export async function getTeacherAnalyticsOverview(
       type: assessment.type,
       dueDate: assessment.dueDate.toISOString(),
       maxMarks: assessment.maxMarks,
-      attemptCount: latest.length,
+      // The merged population, not `latest.length`: a manual mark is a mark even when it has
+      // no attempt, and reporting 0 here made the cohort-average tile blank (TN-3 / TL-3).
+      attemptCount: scores.length,
       average: cohort.average,
       passRate: cohort.passRate,
     }

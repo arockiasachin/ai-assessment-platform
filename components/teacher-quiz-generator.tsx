@@ -44,6 +44,13 @@ type QuestionDraft = {
   subtopic: string
   difficulty: string
   explanation: string
+  /**
+   * The per-question weight. Editable while the question is a draft; a published question
+   * shows its stored value read-only. Scoring uses the weight's **share** of the question
+   * set's total, projected onto the assessment's max (see `lib/quiz-scoring.ts`), so these
+   * need not sum to `maxMarks` — but a teacher must be able to see and set them (TN-42).
+   */
+  points: string
   options: OptionDraft[]
 }
 
@@ -53,6 +60,7 @@ function toDraft(question: GeneratedQuestionResponse): QuestionDraft {
     subtopic: question.subtopic ?? "",
     difficulty: question.difficulty === null ? "" : String(question.difficulty),
     explanation: question.explanation ?? "",
+    points: String(question.points),
     options: question.options.map((option) => ({
       id: option.id,
       text: option.text,
@@ -72,9 +80,11 @@ function replaceQuestion(
 function QuestionEditor({
   question,
   onSaved,
+  onDeleted,
 }: {
   question: GeneratedQuestionResponse
   onSaved: (next: GeneratedQuestionResponse) => void
+  onDeleted: (id: string) => void
 }) {
   const [draft, setDraft] = useState<QuestionDraft>(() => toDraft(question))
   const [status, setStatus] = useState<string | null>(null)
@@ -106,6 +116,11 @@ function QuestionEditor({
     setIsBusy(true)
     setStatus(null)
     setError(null)
+    const points = Number(draft.points)
+    if (!Number.isFinite(points) || points <= 0) {
+      setError("Marks must be a positive number.")
+      return
+    }
     try {
       const response = await fetch(`/api/teacher/quiz-generation/${question.id}`, {
         method: "PATCH",
@@ -115,6 +130,7 @@ function QuestionEditor({
           subtopic: draft.subtopic.trim() || null,
           difficulty: draft.difficulty.trim() === "" ? null : Number(draft.difficulty),
           explanation: draft.explanation.trim() || null,
+          points,
           options: draft.options.map((option) => ({
             ...(option.id ? { id: option.id } : {}),
             text: option.text,
@@ -168,6 +184,27 @@ function QuestionEditor({
     }
   }
 
+  async function remove() {
+    setIsBusy(true)
+    setStatus(null)
+    setError(null)
+    try {
+      const response = await fetch(`/api/teacher/quiz-generation/${question.id}`, {
+        method: "DELETE",
+      })
+      const data = (await response.json()) as { message?: string }
+      if (!response.ok) {
+        setError(data.message ?? "Unable to delete the draft.")
+        return
+      }
+      onDeleted(question.id)
+    } catch {
+      setError("Unable to delete the draft.")
+    } finally {
+      setIsBusy(false)
+    }
+  }
+
   return (
     <div className="space-y-3 rounded-lg border border-border/70 bg-muted/10 p-4">
       <div className="flex flex-wrap items-center gap-2">
@@ -176,6 +213,11 @@ function QuestionEditor({
         {question.difficulty !== null && (
           <Badge variant="outline">difficulty {question.difficulty.toFixed(2)}</Badge>
         )}
+        {/* The weight was always stored; it was never shown, so a teacher could not see how a
+            question was weighted (TN-42). It is display-only once published. */}
+        <Badge variant="outline">
+          {question.points} mark{question.points === 1 ? "" : "s"}
+        </Badge>
         {question.model && <span className="text-xs text-muted-foreground">{question.model}</span>}
         {question.sourceChunkIds.length > 0 && (
           <span className="text-xs text-muted-foreground">
@@ -261,7 +303,19 @@ function QuestionEditor({
         ))}
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-3">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-2">
+          <Label htmlFor={`points-${question.id}`}>Marks</Label>
+          <Input
+            id={`points-${question.id}`}
+            type="number"
+            min={0.01}
+            step={0.5}
+            value={draft.points}
+            disabled={!isDraft}
+            onChange={(event) => setDraft((prev) => ({ ...prev, points: event.target.value }))}
+          />
+        </div>
         <div className="grid gap-2">
           <Label htmlFor={`subtopic-${question.id}`}>Subtopic</Label>
           <Input
@@ -306,7 +360,7 @@ function QuestionEditor({
         </p>
       )}
 
-      {isDraft && (
+      {isDraft ? (
         <div className="flex flex-wrap gap-2">
           <Button type="button" variant="outline" onClick={save} disabled={isBusy}>
             {isBusy ? <Loader2 className="animate-spin" /> : <Save />} Save draft
@@ -314,7 +368,15 @@ function QuestionEditor({
           <Button type="button" onClick={publish} disabled={isBusy}>
             <Send /> Publish question
           </Button>
+          <Button type="button" variant="destructive" onClick={remove} disabled={isBusy}>
+            <Trash2 /> Delete draft
+          </Button>
         </div>
+      ) : (
+        <p className="text-xs text-muted-foreground">
+          Published questions are immutable — students may have been scored against this one. Edit
+          the marks or prompt of a draft only.
+        </p>
       )}
     </div>
   )
@@ -348,6 +410,9 @@ export function TeacherQuizGenerator({
     .sort((a, b) => a.order - b.order)
   const drafts = selectedQuestions.filter((question) => question.status === "draft")
   const published = selectedQuestions.filter((question) => question.status === "published")
+  // Scoring weights each question by its share of this total, projected onto the assessment's
+  // max. Shown so the weighting is a visible fact rather than a stored number nothing displays.
+  const totalQuestionPoints = selectedQuestions.reduce((sum, question) => sum + question.points, 0)
 
   async function generate() {
     if (!selected || topic.trim().length === 0) {
@@ -554,7 +619,7 @@ export function TeacherQuizGenerator({
 
       {selected && (
         <Card className="border-border/70 shadow-sm">
-          <CardHeader className="flex flex-row items-center justify-between gap-3">
+          <CardHeader className="flex flex-wrap items-center justify-between gap-3">
             <CardTitle className="text-base tracking-tight">
               Drafts ({drafts.length}) · Published ({published.length})
             </CardTitle>
@@ -567,6 +632,14 @@ export function TeacherQuizGenerator({
             >
               <CheckCircle2 /> Publish all drafts
             </Button>
+            {selectedQuestions.length > 0 && (
+              <p className="w-full text-xs text-muted-foreground">
+                Marks are weights: this set totals {totalQuestionPoints} across{" "}
+                {selectedQuestions.length} question
+                {selectedQuestions.length === 1 ? "" : "s"}, and each question earns its share of{" "}
+                {selected.maxMarks} assessment marks. Published questions cannot be re-weighted.
+              </p>
+            )}
           </CardHeader>
           <CardContent className="space-y-3">
             {selectedQuestions.length === 0 && (
@@ -579,6 +652,7 @@ export function TeacherQuizGenerator({
                 key={`${question.id}-${question.updatedAt}`}
                 question={question}
                 onSaved={(next) => setQuestions((prev) => replaceQuestion(prev, next))}
+                onDeleted={(id) => setQuestions((prev) => prev.filter((item) => item.id !== id))}
               />
             ))}
           </CardContent>

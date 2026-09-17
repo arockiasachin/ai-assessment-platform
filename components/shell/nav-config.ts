@@ -215,6 +215,15 @@ export const NAV_SECTIONS: Record<MockupRole, NavSection[]> = {
           icon: Terminal,
           description: "Sandboxed runs, test cases, coverage, and similarity flags.",
         },
+        {
+          // No mockup counterpart: students could already file retake requests and the API
+          // could already decide them, but no screen called it (TN-51).
+          label: "Retake requests",
+          href: "/teacher/retake-requests",
+          icon: RefreshCw,
+          description: "Approve or reject students asking for another graded sitting.",
+          appOnly: true,
+        },
       ],
     },
     {
