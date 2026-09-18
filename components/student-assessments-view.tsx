@@ -36,6 +36,11 @@ import { reconcileDrafts } from "@/lib/student-drafts"
 import type { AssessmentType } from "@/lib/generated/prisma/enums"
 import { ASSESSMENT_KIND_LABEL } from "@/lib/labels"
 import type { StudentAssessmentItem, StudentAssessmentsPayload } from "@/lib/student-assessments"
+import {
+  assessmentsEmptyDescription,
+  dueLabel,
+  matchesStatusFilter,
+} from "@/lib/student-assessments-view"
 
 function round(value: number, places = 1) {
   const factor = 10 ** places
@@ -46,13 +51,6 @@ function dueTone(assessment: StudentAssessmentItem): "destructive" | "secondary"
   if (assessment.isPastDue) return "destructive"
   if (assessment.daysUntilDue <= 3) return "secondary"
   return "outline"
-}
-
-function dueLabel(assessment: StudentAssessmentItem) {
-  if (assessment.daysUntilDue === 0) return "Due today"
-  if (assessment.daysUntilDue === 1) return "Due tomorrow"
-  if (assessment.daysUntilDue > 1) return `Due in ${assessment.daysUntilDue} days`
-  return `${Math.abs(assessment.daysUntilDue)} days overdue`
 }
 
 function submissionLabel(state: StudentAssessmentItem["submissionState"]) {
@@ -178,12 +176,11 @@ export function StudentAssessmentsView({
       if (typeFilter !== "all" && item.type !== typeFilter) return false
       if (courseFilter !== "all" && item.courseId !== courseFilter) return false
 
-      // The filter keys on the same `submissionState` the badge renders, so a card filtered as
-      // "Graded" carries the Graded badge and a graded sitting with an unreleased mark does not
-      // hide under "Pending" (SN-10). Keying on `percentage` made the two contradict.
-      if (statusFilter === "graded" && item.submissionState !== "graded") return false
-      if (statusFilter === "pending" && item.submissionState === "graded") return false
-      if (statusFilter === "overdue" && !item.isPastDue) return false
+      // The status filter is one definition shared with the tests
+      // (`lib/student-assessments-view.ts`). Keying Overdue on `isPastDue` alone
+      // counted a late submission as still overdue (SN-25); the badge it must agree
+      // with now lives beside it.
+      if (!matchesStatusFilter(item, statusFilter)) return false
 
       if (!q) return true
       const text = [item.title, item.courseName, item.courseCode, item.className, item.teacherName]
@@ -424,7 +421,7 @@ export function StudentAssessmentsView({
 
                   <div className="flex flex-wrap items-center gap-2 sm:justify-end">
                     <Badge variant={tone}>{dueLabel(assessment)}</Badge>
-                    <Badge variant="outline">{assessment.type}</Badge>
+                    <Badge variant="outline">{ASSESSMENT_KIND_LABEL[assessment.type]}</Badge>
                     <Badge variant="outline" className={submissionTone(assessment.submissionState)}>
                       {submissionLabel(assessment.submissionState)}
                     </Badge>
@@ -538,12 +535,23 @@ export function StudentAssessmentsView({
                           {lockReason && (
                             <p className="text-xs text-muted-foreground">{lockReason}</p>
                           )}
+                          {/* The FAT gate, said before the student writes and presses
+                              Submit rather than only in the route's 403 (SN-24). */}
+                          {assessment.submissionBlockedReason && (
+                            <p className="text-xs text-destructive">
+                              {assessment.submissionBlockedReason}
+                            </p>
+                          )}
                           <div className="grid gap-2 sm:flex sm:flex-wrap">
                             <Button
                               size="sm"
                               variant="outline"
                               onClick={() => void submitAssignment(assessment.id, "saveDraft")}
-                              disabled={savingSubmissionId === assessment.id || !draftAllowed}
+                              disabled={
+                                savingSubmissionId === assessment.id ||
+                                !draftAllowed ||
+                                assessment.submissionBlockedReason !== null
+                              }
                               className="w-full sm:w-auto"
                             >
                               Save draft
@@ -558,7 +566,9 @@ export function StudentAssessmentsView({
                                 )
                               }
                               disabled={
-                                savingSubmissionId === assessment.id || submitAction === null
+                                savingSubmissionId === assessment.id ||
+                                submitAction === null ||
+                                assessment.submissionBlockedReason !== null
                               }
                               className="w-full sm:w-auto"
                             >
@@ -581,7 +591,7 @@ export function StudentAssessmentsView({
         {filtered.length === 0 && (
           <Card className="border-border/70 shadow-sm">
             <CardContent className="py-10 text-center text-sm text-muted-foreground">
-              No assessments match the current filters.
+              {assessmentsEmptyDescription(allAssessments.length)}
             </CardContent>
           </Card>
         )}

@@ -50,6 +50,7 @@ function assessment(overrides: Partial<StudentAssessmentItem> = {}): StudentAsse
     gradedAt: null,
     feedback: null,
     submissionContent: null,
+    submissionBlockedReason: null,
     daysUntilDue: 3,
     isPastDue: false,
     ...overrides,

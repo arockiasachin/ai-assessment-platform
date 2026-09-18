@@ -73,6 +73,17 @@ export type MaterialKpis = {
 }
 
 /**
+ * The retrieval-chunk count, pluralized.
+ *
+ * The row printed `${row.chunks} chunks` unconditionally, so `chunks: 1` read
+ * "1 chunks" on every single-chunk material (SN-21). A count of one has its own
+ * word; that is the whole rule.
+ */
+export function chunkCountLabel(chunks: number): string {
+  return `${chunks} chunk${chunks === 1 ? "" : "s"}`
+}
+
+/**
  * Derived from the **whole** list, never the filtered slice: the cards are a
  * summary of what the student has, and having them drop to 1 whenever a search is
  * typed would read as data loss.

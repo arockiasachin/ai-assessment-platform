@@ -56,6 +56,24 @@ export function toRunEvidenceJson(evidence: RunEvidence): Record<string, unknown
   }
 }
 
+/**
+ * When a run happened, for a "Last run" label.
+ *
+ * `createdAt` is the row's insert time, which for a live run is close to
+ * `startedAt` but for a backdated one (the courses seed writes a run that finished
+ * two weeks ago) is the seed's clock — so the Task tab reported a last run that
+ * finished before it was created, contradicting the Runs tab's `finishedAt`
+ * (SN-40). The run's own timestamps are the truth; `createdAt` is only the
+ * fallback for a row that has not started yet.
+ */
+export function runTimestamp(run: {
+  finishedAt: Date | null
+  startedAt: Date | null
+  createdAt: Date
+}): Date {
+  return run.finishedAt ?? run.startedAt ?? run.createdAt
+}
+
 export function serializeTestCase(
   testCase: TestCase,
   draftIds: ReadonlySet<string>,

@@ -235,6 +235,11 @@ function GroupPanel({
       evaluation.evaluateeId === group.teammates.find((teammate) => teammate.isSelf)?.studentId,
   )
   const others = group.teammates.filter((teammate) => !teammate.isSelf)
+  // A submitted record exists. The route's upsert overwrites it, so the UI has to say so
+  // rather than let a second press silently replace it (SN-39).
+  const alreadySubmitted = group.myEvaluations.some(
+    (evaluation) => evaluation.status === "SUBMITTED",
+  )
 
   const columns: Column<TeammateResponse>[] = [
     {
@@ -315,7 +320,11 @@ function GroupPanel({
           <ProgressBar
             value={group.submittedEvaluations}
             max={group.expectedEvaluations}
-            label="Evaluations submitted"
+            // "Evaluations submitted" read as the round's total, so when the student's
+            // own submissions (including the self-rating) reached the denominator it
+            // looked complete while the received-ratings gate below still withheld
+            // results (SL-2). This counter is the student's own task, and now says so.
+            label="Your evaluations submitted"
             valueText={`${group.submittedEvaluations} of ${group.expectedEvaluations}`}
           />
           <div>
@@ -323,13 +332,16 @@ function GroupPanel({
             <MetricRow
               label="Your self-rating"
               value={selfEvaluation?.status === "SUBMITTED" ? "Submitted" : "Not submitted"}
-              hint="Rating yourself is expected but not required"
+              // The server refuses a POST without a self-evaluation
+              // (`lib/groups/student-service.ts`), and the denominator counts it, so
+              // "expected but not required" was simply false (SN-38).
+              hint="Required — you rate yourself as well as every teammate"
             />
           </div>
           <Callout tone="info" icon={Lock}>
             {/* The threshold comes from the server, never a local constant. */}
-            Results appear only after at least {received.minRatersRequired} teammates have
-            submitted, so no individual rating can be attributed. You will never see who rated you.
+            Results appear only after at least {received.minRatersRequired} of your teammates have
+            rated you, so no individual rating can be attributed. You will never see who rated you.
           </Callout>
         </div>
       </SectionCard>
@@ -338,6 +350,14 @@ function GroupPanel({
         title="Your ratings"
         description="Rate each teammate on five behaviourally-anchored dimensions. Comments are visible only to the instructor."
       >
+        {alreadySubmitted && (
+          <div className="mb-4">
+            <Callout tone="info" title="Already submitted">
+              You have already submitted this round. Editing and submitting again replaces your
+              previous ratings and comments.
+            </Callout>
+          </div>
+        )}
         <div className="space-y-5">
           {group.teammates.map((teammate) => {
             const teammateDraft = draft[teammate.studentId]
@@ -408,13 +428,40 @@ function GroupPanel({
           })}
 
           <div className="flex flex-wrap gap-2">
-            <Button size="sm" variant="outline" disabled={busy} onClick={onSave}>
+            <Button
+              size="sm"
+              variant="outline"
+              // A submitted round is not a draft, and pressing this would flip every row
+              // back to DRAFT through the same upsert that SN-39 is about. The button is
+              // disabled rather than silently reverting a submission.
+              disabled={busy || alreadySubmitted}
+              title={
+                alreadySubmitted
+                  ? "A submitted round cannot be returned to draft. Submit again to replace it."
+                  : undefined
+              }
+              onClick={onSave}
+            >
               {busy ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : null}
               Save draft
             </Button>
-            <Button size="sm" disabled={busy} onClick={onSubmit}>
+            <Button
+              size="sm"
+              disabled={busy}
+              onClick={() => {
+                if (
+                  alreadySubmitted &&
+                  !window.confirm(
+                    "This replaces your previous submission for this round. Continue?",
+                  )
+                ) {
+                  return
+                }
+                onSubmit()
+              }}
+            >
               <Send className="size-4" aria-hidden="true" />
-              Submit evaluations
+              {alreadySubmitted ? "Resubmit evaluations" : "Submit evaluations"}
             </Button>
           </div>
         </div>
@@ -432,6 +479,17 @@ function GroupPanel({
             <MetricRow
               label="Ratings received"
               value={`${received.ratingCount} of ${received.minRatersRequired} needed`}
+              // A three-person team can never reach three non-self raters, so "2 of 3
+              // needed" implied progress toward a gate that cannot open. When the team is
+              // too small, say that instead of showing a count that will never fill.
+              hint={
+                received.ratingCount < received.minRatersRequired &&
+                others.length < received.minRatersRequired
+                  ? `Your team has only ${others.length} other member${
+                      others.length === 1 ? "" : "s"
+                    }, fewer than the ${received.minRatersRequired} this rule needs, so results stay private.`
+                  : undefined
+              }
             />
           </div>
         ) : (

@@ -9,6 +9,11 @@ import { SectionCard } from "@/components/ui/section-card"
 import { StatCard } from "@/components/ui/stat-card"
 import { StatusPill, type StatusKey } from "@/components/ui/status-pill"
 import { formatDateTime } from "@/lib/format"
+import {
+  isTextQuestionType,
+  resumableAttempt,
+  unansweredQuestionCount,
+} from "@/lib/quiz-attempts/attempt-view"
 import type {
   QuizAttemptSummary,
   QuizAttemptView,
@@ -56,10 +61,6 @@ async function call<T>(url: string, init?: RequestInit): Promise<T> {
 type AnswerMaps = {
   answers: Record<string, number | null>
   textAnswers: Record<string, string>
-}
-
-function isTextQuestionType(question: QuizAttemptView["questions"][number]): boolean {
-  return question.type === "SHORT_ANSWER" || question.type === "ESSAY"
 }
 
 /** The local answer maps, seeded with a null for every question and every saved draft applied. */
@@ -136,6 +137,9 @@ export function StudentQuizAttempts({ initialQuizzes, initialAttempt = null }: P
   const textAnswersRef = useRef(textAnswers)
 
   const selected = quizzes.find((quiz) => quiz.assessmentId === selectedId) ?? null
+  // A graded sitting that is still open, so the primary action can offer to resume it rather
+  // than presenting a "Start attempt" that the server would answer by returning the same row.
+  const resumable = resumableAttempt(attempts)
 
   useEffect(() => {
     answersRef.current = answers
@@ -317,6 +321,7 @@ export function StudentQuizAttempts({ initialQuizzes, initialAttempt = null }: P
   const resultByQuestion = new Map(
     (view?.results ?? []).map((result) => [result.questionId, result]),
   )
+  const unanswered = view ? unansweredQuestionCount(view, answers, textAnswers) : 0
 
   return (
     <div className="grid gap-6">
@@ -420,15 +425,20 @@ export function StudentQuizAttempts({ initialQuizzes, initialAttempt = null }: P
           action={
             <Button
               size="sm"
-              disabled={busy || !selected.canStart}
-              onClick={() => void startAttempt()}
+              disabled={busy || (!selected.canStart && resumable === null)}
+              onClick={() => {
+                // Resume reopens the sitting the server would otherwise return from a
+                // second start; it does not spend a new attempt (SN-23).
+                if (resumable) void openAttempt(resumable.id)
+                else void startAttempt()
+              }}
             >
               {busy ? (
                 <Loader2 className="size-4 animate-spin" aria-hidden="true" />
               ) : (
                 <Play className="size-4" aria-hidden="true" />
               )}
-              <span className="ml-1">Start attempt</span>
+              <span className="ml-1">{resumable ? "Resume attempt" : "Start attempt"}</span>
             </Button>
           }
         >
@@ -474,7 +484,9 @@ export function StudentQuizAttempts({ initialQuizzes, initialAttempt = null }: P
           title={`Attempt ${view.attemptNumber}`}
           description={
             view.status === "IN_PROGRESS"
-              ? "In progress — answer all questions, then submit."
+              ? // The copy used to claim every question must be answered, while Submit
+                // accepted and scored blanks as zero (SL-3). It now says what happens.
+                "In progress — answer the questions you can, then submit. Unanswered questions score zero."
               : view.score !== null
                 ? `Scored ${view.score}/${view.maxScore ?? ""}`
                 : "Submitted"
@@ -585,6 +597,13 @@ export function StudentQuizAttempts({ initialQuizzes, initialAttempt = null }: P
                         ? "Could not save — keep typing and it will retry"
                         : ""}
                 </span>
+                {/* The count that makes the copy above true: blanks are allowed and score
+                    zero, so say how many there are before Submit (SL-3). */}
+                {unanswered > 0 && (
+                  <span className="text-xs text-muted-foreground">
+                    {unanswered} unanswered · scores zero
+                  </span>
+                )}
               </div>
             )}
           </div>

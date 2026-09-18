@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest"
 
 import type { StudentMaterialView } from "@/lib/materials"
 import {
+  chunkCountLabel,
   deriveMaterialKpis,
   filterMaterials,
   isFiltered,
@@ -173,5 +174,19 @@ describe("deriveMaterialKpis", () => {
 
   it("handles an empty list without producing NaN", () => {
     expect(deriveMaterialKpis([])).toEqual({ total: 0, indexed: 0, pending: 0, chunks: 0 })
+  })
+})
+
+describe("chunkCountLabel", () => {
+  it("uses the singular for one chunk", () => {
+    // The row rendered `${chunks} chunks`, so every one-chunk material read
+    // "1 chunks" (SN-21).
+    expect(chunkCountLabel(1)).toBe("1 chunk")
+  })
+
+  it("uses the plural for every other count", () => {
+    expect(chunkCountLabel(0)).toBe("0 chunks")
+    expect(chunkCountLabel(2)).toBe("2 chunks")
+    expect(chunkCountLabel(11)).toBe("11 chunks")
   })
 })

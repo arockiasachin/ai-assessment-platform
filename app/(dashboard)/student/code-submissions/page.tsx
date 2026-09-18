@@ -467,7 +467,12 @@ export default async function StudentCodeSubmissionsPage({
                         hint={
                           latestRun === null
                             ? "No run recorded yet"
-                            : formatDateTime(latestRun.createdAt)
+                            : // The run's own finish time, matching the Runs tab's
+                              // "Finished" column. `createdAt` is the row's insert time,
+                              // which for a backdated run is later than the run itself and
+                              // made the Task tab read as though it finished before it
+                              // was created (SN-40).
+                              formatDateTime(latestRun.finishedAt ?? latestRun.createdAt)
                         }
                       />
                     </div>

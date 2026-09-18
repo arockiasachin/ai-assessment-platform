@@ -27,6 +27,7 @@ import type {
   CourseRegistrationStatus,
   StudentCoursesPayload,
 } from "@/lib/student-courses"
+import { courseRunWindowLabel, registrationWindowLabel } from "@/lib/student-courses-view"
 
 /**
  * Student course workspace.
@@ -45,21 +46,11 @@ import type {
 type Props = { initialPayload: StudentCoursesPayload }
 
 /**
- * Dates are formatted in UTC with an explicit locale, matching `lib/mock/format.ts`.
- * Without the pinned time zone the server render (UTC) and the browser render
- * (the visitor's zone) can disagree about the day, which is a hydration error —
- * this repo has already shipped one.
+ * Dates are formatted in `lib/student-courses-view.ts` with an explicit locale and
+ * UTC time zone, matching `lib/mock/format.ts`. Without the pinned time zone the
+ * server render (UTC) and the browser render (the visitor's zone) can disagree
+ * about the day, which is a hydration error — this repo has already shipped one.
  */
-const dateFormatter = new Intl.DateTimeFormat("en-GB", {
-  day: "numeric",
-  month: "short",
-  year: "numeric",
-  timeZone: "UTC",
-})
-
-function formatDate(iso: string | null): string {
-  return iso ? dateFormatter.format(new Date(iso)) : "—"
-}
 
 /** `null` is "not rated yet", so it renders as an em dash — never as `0`. */
 function formatAverageRating(value: number | null): string {
@@ -148,7 +139,10 @@ const CATALOG_COLUMNS: Column<CourseCatalogItem>[] = [
     hideBelow: "lg",
     cell: (course) => (
       <span className="font-mono text-xs tabular-nums">
-        {formatDate(course.registrationOpenAt)} → {formatDate(course.registrationCloseAt)}
+        {registrationWindowLabel({
+          openAt: course.registrationOpenAt,
+          closeAt: course.registrationCloseAt,
+        })}
       </span>
     ),
   },
@@ -327,7 +321,10 @@ export function StudentCoursesView({ initialPayload }: Props) {
                         label: "Runs",
                         value: (
                           <span className="font-mono text-xs tabular-nums">
-                            {formatDate(course.startsOn)} → {formatDate(course.endsOn)}
+                            {courseRunWindowLabel({
+                              startsOn: course.startsOn,
+                              endsOn: course.endsOn,
+                            })}
                           </span>
                         ),
                       },

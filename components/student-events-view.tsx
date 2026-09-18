@@ -12,6 +12,7 @@ import type { CalendarEventItem } from "@/lib/calendar"
 import {
   calendarKindOptions,
   calendarMonthOptions,
+  eventLocationLabel,
   filterCalendarEvents,
   isFiltered,
   type CalendarKindFilter,
@@ -70,7 +71,7 @@ export function StudentEventsView({
       </span>
     ),
     description: event.detail,
-    meta: `${formatDateTime(event.startAt)} · ${event.location ?? "No location set"}`,
+    meta: `${formatDateTime(event.startAt)} · ${eventLocationLabel(event.location)}`,
     tone: CALENDAR_KIND_TONE[event.kind],
   }))
 
@@ -117,7 +118,7 @@ export function StudentEventsView({
 
       <SectionCard
         title="All events"
-        description="The full calendar for the courses you are enrolled in, including entries that have already passed."
+        description="Your courses' calendar entries and institution-wide holidays, including entries that have already passed."
       >
         <DataTable
           caption="Course calendar events"
@@ -176,13 +177,13 @@ const columns: Column<CalendarEventItem>[] = [
     id: "class",
     header: "Class",
     hideBelow: "sm",
-    cell: (row) =>
-      // Null is a real absence, not a zero, so it renders an em dash.
-      row.location === null ? (
-        <span className="text-muted-foreground">—</span>
-      ) : (
-        <span>{row.location}</span>
-      ),
+    cell: (row) => (
+      // Null is a real absence, not a zero, so it renders an em dash via the one
+      // definition shared with the Upcoming timeline (SN-42).
+      <span className={row.location === null ? "text-muted-foreground" : undefined}>
+        {eventLocationLabel(row.location)}
+      </span>
+    ),
   },
   {
     id: "course",

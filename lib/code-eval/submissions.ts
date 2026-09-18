@@ -18,6 +18,7 @@ import { executeSandbox, type SandboxExecutor } from "./executor"
 import type { HarnessTestSpec } from "./harness"
 import { evaluateSubmissionEligibility } from "./limits"
 import { resolveMaxSubmissions } from "./metadata"
+import { reapStuckRuns } from "./reaper"
 import {
   buildTestResults,
   computeCoverage,
@@ -26,7 +27,7 @@ import {
   resolveRunStatus,
   summarizeResults,
 } from "./results"
-import { serializeTestRun, toRunEvidenceJson } from "./serialize"
+import { runTimestamp, serializeTestRun, toRunEvidenceJson } from "./serialize"
 
 /**
  * Student-side submission pipeline.
@@ -65,6 +66,9 @@ function toHarnessTests(
 /** The student's enrolled CODE tasks with their submission budget. */
 export async function listStudentCodeTasks(user: AuthUser): Promise<StudentCodeTask[]> {
   const studentId = await resolveStudentProfileId(user)
+  // A crashed process leaves a reserved run `RUNNING` forever; reap before reading so
+  // the student is never shown a run that has been "still running" for days (SN-48).
+  await reapStuckRuns()
   const assessments = await prisma.assessment.findMany({
     where: {
       type: "CODE",
@@ -103,7 +107,7 @@ export async function listStudentCodeTasks(user: AuthUser): Promise<StudentCodeT
 
     const runs = await prisma.testRun.findMany({
       where: { codeTaskId: codeTask.id, studentId },
-      select: { status: true, createdAt: true },
+      select: { status: true, createdAt: true, startedAt: true, finishedAt: true },
       orderBy: { createdAt: "desc" },
       take: 200,
     })
@@ -131,7 +135,9 @@ export async function listStudentCodeTasks(user: AuthUser): Promise<StudentCodeT
       canSubmit: eligibility.allowed,
       blockedReason: eligibility.reason,
       latestRunStatus: runs[0]?.status ?? null,
-      latestRunAt: runs[0]?.createdAt.toISOString() ?? null,
+      // The run's own time, not the row's insert time: a backdated run made the
+      // Task tab say it had run after it had finished (SN-40).
+      latestRunAt: runs[0] ? runTimestamp(runs[0]).toISOString() : null,
     })
   }
 
@@ -173,6 +179,9 @@ export async function listStudentRuns(
   assessmentId: string,
 ): Promise<TestRunResponse[]> {
   const enrolled = await loadEnrolledCodeTask(user, assessmentId)
+  // The Runs tab is where "Still running" is shown, so reap before reading here too
+  // (SN-48). A stuck row is reported as an interrupted run rather than an eternal one.
+  await reapStuckRuns()
   const runs = await prisma.testRun.findMany({
     where: { codeTaskId: enrolled.codeTaskId, studentId: enrolled.studentId },
     orderBy: { createdAt: "desc" },

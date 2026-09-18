@@ -51,7 +51,7 @@ export default async function StudentEventsPage() {
       >
         <PageHeader
           title="Events"
-          description="Classes, deadlines, and reminders for the courses you are enrolled in."
+          description="Classes, deadlines and reminders for your courses, plus institution-wide holidays."
         />
         <StudentEventsView events={events} upcoming={upcoming} />
       </AppShell>

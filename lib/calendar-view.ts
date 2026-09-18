@@ -69,6 +69,18 @@ export function isFiltered(filters: CalendarFilters): boolean {
   return filters.search.trim() !== "" || filters.kind !== "all" || filters.month !== "all"
 }
 
+/**
+ * The location, with `null` as an em dash.
+ *
+ * The Upcoming timeline printed "No location set" while the table printed "—" for
+ * the same absence (SN-42). One definition, used by both surfaces, so they cannot
+ * disagree about how a missing location reads. `—` is the repo's rule for null
+ * (see `lib/calendar.ts`), and it is not a zero or an empty cell.
+ */
+export function eventLocationLabel(location: string | null): string {
+  return location ?? "—"
+}
+
 export type CalendarOption = { value: string; label: string }
 
 /** Only the kinds actually present: a menu entry that can only empty the table is worse than a short menu. */

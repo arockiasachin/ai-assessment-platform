@@ -14,6 +14,7 @@ import { formatDate } from "@/lib/format"
 import { MATERIAL_KIND_LABEL } from "@/lib/labels"
 import type { StudentMaterialView } from "@/lib/materials"
 import {
+  chunkCountLabel,
   deriveMaterialKpis,
   filterMaterials,
   isFiltered,
@@ -105,7 +106,7 @@ const columns: Column<StudentMaterialView>[] = [
           <StatusPill status="pending" dot />
         )}
         <p className="text-xs text-muted-foreground">
-          {row.indexed ? `${row.chunks} chunks` : "Not searchable yet"}
+          {row.indexed ? chunkCountLabel(row.chunks) : "Not searchable yet"}
         </p>
       </div>
     ),

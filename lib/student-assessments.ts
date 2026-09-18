@@ -1,7 +1,9 @@
 import "server-only"
 
 import { releasedAssessmentWhere } from "@/lib/assessment-visibility"
+import { supportsTextSubmission } from "@/lib/assessment-submission-rules"
 import { liveEnrollmentStatuses } from "@/lib/enrollment-scope"
+import { evaluateFatGateForStudent } from "@/lib/grading/offering-config-service"
 import { toAssessmentScale } from "@/lib/gradebook"
 import { prisma } from "@/lib/prisma"
 import { GRADED } from "@/lib/quiz-attempts/kinds"
@@ -82,6 +84,17 @@ export type StudentAssessmentItem = {
   gradedAt: string | null
   feedback: string | null
   submissionContent: string | null
+  /**
+   * Why a written submission is refused before it is attempted, or `null`.
+   *
+   * The submission route enforces the FAT gate and answers 403 with an
+   * explanation, but the card gave no hint until the student had written their
+   * work and pressed Submit (SN-24). This is the same `evaluateFatGateForStudent`
+   * decision, computed at read time, so the card can say it in advance. It is only
+   * populated for the kinds that accept text — the gate is not what refuses a quiz
+   * or a code task.
+   */
+  submissionBlockedReason: string | null
   daysUntilDue: number
   isPastDue: boolean
 }
@@ -192,6 +205,7 @@ export async function listStudentAssessments(
       type: true,
       dueDate: true,
       maxMarks: true,
+      offeringId: true,
       courseId: true,
       course: { select: { code: true, name: true } },
       offering: {
@@ -233,6 +247,31 @@ export async function listStudentAssessments(
   })
 
   const dayMs = 1000 * 60 * 60 * 24
+
+  /*
+   * The FAT gate, resolved once per written assessment.
+   *
+   * The route enforces it and answers 403 with the reason, but that was the first
+   * the student heard of it — after writing their submission and pressing Submit
+   * (SN-24). Evaluating the same decision here lets the card say it in advance.
+   * Only the kinds the route accepts are evaluated: the gate is not what refuses a
+   * quiz or a code task, and saying it was would be a fabricated block.
+   */
+  const submissionBlockedReasons = new Map<string, string>()
+  await Promise.all(
+    assessments
+      .filter((assessment) => supportsTextSubmission(assessment.type))
+      .map(async (assessment) => {
+        const gate = await evaluateFatGateForStudent({
+          offeringId: assessment.offeringId,
+          assessmentId: assessment.id,
+          studentId: student.id,
+        })
+        if (!gate.allowed && gate.message) {
+          submissionBlockedReasons.set(assessment.id, gate.message)
+        }
+      }),
+  )
 
   return {
     generatedAt: now.toISOString(),
@@ -333,6 +372,7 @@ export async function listStudentAssessments(
         // this is reachable without a grade row.
         feedback: publishedGrade !== null ? (submission?.feedback ?? null) : null,
         submissionContent: submission?.contentText ?? null,
+        submissionBlockedReason: submissionBlockedReasons.get(assessment.id) ?? null,
         daysUntilDue: Math.ceil((dueTime - now.getTime()) / dayMs),
         isPastDue: dueTime < now.getTime(),
       }

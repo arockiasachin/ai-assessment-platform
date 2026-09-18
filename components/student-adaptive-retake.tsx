@@ -20,6 +20,7 @@ import type {
   RetakableAssessment,
   RetakeStateValue,
 } from "@/lib/contracts/analytics"
+import { retakeOptionLabel, retakeQuestionCountClause } from "@/lib/student-retake-view"
 
 /**
  * Student adaptive retake.
@@ -88,7 +89,11 @@ export function StudentAdaptiveRetake({
     () =>
       assessments.map((assessment) => ({
         value: assessment.id,
-        label: `${assessment.courseCode} · ${assessment.title} (${assessment.failedCount + assessment.unansweredCount} to retry)`,
+        label: retakeOptionLabel({
+          courseCode: assessment.courseCode,
+          title: assessment.title,
+          toRetry: assessment.failedCount + assessment.unansweredCount,
+        }),
       })),
     [assessments],
   )
@@ -131,8 +136,11 @@ export function StudentAdaptiveRetake({
             <SelectContent>
               {assessments.map((assessment) => (
                 <SelectItem key={assessment.id} value={assessment.id}>
-                  {assessment.courseCode} · {assessment.title} (
-                  {assessment.failedCount + assessment.unansweredCount} to retry)
+                  {retakeOptionLabel({
+                    courseCode: assessment.courseCode,
+                    title: assessment.title,
+                    toRetry: assessment.failedCount + assessment.unansweredCount,
+                  })}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -160,7 +168,8 @@ export function StudentAdaptiveRetake({
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="text-base">
-              {retake.assessment.title} — {retake.questionIds.length} question(s) to retry
+              {retake.assessment.title}
+              {retakeQuestionCountClause(retake.questionIds.length)}
             </CardTitle>
             <p className="text-xs text-muted-foreground">
               {retake.failedQuestionIds.length} answered incorrectly,{" "}
@@ -295,27 +304,37 @@ function RetakeActions({
   const showRequest = state.policy === "APPROVAL" && state.requestStatus === null
   const showApproved = state.policy === "APPROVAL" && state.requestStatus === "APPROVED"
   const showPending = state.policy === "APPROVAL" && state.requestStatus === "PENDING"
+  const hasAction = showPractice || showRequest || showApproved || showPending
 
-  if (!showPractice && !showRequest && !showApproved && !showPending) {
-    // `NONE`, or `FIXED` at the cap: say why rather than showing nothing at all, since the
-    // student came here to retake something.
-    return state.blockedReason ? (
-      <Callout tone="info" title="No retake available">
-        <p>{state.blockedReason}</p>
-      </Callout>
-    ) : null
+  if (!hasAction && !state.blockedReason) {
+    return null
   }
 
   return (
     <div className="space-y-3">
+      {/*
+        The graded-cap message used to be dropped whenever practice was available
+        (SN-43): `blockedReason` was computed for the cap but only rendered in the
+        branch that had no action at all. A student at the cap saw a Practice button
+        and no explanation of why a graded retake was gone.
+      */}
+      {state.blockedReason && (
+        <Callout tone="info" title="No graded retake available">
+          <p>{state.blockedReason}</p>
+        </Callout>
+      )}
+
       {(showPractice || showApproved) && (
         <div className="flex flex-wrap items-center gap-3">
           <Button onClick={() => void startPractice()} disabled={busy !== null}>
             {busy === "practice" && <Loader2 className="size-4 animate-spin" />}
-            Practise these questions
+            {/* The service starts a practice sitting of the whole quiz, not the retake
+                subset, so the button no longer claims otherwise (SN-44). */}
+            Practise the full quiz
           </Button>
           <p className="text-xs text-muted-foreground">
-            Practice does not count towards your attempt limit.
+            Practice covers the whole quiz, not only the questions above, and does not count towards
+            your attempt limit.
           </p>
         </div>
       )}

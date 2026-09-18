@@ -110,14 +110,16 @@ export function dueThisWeek(
   )
 }
 
-/** A relative due label derived from the reader's own day count. */
-export function dueLabel(assessment: StudentAssessmentItem): string {
-  if (assessment.daysUntilDue === 0) return "Due today"
-  if (assessment.daysUntilDue === 1) return "Due tomorrow"
-  if (assessment.daysUntilDue > 1) return `Due in ${assessment.daysUntilDue} days`
-  const overdue = Math.abs(assessment.daysUntilDue)
-  return overdue === 1 ? "1 day overdue" : `${overdue} days overdue`
-}
+/**
+ * A relative due label derived from the reader's own day count.
+ *
+ * Consolidated: this used to be a second copy of the same rule, and both copies
+ * read `daysUntilDue` before asking `isPastDue` — so both labelled an item that
+ * passed its deadline less than a day ago "Due today". The one definition now lives
+ * in `lib/student-assessments-view.ts` and is re-exported here so the dashboard's
+ * "Due next" table and the assessment list cannot disagree (SN-25).
+ */
+export { dueLabel } from "@/lib/student-assessments-view"
 
 export type StudentMarkState = "released" | "withheld" | "none"
 

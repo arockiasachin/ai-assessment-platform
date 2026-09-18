@@ -4,6 +4,7 @@ import type { CalendarEventItem } from "@/lib/calendar"
 import {
   calendarKindOptions,
   calendarMonthOptions,
+  eventLocationLabel,
   filterCalendarEvents,
   isFiltered,
   isUpcoming,
@@ -240,5 +241,17 @@ describe("nextUpcoming", () => {
     // The empty-state branch of the Upcoming panel.
     const past = [event({ id: "x", startAt: "2020-01-01T00:00:00Z" })]
     expect(nextUpcoming(past, now)).toEqual([])
+  })
+})
+
+describe("eventLocationLabel", () => {
+  it("renders a null location as an em dash, not as prose", () => {
+    // The Upcoming timeline said "No location set" while the table said "—" for the
+    // same absence (SN-42); one definition now feeds both.
+    expect(eventLocationLabel(null)).toBe("—")
+  })
+
+  it("passes a real location through unchanged", () => {
+    expect(eventLocationLabel("Room 12")).toBe("Room 12")
   })
 })
