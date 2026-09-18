@@ -2,6 +2,8 @@ import "server-only"
 
 import sanitizeHtml from "sanitize-html"
 
+import { htmlToPlainText } from "./html-to-text"
+
 /**
  * Rich-text handling for written submissions.
  *
@@ -169,52 +171,13 @@ export function preformattedContentHtml(content: string | null | undefined): str
   return sanitizeSubmissionHtml(`<pre>${escapeHtml(content)}</pre>`)
 }
 
-const NAMED_ENTITIES: Record<string, string> = {
-  amp: "&",
-  lt: "<",
-  gt: ">",
-  quot: '"',
-  apos: "'",
-  nbsp: " ",
-}
-
-function decodeEntities(value: string): string {
-  return value.replace(/&(#x[0-9a-fA-F]+|#[0-9]+|[a-zA-Z]+);/g, (match, body: string) => {
-    try {
-      if (body.startsWith("#x") || body.startsWith("#X")) {
-        return String.fromCodePoint(Number.parseInt(body.slice(2), 16))
-      }
-      if (body.startsWith("#")) {
-        return String.fromCodePoint(Number.parseInt(body.slice(1), 10))
-      }
-      return NAMED_ENTITIES[body] ?? match
-    } catch {
-      return match
-    }
-  })
-}
-
-/**
- * The readable text of submission HTML: block boundaries become newlines, tags
- * are removed, and entities are decoded back to characters.
- *
- * `sanitize-html` with no allowed tags strips markup but does **not** insert
- * separators, so `<p>one</p><p>two</p>` would read as `onetwo`; the block
- * replacements below run first so a word or character count is not silently low.
- * This is the value {@link submissionTextLength} and {@link submissionWordCount}
- * measure, and it is also the reasonable thing to feed a future word-count-only
- * view.
+/*
+ * `htmlToPlainText` lives in `./html-to-text` and is re-exported here so this
+ * module keeps its public surface. It sits outside the `server-only` sentinel
+ * because `lib/rubric-grading/evaluation.ts` is reachable from the `tsx` seeds
+ * and needs the same conversion; see that module for the full reason.
  */
-export function htmlToPlainText(html: string): string {
-  const withBreaks = html
-    .replace(/<br\s*\/?>/gi, "\n")
-    .replace(/<\/(p|div|li|h[1-6]|tr|blockquote|pre|table)>/gi, "\n")
-  const stripped = sanitizeHtml(withBreaks, { allowedTags: [], allowedAttributes: {} })
-  return decodeEntities(stripped)
-    .replace(/[ \t]+/g, " ")
-    .replace(/\n{3,}/g, "\n\n")
-    .trim()
-}
+export { htmlToPlainText }
 
 /**
  * The character count the 4000 cap is measured against: the plain text of the

@@ -235,6 +235,45 @@ describe("rubric grading pipeline", () => {
     expect(audits).toBe(2)
   })
 
+  it("grades the plain text of an HTML submission, so a prose quote still verifies", async () => {
+    /*
+     * Written submissions store sanitized HTML in `contentText` now. The model is
+     * shown the readable prose and its verbatim quote is verified against that
+     * same text, so markup reaching either side would both pollute the prompt and
+     * fail a correct quote — flagging every criterion for review.
+     */
+    const { submission, teacherUser } = await seedAssessment()
+    await prisma.submission.update({
+      where: { id: submission.id },
+      data: {
+        contentText:
+          "<p>The author argues that <strong>remote work</strong> raises productivity because " +
+          "it removes commutes.</p><p>Studies show a 13% gain, though the evidence is " +
+          "correlational.</p>",
+      },
+    })
+
+    const captured: string[] = []
+    const base = fakeProvider([argumentEval(), evidenceEval()])
+    const provider: LlmProvider = {
+      ...base,
+      async generate(request) {
+        captured.push(request.messages.map((message) => message.content).join("\n"))
+        return base.generate(request)
+      },
+    }
+
+    const outcome = await evaluateSubmissionForTeacher(teacherUser, submission.id, { provider })
+
+    const prompt = captured.join("\n")
+    expect(prompt).not.toContain("<p>")
+    expect(prompt).not.toContain("<strong>")
+    expect(prompt).toContain("remote work raises productivity because it removes commutes")
+    // Both quotes are real prose from the submission, so neither is flagged.
+    expect(outcome.flagged).toBe(false)
+    expect(outcome.review.status).toBe("PENDING")
+  })
+
   it("supersedes the previous suggestion per criterion on re-evaluation", async () => {
     const { assessment, submission, teacherUser, studentId } = await seedAssessment()
 

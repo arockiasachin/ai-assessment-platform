@@ -6,6 +6,7 @@ import type {
 import { recordAiSuggestion } from "@/lib/grading"
 import type { LlmGenerateResult, LlmMessage, LlmProvider } from "@/lib/llm"
 import { getLlmProvider } from "@/lib/llm"
+import { htmlToPlainText } from "@/lib/html-to-text"
 import { prisma } from "@/lib/prisma"
 import type { AuthUser } from "@/lib/session"
 
@@ -117,6 +118,9 @@ type EvaluationAssessment = {
 const assessmentSelect = {
   id: true,
   title: true,
+  // Read for the submission body only: written kinds store sanitized HTML in
+  // `contentText`, while a CODE task stores the student's source there.
+  type: true,
   maxMarks: true,
   createdById: true,
   offering: { select: { teacherId: true } },
@@ -177,7 +181,19 @@ export async function evaluateSubmissionForTeacher(
     throw new RubricGradingError(409, "Assessment has no rubric with criteria to grade against.")
   }
 
-  const submissionText = submission.contentText?.trim() ?? ""
+  /*
+   * `contentText` is sanitized HTML for a written submission, and the student's
+   * **source code** for a CODE task. The model must be shown the readable prose,
+   * never markup: the prompt asks for a verbatim quote, and `parseCriterionEvaluation`
+   * verifies that quote against this same text, so tags here would both pollute the
+   * prompt and make a correct prose quote fail verification (a false `NEEDS_REVIEW`).
+   * The CODE branch mirrors `displayContentText` in `review-queue.ts` — source is
+   * left intact so `#include <stdio.h>` is not read as a tag.
+   */
+  const rawContent = submission.contentText ?? ""
+  const submissionText = (
+    submission.assessment.type === "CODE" ? rawContent : htmlToPlainText(rawContent)
+  ).trim()
   if (submissionText.length === 0) {
     throw new RubricGradingError(409, "Submission has no text content to evaluate.")
   }
