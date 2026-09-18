@@ -118,6 +118,28 @@ const GROUP_ASSESSMENT_ID = "demo-assessment-group-project"
  * "Upcoming" panel.
  */
 const WEEK2_ASSESSMENT_ID = "demo-assessment-week2"
+/**
+ * Two assessments in the **completed** `Term-2/2025` offering, with released marks.
+ *
+ * The prior-term offering existed from the start (it carries the course-rating
+ * path, which only accepts a rating once an offering has ended, and the
+ * 2025 revision handout) but had **no assessments at all**. That left one branch
+ * of the student grades page permanently unreachable from seeded data: the
+ * "previous semesters" column could only ever render empty, so the feature could
+ * not be demonstrated and a broken prior-term split would look exactly like a
+ * working one (Phase 2, `lib/student-grades.ts`).
+ *
+ * A mark only reaches a student when **both** releases are set — the assessment's
+ * `releasedAt` (it is visible) and `Grade.publishedAt` (the mark is out) — and
+ * these rows set both. `recordManualMark` supplies the second, which is also what
+ * gives every mark its `AuditLog` row, per this file's rule that publish-like
+ * facts go through the real service.
+ *
+ * Deliberately **no calendar events**: a deadline in a term that ended in 2025 is
+ * not upcoming, and the same reasoning already applies to `createPastCatAssessment`.
+ */
+const PAST_CLASS_TEST_ASSESSMENT_ID = "demo-assessment-past-class-test"
+const PAST_FINAL_ASSESSMENT_ID = "demo-assessment-past-final"
 const CODE_TASK_ID = "demo-code-task"
 const GROUP_ID = "demo-group-alpha"
 const LTI_REGISTRATION_ID = "demo-lti-registration"
@@ -259,6 +281,8 @@ export const DEMO_IDS = {
   codeAssessmentId: CODE_ASSESSMENT_ID,
   groupAssessmentId: GROUP_ASSESSMENT_ID,
   week2AssessmentId: WEEK2_ASSESSMENT_ID,
+  pastClassTestAssessmentId: PAST_CLASS_TEST_ASSESSMENT_ID,
+  pastFinalAssessmentId: PAST_FINAL_ASSESSMENT_ID,
   codeTaskId: CODE_TASK_ID,
   groupId: GROUP_ID,
   ltiRegistrationId: LTI_REGISTRATION_ID,
@@ -409,6 +433,8 @@ async function deleteDemoData(): Promise<void> {
           CODE_ASSESSMENT_ID,
           GROUP_ASSESSMENT_ID,
           WEEK2_ASSESSMENT_ID,
+          PAST_CLASS_TEST_ASSESSMENT_ID,
+          PAST_FINAL_ASSESSMENT_ID,
         ],
       },
     },
@@ -1467,6 +1493,119 @@ async function createPastCatAssessment() {
   }
 }
 
+/**
+ * Released marks for the completed `Term-2/2025` offering of the demo course.
+ *
+ * **Students 1–3 only, and that is load-bearing rather than incidental.** Those are
+ * the three enrolled in *both* offerings, while 4–5 are in the active offering only
+ * (see `createCourseAndOfferings`). Seeding them this way is what gives the student
+ * grades page both of its empty states from real rows: `demo.student1` has a current
+ * and a previous term, `demo.student4` has only the current one and must read "No
+ * previous semesters". Marking every student would make the two indistinguishable,
+ * which is the failure mode this whole seed file exists to prevent.
+ *
+ * `releasedAt` is earlier than `dueDate`, matching the rest of this seed and
+ * `seed-courses.ts`: the assessment release is *visibility* (students must see the
+ * work before its deadline), while the mark is published separately and later.
+ * `recordManualMark` supplies the mark's `publishedAt` and its audit row.
+ */
+const PAST_TERM_MARKS = [
+  { studentIndex: 0, classTest: 16, final: 41 },
+  { studentIndex: 1, classTest: 12, final: 30 },
+  { studentIndex: 2, classTest: 18, final: 45 },
+] as const
+
+async function createPriorTermMarks(): Promise<void> {
+  const assessments = [
+    {
+      id: PAST_CLASS_TEST_ASSESSMENT_ID,
+      title: "Term 2 class test",
+      type: "ASSIGNMENT" as const,
+      maxMarks: 20,
+      dueDate: new Date("2025-02-14T08:00:00.000Z"),
+      releasedAt: new Date("2025-02-01T08:00:00.000Z"),
+      submittedAt: new Date("2025-02-13T10:00:00.000Z"),
+      gradedAt: new Date("2025-02-19T15:00:00.000Z"),
+      contentText: "Answers to the Term 2 class test, worked through in full.",
+      feedback: "Handed in on time; the working is shown for every step.",
+    },
+    {
+      id: PAST_FINAL_ASSESSMENT_ID,
+      title: "Term 2 final examination",
+      type: "DESCRIPTIVE" as const,
+      maxMarks: 50,
+      dueDate: new Date("2025-04-25T08:00:00.000Z"),
+      releasedAt: new Date("2025-04-01T08:00:00.000Z"),
+      submittedAt: new Date("2025-04-24T09:30:00.000Z"),
+      gradedAt: new Date("2025-05-05T11:00:00.000Z"),
+      contentText: "Final examination script for Term 2.",
+      feedback: "The graph interpretation is the strongest part; revise simultaneous equations.",
+    },
+  ]
+
+  for (const assessment of assessments) {
+    await prisma.assessment.create({
+      data: {
+        id: assessment.id,
+        offeringId: PAST_OFFERING_ID,
+        courseId: COURSE_ID,
+        classId: PAST_CLASS_ID,
+        title: assessment.title,
+        type: assessment.type,
+        dueDate: assessment.dueDate,
+        maxMarks: assessment.maxMarks,
+        // The assessment-level release. Without it the reader hides the whole
+        // assessment from the student, marks or no marks.
+        releasedAt: assessment.releasedAt,
+        createdById: TEACHER_STAFF_ID,
+      },
+    })
+  }
+
+  for (const mark of PAST_TERM_MARKS) {
+    const studentId = STUDENT_PROFILE_IDS[mark.studentIndex]
+
+    /*
+     * A submission per assessment, `GRADED`.
+     *
+     * Without it a released past mark renders beside "Not submitted" and the
+     * assessments hub offers a writing editor for a 2025 paper — the mark implies
+     * work that was handed in, so the record should say so. `GRADED` is the state
+     * the real write path leaves behind, and it is also what locks the editor with
+     * an explanation (`submissionLockReason`).
+     */
+    for (const assessment of assessments) {
+      await prisma.submission.create({
+        data: {
+          assessmentId: assessment.id,
+          studentId,
+          status: "GRADED",
+          contentText: assessment.contentText,
+          submittedAt: assessment.submittedAt,
+          gradedAt: assessment.gradedAt,
+          gradedById: TEACHER_STAFF_ID,
+          feedback: assessment.feedback,
+        },
+      })
+    }
+
+    await recordManualMark({
+      assessmentId: PAST_CLASS_TEST_ASSESSMENT_ID,
+      studentId,
+      points: mark.classTest,
+      maxPoints: 20,
+      actor: { id: TEACHER_USER_ID, role: "teacher" },
+    })
+    await recordManualMark({
+      assessmentId: PAST_FINAL_ASSESSMENT_ID,
+      studentId,
+      points: mark.final,
+      maxPoints: 50,
+      actor: { id: TEACHER_USER_ID, role: "teacher" },
+    })
+  }
+}
+
 async function createCourseRatings() {
   // The ratings read path (`getTeacherRatingsReport`) is exercised by the spine
   // test; the write path lives in `lib/course-ratings.ts`, which is `server-only`
@@ -1637,6 +1776,7 @@ export async function seedDemo(): Promise<DemoSeedSummary> {
   await createCodeTask()
   await createGroupProject()
   await createPastCatAssessment()
+  await createPriorTermMarks()
   await createCourseRatings()
   await createLtiRegistration()
 

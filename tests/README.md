@@ -1,7 +1,7 @@
 # Tests
 
 Vitest for unit and data-layer tests, plus DB-backed route/service tests. The
-suite is **203 test files** (`ls tests/*.test.ts`). Tests never call a live LLM;
+suite is **208 test files** (`ls tests/*.test.ts`). Tests never call a live LLM;
 `tests/setup.ts` forces `LLM_PROVIDER=mock`.
 
 ## What you actually get without a database
@@ -10,8 +10,8 @@ Worth knowing, because it is easy to misread a local run:
 
 |                      | files                    | tests           |
 | -------------------- | ------------------------ | --------------- |
-| With a test database | 206 passed (206 total)   | **1904 passed** |
-| Without one          | 124 passed, 82 **error** | 1318 passed     |
+| With a test database | 208 passed (208 total)   | **1931 passed** |
+| Without one          | 126 passed, 82 **error** | 1345 passed     |
 
 The 82 files do not fail an assertion — they refuse to run
 (`Refusing to run database tests against …`), so a run without a database reports

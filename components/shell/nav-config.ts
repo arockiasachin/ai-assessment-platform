@@ -403,6 +403,19 @@ export const NAV_SECTIONS: Record<MockupRole, NavSection[]> = {
           ],
         },
         {
+          // Real page only. The rail lists it directly rather than under
+          // Assessments, because it is a view *across* assessments (marks grouped
+          // by subject and term), not one more assessment type. App-only for the
+          // same reason as Write: the mockup tree has no counterpart page, and
+          // `appOnly` is what keeps the mockup index's page-existence assertion
+          // true rather than pointing it at a route that does not exist there.
+          label: "Grades",
+          href: "/student/grades",
+          icon: GraduationCap,
+          description: "Released marks by subject and term, with previous semesters.",
+          appOnly: true,
+        },
+        {
           label: "Resources",
           href: "/mockup/student/resources",
           icon: Library,

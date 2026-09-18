@@ -4,6 +4,7 @@ import Link from "next/link"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { useMemo, useState } from "react"
 import {
+  BookOpen,
   BookOpenCheck,
   CalendarClock,
   ClipboardList,
@@ -140,16 +141,26 @@ export function StudentAssessmentsView({
     return notes
   }, [allAssessments, courseRegimes])
 
-  const courseOptions = useMemo(
-    () =>
-      Array.from(
-        new Map(allAssessments.map((item) => [item.courseId, item.courseName])).entries(),
-      ).map(([id, name]) => ({
-        id,
-        name,
-      })),
-    [allAssessments],
-  )
+  /**
+   * One entry per course, carrying the code as well as the id.
+   *
+   * The code is what the course hub is addressed by
+   * (`/student/course?courseCode=…`), so the "Course hubs" links below and the
+   * Select above read the same list rather than two derivations of it.
+   */
+  const courseOptions = useMemo(() => {
+    const byId = new Map<string, { id: string; name: string; code: string }>()
+    for (const item of allAssessments) {
+      if (!byId.has(item.courseId)) {
+        byId.set(item.courseId, {
+          id: item.courseId,
+          name: item.courseName,
+          code: item.courseCode,
+        })
+      }
+    }
+    return [...byId.values()]
+  }, [allAssessments])
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
@@ -214,6 +225,32 @@ export function StudentAssessmentsView({
             <p className="text-sm text-muted-foreground">
               Inspect scores, due windows, feedback, and course context in one place.
             </p>
+            {/*
+              The hub's entry point into each per-course hub. It is rendered here,
+              unconditionally, rather than only on a card's expanded panel, so the
+              way through is in the first paint and reachable without opening an
+              assessment.
+            */}
+            {courseOptions.length > 0 && (
+              <div className="mt-3">
+                <p className="text-xs font-medium text-muted-foreground">Course hubs</p>
+                <ul className="mt-1 flex flex-wrap gap-1.5">
+                  {courseOptions.map((course) => (
+                    <li key={course.id}>
+                      <Link
+                        href={{
+                          pathname: "/student/course",
+                          query: { courseCode: course.code },
+                        }}
+                        className="inline-flex items-center rounded-md border border-border/70 bg-background/70 px-2 py-0.5 font-mono text-xs text-primary transition-colors hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-1 focus-visible:outline-ring"
+                      >
+                        {course.code}
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
           </div>
           <div className="grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">
             <div className="rounded-md border border-border/70 bg-background/80 px-2 py-1.5 text-center">
@@ -456,6 +493,26 @@ export function StudentAssessmentsView({
                     )}
 
                     <div className="mt-3 flex flex-wrap gap-2">
+                      {/*
+                        The hub's link into the per-course hub. It lives in the
+                        expanded panel rather than beside the course name in the
+                        summary row because that whole row is a `<button>` — an
+                        anchor inside a button is invalid and unreachable by
+                        keyboard, so the metadata stays text and the way through
+                        is here.
+                      */}
+                      <Link
+                        href={{
+                          pathname: "/student/course",
+                          query: { courseCode: assessment.courseCode },
+                        }}
+                        className="inline-flex"
+                      >
+                        <Button size="sm" variant="ghost">
+                          <BookOpen className="size-4" />
+                          View course
+                        </Button>
+                      </Link>
                       {assessment.type === "QUIZ" ? (
                         <Link href="/student/quizzes" className="inline-flex">
                           <Button size="sm" variant="outline">

@@ -428,9 +428,32 @@ describe("student nav: the Assessments group", () => {
     ).toContain("/student/write")
   })
 
-  it("does not advertise a Grades entry the route does not have yet", () => {
-    // Phase 2 owns /student/grades; a rail link pointing at a non-existent route
-    // would be a dangling affordance.
-    expect(leafLabels(learning.items)).not.toContain("Grades")
+  it("advertises Grades as a top-level item now that the route exists", () => {
+    // Phase 1 deliberately shipped no Grades entry because the page did not exist;
+    // a rail link to a missing route is a dangling affordance. Phase 2 added both.
+    // It stays **top level** rather than becoming an Assessments child: grades is a
+    // view across assessments (marks grouped by subject and term), not one more
+    // assessment type, so nesting it would put it under a menu that answers a
+    // different question.
+    const grades = section(learning.items, "Grades")
+    expect(leafLabels(learning.items)).toContain("Grades")
+    expect(grades.href).toBe("/student/grades")
+    expect(grades.children).toBeUndefined()
+    // App-only: the mockup tree has no counterpart page, and the label is a real
+    // route rather than a mockup one.
+    expect(grades.appOnly).toBe(true)
+    expect(grades.href.startsWith("/mockup")).toBe(false)
+  })
+
+  it("filters Grades out of the mockup tree and keeps it in the app tree", () => {
+    const inMockup = flattenNavItems(
+      navSectionsFor("student", "mockup").flatMap((s) => s.items),
+    ).map((item) => item.href)
+    const inApp = flattenNavItems(navSectionsFor("student", "app").flatMap((s) => s.items)).map(
+      (item) => item.href,
+    )
+
+    expect(inMockup).not.toContain("/student/grades")
+    expect(inApp).toContain("/student/grades")
   })
 })
