@@ -4,6 +4,7 @@ import { RoleGuard } from "@/components/role-guard"
 import { AppShell, PageHeader } from "@/components/shell"
 import { StudentAdaptiveRetake } from "@/components/student-adaptive-retake"
 import { getSessionUser } from "@/lib/auth"
+import { breadcrumbTrail } from "@/lib/navigation"
 import { listStudentRetakableAssessmentsForStudent } from "@/lib/analytics/service"
 import { initialsFromEmail, roleLabelFromRole } from "@/lib/user-identity"
 
@@ -29,6 +30,7 @@ export default async function StudentRetakePage() {
       >
         <PageHeader
           title="Retake"
+          breadcrumbs={breadcrumbTrail("/student/retake", "Retake")}
           description="A targeted retake built from the questions you got wrong or left blank on your latest attempt. Practise as often as you like; a graded retake is subject to your teacher's policy."
         />
         <StudentAdaptiveRetake initialAssessments={assessments} />

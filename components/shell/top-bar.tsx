@@ -20,6 +20,7 @@ import {
   type NavScope,
 } from "@/components/shell/nav-config"
 import { MobileNav } from "@/components/shell/mobile-nav"
+import { QuickSearch } from "@/components/shell/quick-search"
 import { ThemeToggle } from "@/components/shell/theme-toggle"
 
 /** The signed-in identity the top bar renders. */
@@ -51,9 +52,10 @@ export type TopBarNotification = {
 /**
  * Sticky application top bar.
  *
- * Renders entirely from props — there is no `fetch` and no effect, so the chrome paints on the
- * first frame (no "Loading…" flash). The search field is intentionally inert: visually complete so
- * reviewers can judge the composition, but it does not submit anywhere.
+ * Renders entirely from props — the chrome itself has no `fetch` and no effect, so it paints on
+ * the first frame (no "Loading…" flash). The centre zone's search is real in `app` scope
+ * (`QuickSearch`, which owns its own debounced request) and deliberately inert in `mockup` scope,
+ * where the design reference has no session to search with.
  *
  * **Mockup-only data arrives as props rather than imports.** This component used to import
  * `MOCK_NOTIFICATIONS` and `MOCK_CURRENT_USER` directly, which meant a *real* shell component
@@ -81,70 +83,78 @@ export function TopBar({
   /** Mockup-only. Empty in app scope, which renders no notification affordance at all. */
   notifications?: TopBarNotification[]
 }) {
-  // Search is mockup-only until it is wired up, so this id only ever renders
-  // there. Keeping the name scope-specific means an app-scope search can be
-  // added later without colliding with the mockup one.
-  const searchId = "mockup-search"
+  // Search is role-scoped, and only the student and teacher scopes exist today;
+  // `admin` gets no field rather than one that can only ever come back empty.
+  const searchPlaceholder =
+    role === "student"
+      ? "Search your assessments, courses, and resources…"
+      : role === "teacher"
+        ? "Search your assessments, offerings, and students…"
+        : null
 
   return (
     <header className="sticky top-0 z-30 border-b border-border bg-background/80 backdrop-blur-md">
+      {/*
+       * Three zones: brand (left, shrink-0) · search (centre, flex-1) · account
+       * (right, shrink-0).
+       *
+       * The alignment bug this replaces was two margins fighting in one rule —
+       * `ml-auto … md:ml-2` — where Tailwind v4 emits the `md:` rule later, so
+       * `md:ml-2` won above 48rem and the right cluster lost its auto margin. In
+       * app scope the search form (the only other auto margin) was not rendered,
+       * so nothing was pushed anywhere and the account cluster packed against the
+       * brand. A zone that grows between two fixed zones removes the conflict by
+       * construction: the centre consumes the free space, so the right cluster is
+       * positioned by the layout rather than by a margin override. `ml-auto` on
+       * the right cluster remains only as the below-`md` fallback, where the
+       * centre zone is hidden and there is no competing margin rule at all.
+       */}
       <div className="flex h-14 items-center gap-2 px-3 sm:gap-3 sm:px-4">
-        <MobileNav role={role} scope={scope} />
+        {/* Zone 1 — brand. */}
+        <div className="flex min-w-0 shrink-0 items-center gap-2">
+          <MobileNav role={role} scope={scope} />
 
-        <Link
-          href={brandHref(scope, role)}
-          className="flex shrink-0 items-center gap-2.5 rounded-lg py-1 outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
-        >
-          <span className="flex size-9 items-center justify-center rounded-xl bg-primary text-primary-foreground">
-            <BRAND.icon className="size-5" aria-hidden="true" />
-          </span>
-          <span className="hidden min-w-0 sm:block">
-            <span className="block text-sm leading-none font-semibold tracking-tight">
-              {BRAND.name}
+          <Link
+            href={brandHref(scope, role)}
+            className="flex shrink-0 items-center gap-2.5 rounded-lg py-1 outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+          >
+            <span className="flex size-9 items-center justify-center rounded-xl bg-primary text-primary-foreground">
+              <BRAND.icon className="size-5" aria-hidden="true" />
             </span>
-            <span className="mt-1 block truncate text-xs text-muted-foreground">
-              {BRAND.tagline}
+            <span className="hidden min-w-0 sm:block">
+              <span className="block text-sm leading-none font-semibold tracking-tight">
+                {BRAND.name}
+              </span>
+              <span className="mt-1 block truncate text-xs text-muted-foreground">
+                {BRAND.tagline}
+              </span>
             </span>
-          </span>
-        </Link>
+          </Link>
+        </div>
 
         {/*
-         * The search field is a deliberately inert placeholder in the mockups —
-         * it has no submit handler and the ⌘K hint is decorative. That is fine on
-         * a design screen, but shipping a labelled `role="search"` landmark that
-         * silently swallows keystrokes onto a real authenticated page is a
-         * dangling affordance, so it is mockup-only until search is wired up.
-         * The old real header had no search at all, so this is not a regression.
+         * Zone 2 — search.
+         *
+         * In `app` scope this is the real, role-scoped quick-search. In `mockup`
+         * scope it stays intentionally inert: the mockup tree is a static design
+         * reference with no session, so a live control there would 401 — a
+         * labelled `role="search"` landmark that silently swallows keystrokes is
+         * exactly the dangling affordance it used to be. The design screen keeps
+         * the visual, the real app keeps the behaviour.
+         *
+         * `admin` gets no search: there is no admin search scope yet, and an
+         * always-empty box is worse than none.
          */}
-        {scope === "mockup" && (
-          <form
-            role="search"
-            onSubmit={(event) => event.preventDefault()}
-            className="relative ml-auto hidden w-full max-w-sm md:block"
-          >
-            <label htmlFor={searchId} className="sr-only">
-              Search assessments, students and questions
-            </label>
-            <Search
-              className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground"
-              aria-hidden="true"
-            />
-            <Input
-              id={searchId}
-              type="search"
-              placeholder="Search assessments, students, questions…"
-              className="pl-8 pr-12"
-            />
-            <kbd
-              aria-hidden="true"
-              className="pointer-events-none absolute top-1/2 right-2 -translate-y-1/2 rounded border border-border bg-muted px-1.5 py-0.5 font-mono text-[0.65rem] text-muted-foreground"
-            >
-              ⌘K
-            </kbd>
-          </form>
-        )}
+        <div className="hidden min-w-0 flex-1 justify-center px-2 md:flex">
+          {scope === "app" && searchPlaceholder !== null ? (
+            <QuickSearch placeholder={searchPlaceholder} />
+          ) : scope === "mockup" ? (
+            <MockupSearchField />
+          ) : null}
+        </div>
 
-        <div className="ml-auto flex items-center gap-1 md:ml-2">
+        {/* Zone 3 — account. */}
+        <div className="ml-auto flex shrink-0 items-center gap-1">
           {scope === "mockup" && notifications.length > 0 && (
             <NotificationsMenu notifications={notifications} />
           )}
@@ -153,6 +163,44 @@ export function TopBar({
         </div>
       </div>
     </header>
+  )
+}
+
+/**
+ * The mockup tree's composition-only search field.
+ *
+ * Inert by design and **mockup-only**: `/mockup` is a static design reference
+ * outside the auth proxy, so there is no session for a query to be scoped to. It
+ * exists so the three-zone composition can be reviewed; `app` scope renders the
+ * real `QuickSearch` in the same zone instead.
+ */
+function MockupSearchField() {
+  return (
+    <form
+      role="search"
+      onSubmit={(event) => event.preventDefault()}
+      className="relative w-full max-w-sm"
+    >
+      <label htmlFor="mockup-search" className="sr-only">
+        Search assessments, students and questions
+      </label>
+      <Search
+        className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground"
+        aria-hidden="true"
+      />
+      <Input
+        id="mockup-search"
+        type="search"
+        placeholder="Search assessments, students, questions…"
+        className="pl-8 pr-12"
+      />
+      <kbd
+        aria-hidden="true"
+        className="pointer-events-none absolute top-1/2 right-2 -translate-y-1/2 rounded border border-border bg-muted px-1.5 py-0.5 font-mono text-[0.65rem] text-muted-foreground"
+      >
+        ⌘K
+      </kbd>
+    </form>
   )
 }
 

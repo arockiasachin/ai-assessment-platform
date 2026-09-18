@@ -1,6 +1,7 @@
 "use client"
 
 import Link from "next/link"
+import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { useMemo, useState } from "react"
 import {
   BookOpenCheck,
@@ -17,7 +18,7 @@ import { GradeBadge } from "@/components/grade-badge"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Callout } from "@/components/ui/callout"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import {
   Select,
@@ -29,13 +30,15 @@ import {
 import { formatDateTime } from "@/lib/format"
 import { regimeForCourse, type StudentCourseRegime } from "@/lib/grading/regime-view"
 import { submissionLockReason, supportsTextSubmission } from "@/lib/assessment-submission-rules"
-import type { AssessmentType } from "@/lib/generated/prisma/enums"
 import { ASSESSMENT_KIND_LABEL } from "@/lib/labels"
 import type { StudentAssessmentItem, StudentAssessmentsPayload } from "@/lib/student-assessments"
 import {
   assessmentsEmptyDescription,
   dueLabel,
   matchesStatusFilter,
+  matchesTypeFilter,
+  parseAssessmentTypeFilter,
+  type AssessmentTypeFilter,
 } from "@/lib/student-assessments-view"
 
 function round(value: number, places = 1) {
@@ -86,8 +89,25 @@ export function StudentAssessmentsView({
    */
   courseRegimes?: StudentCourseRegime[]
 }) {
+  const router = useRouter()
+  const pathname = usePathname()
+  const searchParams = useSearchParams()
+  /*
+   * The type filter is **URL-driven** rather than local state, because the
+   * sidebar's Assessments menu links to `/student/assessments?type=…`. Local
+   * state would not update when a student clicks "Quizzes" while already on the
+   * hub (the route does not remount), so the menu link would appear dead. The
+   * other filters stay local: nothing outside this component sets them.
+   */
+  const typeFilter = parseAssessmentTypeFilter(searchParams.get("type"))
+  const setTypeFilter = (value: AssessmentTypeFilter) => {
+    const params = new URLSearchParams(searchParams)
+    if (value === "all") params.delete("type")
+    else params.set("type", value)
+    const query = params.toString()
+    router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false })
+  }
   const [search, setSearch] = useState("")
-  const [typeFilter, setTypeFilter] = useState<"all" | AssessmentType>("all")
   const [courseFilter, setCourseFilter] = useState<string>("all")
   const [statusFilter, setStatusFilter] = useState<"all" | "graded" | "pending" | "overdue">("all")
   const [expanded, setExpanded] = useState<Record<string, boolean>>({})
@@ -135,7 +155,7 @@ export function StudentAssessmentsView({
     const q = search.trim().toLowerCase()
 
     return allAssessments.filter((item) => {
-      if (typeFilter !== "all" && item.type !== typeFilter) return false
+      if (!matchesTypeFilter(item, typeFilter)) return false
       if (courseFilter !== "all" && item.courseId !== courseFilter) return false
 
       // The status filter is one definition shared with the tests
@@ -244,10 +264,12 @@ export function StudentAssessmentsView({
 
       <Card className="border-border/70 shadow-sm">
         <CardHeader>
-          <CardTitle className="inline-flex items-center gap-2 text-base tracking-tight">
-            <Filter className="size-4 text-primary" />
+          {/* A real heading: the filter is a section of the page, so the
+              outline reads h1 → h2 (the hub blurb) → h3 (filter, list). */}
+          <h3 className="inline-flex items-center gap-2 text-base leading-snug font-medium tracking-tight">
+            <Filter className="size-4 text-primary" aria-hidden="true" />
             Filter and explore
-          </CardTitle>
+          </h3>
         </CardHeader>
         <CardContent className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
           <div className="relative xl:col-span-2">
@@ -263,18 +285,23 @@ export function StudentAssessmentsView({
 
           <Select
             value={typeFilter}
-            onValueChange={(value) => setTypeFilter((value as "all" | AssessmentType) ?? "all")}
+            onValueChange={(value) => setTypeFilter(parseAssessmentTypeFilter(value))}
           >
             <SelectTrigger aria-label="Filter by assessment type">
               <SelectValue placeholder="Type" />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All types</SelectItem>
-              {Object.entries(ASSESSMENT_KIND_LABEL).map(([value, label]) => (
-                <SelectItem key={value} value={value}>
-                  {label}
-                </SelectItem>
-              ))}
+              {Object.entries(ASSESSMENT_KIND_LABEL)
+                // The sidebar lists written work as one entry, so the control
+                // offers the same grouping rather than two kinds it never links.
+                .filter(([value]) => value !== "DESCRIPTIVE" && value !== "ASSIGNMENT")
+                .map(([value, label]) => (
+                  <SelectItem key={value} value={value}>
+                    {label}
+                  </SelectItem>
+                ))}
+              <SelectItem value="WRITTEN">Written and assignments</SelectItem>
             </SelectContent>
           </Select>
 
@@ -311,7 +338,10 @@ export function StudentAssessmentsView({
         </CardContent>
       </Card>
 
-      <div className="space-y-3">
+      <section aria-labelledby="assessments-list-heading" className="space-y-3">
+        <h3 id="assessments-list-heading" className="text-base font-semibold tracking-tight">
+          Your assessments
+        </h3>
         {filtered.map((assessment) => {
           const isExpanded = Boolean(expanded[assessment.id])
           const tone = dueTone(assessment)
@@ -329,14 +359,34 @@ export function StudentAssessmentsView({
                   }
                 >
                   <div className="space-y-1">
-                    <p className="font-semibold tracking-tight">{assessment.title}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {assessment.courseCode} · {assessment.courseName} · {assessment.className}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      {assessment.term} {assessment.academicYear} · Teacher:{" "}
-                      {assessment.teacherName}
-                    </p>
+                    {/* Larger than the metadata below it and the badges beside
+                        it, so the row scans as title → context → state. */}
+                    <p className="text-base font-semibold tracking-tight">{assessment.title}</p>
+                    {/* Labelled metadata rows rather than two muted sentences:
+                        every fact has a name, so the row can be skimmed by label
+                        and no value is left dangling after a separator. */}
+                    <dl className="mt-1 grid gap-x-5 gap-y-0.5 text-xs sm:grid-cols-2">
+                      <div className="flex items-baseline gap-1.5">
+                        <dt className="shrink-0 text-muted-foreground">Course</dt>
+                        <dd className="truncate font-medium">
+                          {assessment.courseCode} · {assessment.courseName}
+                        </dd>
+                      </div>
+                      <div className="flex items-baseline gap-1.5">
+                        <dt className="shrink-0 text-muted-foreground">Class</dt>
+                        <dd className="truncate font-medium">{assessment.className}</dd>
+                      </div>
+                      <div className="flex items-baseline gap-1.5">
+                        <dt className="shrink-0 text-muted-foreground">Term</dt>
+                        <dd className="font-medium">
+                          {assessment.term} {assessment.academicYear}
+                        </dd>
+                      </div>
+                      <div className="flex items-baseline gap-1.5">
+                        <dt className="shrink-0 text-muted-foreground">Teacher</dt>
+                        <dd className="truncate font-medium">{assessment.teacherName}</dd>
+                      </div>
+                    </dl>
                   </div>
 
                   <div className="flex flex-wrap items-center gap-2 sm:justify-end">
@@ -487,7 +537,7 @@ export function StudentAssessmentsView({
             </CardContent>
           </Card>
         )}
-      </div>
+      </section>
 
       <Card className="border-border/70 shadow-sm">
         <CardContent className="grid gap-3 py-5 sm:grid-cols-3">

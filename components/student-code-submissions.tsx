@@ -16,9 +16,10 @@ import {
 } from "lucide-react"
 
 import { AssessmentPicker, type AssessmentPickerOption } from "@/components/assessment-picker"
+import { BackLink } from "@/components/back-link"
 import { CollapsibleSection } from "@/components/collapsible-section"
 import { EditorWorkspace } from "@/components/editor-workspace"
-import { TaskBrief } from "@/components/task-brief"
+import { QuestionPrompt } from "@/components/question-prompt"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { CodeBlock } from "@/components/ui/code-block"
@@ -529,6 +530,7 @@ export function StudentCodeSubmissionEditor({
           labelled rows in the brief pane. */}
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <div className="min-w-0">
+          <BackLink pathname="/student/code-submissions" className="mb-1" />
           <p className="text-xs font-semibold tracking-wider text-muted-foreground uppercase">
             Code submissions
           </p>
@@ -590,7 +592,10 @@ export function StudentCodeSubmissionEditor({
         left={
           <div className="space-y-5">
             <CollapsibleSection title="Problem" icon={BookOpenText}>
-              <TaskBrief text={task.instructions} />
+              <QuestionPrompt
+                text={task.instructions}
+                emptyText="No instructions were recorded for this task."
+              />
             </CollapsibleSection>
 
             <Separator />

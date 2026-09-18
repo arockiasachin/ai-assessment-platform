@@ -8,6 +8,7 @@ import { OfferingTabs } from "@/components/offering-tabs"
 import { TeacherObservabilityView } from "@/components/teacher-observability-view"
 import { listTeacherOfferingsForAnalytics } from "@/lib/analytics/service"
 import { getSessionUser } from "@/lib/auth"
+import { breadcrumbTrail } from "@/lib/navigation"
 import { getRecentGradeActivityForTeacher } from "@/lib/observability/audit-view"
 import { listGradingDecisionsForTeacher } from "@/lib/observability/grading-decisions"
 import { initialsFromEmail, roleLabelFromRole } from "@/lib/user-identity"
@@ -89,6 +90,7 @@ export default async function TeacherObservabilityPage({
         <PageHeader
           eyebrow={selected ? `${selected.courseCode} · audit trail` : "Audit trail"}
           title="Activity log"
+          breadcrumbs={breadcrumbTrail("/teacher/observability", "Activity log")}
           description="Recent grade-pipeline activity — AI suggestions, review decisions, and published grades — plus every mark a teacher changed. Read-only."
         />
 

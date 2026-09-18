@@ -5,6 +5,7 @@ import { RoleGuard } from "@/components/role-guard"
 import { AppShell, PageHeader } from "@/components/shell"
 import { StudentQuizAttempts } from "@/components/student-quiz-attempts"
 import { getSessionUser } from "@/lib/auth"
+import { breadcrumbTrail } from "@/lib/navigation"
 import { getStudentAttempt, listStudentQuizzes } from "@/lib/quiz-attempts"
 import { initialsFromEmail, roleLabelFromRole } from "@/lib/user-identity"
 
@@ -56,6 +57,7 @@ export default async function StudentQuizAttemptPage({
       >
         <PageHeader
           title={attempt.assessmentTitle}
+          breadcrumbs={breadcrumbTrail(`/student/quizzes/${attemptId}`, "Quiz attempt")}
           description="Answer the questions, then submit. Answers are autosaved while the sitting is in progress; a teacher approves every score before it is published."
         />
         <StudentQuizAttempts initialQuizzes={quizzes} initialAttempt={attempt} />

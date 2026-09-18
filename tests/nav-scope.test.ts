@@ -13,6 +13,7 @@ import {
   brandHref,
   findNavItem,
   findNavItemByAppPath,
+  flattenNavItems,
   isActiveHref,
   navHref,
   navSectionsFor,
@@ -60,7 +61,12 @@ describe("nav scope: mockup tree is unchanged", () => {
 
   it("returns the section list a mockup page would link", () => {
     for (const role of MOCKUP_ROLES) {
-      const total = navSectionsFor(role, "mockup").reduce((n, s) => n + s.items.length, 0)
+      // A nested group is a disclosure, so the pages a section reaches are its
+      // leaves — the same set `allNavItems` enumerates.
+      const total = navSectionsFor(role, "mockup").reduce(
+        (n, s) => n + flattenNavItems(s.items).length,
+        0,
+      )
       const expected = allNavItems().filter((entry) => entry.role === role).length
       expect(total, role).toBe(expected)
     }
@@ -122,7 +128,9 @@ describe("admin is reachable but unadvertised", () => {
 })
 
 describe("app-only nav items", () => {
-  const APP_ONLY = NAV_SECTIONS.teacher.flatMap((s) => s.items).filter((i) => i.appOnly)
+  const APP_ONLY = flattenNavItems(NAV_SECTIONS.teacher.flatMap((s) => s.items)).filter(
+    (i) => i.appOnly,
+  )
 
   it("exist, and carry a real path rather than a mockup one", () => {
     expect(APP_ONLY.length).toBeGreaterThan(0)
@@ -143,7 +151,9 @@ describe("app-only nav items", () => {
 
   it("are excluded from the mockup nav, which has no page for them", () => {
     for (const role of MOCKUP_ROLES) {
-      const hrefs = navSectionsFor(role, "mockup").flatMap((s) => s.items.map((i) => i.href))
+      const hrefs = navSectionsFor(role, "mockup").flatMap((s) =>
+        flattenNavItems(s.items).map((i) => i.href),
+      )
       for (const item of APP_ONLY) {
         expect(hrefs, `${item.label} must not appear in mockup nav`).not.toContain(item.href)
       }
@@ -151,7 +161,9 @@ describe("app-only nav items", () => {
   })
 
   it("are included in the app nav", () => {
-    const hrefs = navSectionsFor("teacher", "app").flatMap((s) => s.items.map((i) => i.href))
+    const hrefs = navSectionsFor("teacher", "app").flatMap((s) =>
+      flattenNavItems(s.items).map((i) => i.href),
+    )
     for (const item of APP_ONLY) expect(hrefs, item.label).toContain(item.href)
   })
 
@@ -248,7 +260,11 @@ describe("nav scope: app tree resolves to real pages", () => {
   it("filters dropped items out of the app section list", () => {
     for (const role of MOCKUP_ROLES) {
       const sections = navSectionsFor(role, "app")
-      const hrefs = sections.flatMap((s) => s.items.map((i) => navHref(i.href, "app")))
+      // Flatten through groups: every *leaf* must resolve to a real app path,
+      // and a group must survive only with leaves under it.
+      const hrefs = sections.flatMap((s) =>
+        flattenNavItems(s.items).map((i) => navHref(i.href, "app")),
+      )
       expect(
         hrefs.every((h) => h !== null),
         role,
@@ -262,12 +278,15 @@ describe("nav scope: app tree resolves to real pages", () => {
     // teacher loses profile and settings, and gains every app-only page (Offerings,
     // Marks). The app-only count is derived rather than hardcoded so adding one is a
     // one-line nav change, not a test edit plus a nav change.
-    const appOnlyCount = NAV_SECTIONS.teacher
-      .flatMap((section) => section.items)
-      .filter((item) => item.appOnly).length
-    const teacherApp = navSectionsFor("teacher", "app").reduce((n, s) => n + s.items.length, 0)
+    const appOnlyCount = flattenNavItems(
+      NAV_SECTIONS.teacher.flatMap((section) => section.items),
+    ).filter((item) => item.appOnly).length
+    const teacherApp = navSectionsFor("teacher", "app").reduce(
+      (n, s) => n + flattenNavItems(s.items).length,
+      0,
+    )
     const teacherMockup = navSectionsFor("teacher", "mockup").reduce(
-      (n, s) => n + s.items.length,
+      (n, s) => n + flattenNavItems(s.items).length,
       0,
     )
     expect(teacherApp).toBe(teacherMockup - 2 + appOnlyCount)
@@ -334,5 +353,84 @@ describe("findNavItemByAppPath", () => {
     // `navHref` returns null for these, so they can never match — nothing should render a
     // heading for a page that does not exist.
     expect(findNavItemByAppPath("/mockup/teacher/settings")).toBeNull()
+  })
+})
+
+describe("student nav: the Assessments group", () => {
+  const learning = NAV_SECTIONS.student.find((section) => section.id === "learning")!
+  const collaboration = NAV_SECTIONS.student.find((section) => section.id === "collaboration")!
+
+  const section = (items: typeof learning.items, label: string) =>
+    items.find((item) => item.label === label)!
+  const leafLabels = (items: typeof learning.items) => flattenNavItems(items).map((i) => i.label)
+
+  it("nests the assessment types under one collapsible group", () => {
+    const group = section(learning.items, "Assessments")
+    expect(group.children).toBeDefined()
+    const childLabels = group.children!.map((child) => child.label)
+    expect(childLabels).toContain("All assessments")
+    expect(childLabels).toContain("Quizzes")
+    expect(childLabels).toContain("Written and assignments")
+    expect(childLabels).toContain("Code tasks")
+    expect(childLabels).toContain("Group projects")
+  })
+
+  it("sends each type child to the hub with a type filter", () => {
+    const group = section(learning.items, "Assessments")
+    const byLabel = new Map(group.children!.map((child) => [child.label, child]))
+    expect(byLabel.get("All assessments")?.query).toBeUndefined()
+    expect(byLabel.get("Quizzes")?.query).toEqual({ type: "QUIZ" })
+    expect(byLabel.get("Written and assignments")?.query).toEqual({ type: "WRITTEN" })
+    expect(byLabel.get("Code tasks")?.query).toEqual({ type: "CODE" })
+    expect(byLabel.get("Group projects")?.query).toEqual({ type: "GROUP_PROJECT" })
+    for (const child of group.children!) {
+      // Every filter child points at the one hub page; the query narrows it.
+      if (child.label !== "Write" && child.label !== "Code submissions") {
+        expect(child.href).toBe("/mockup/student/assessments")
+      }
+    }
+  })
+
+  it("removes the standalone Quizzes entry, which the group now covers", () => {
+    // Top level only: "Quizzes" is still a *child* of the Assessments group,
+    // which is the point — it is reachable, just not a second top-level idea.
+    expect(learning.items.map((item) => item.label)).not.toContain("Quizzes")
+    // Quizzes still reaches a real page through the group.
+    expect(
+      flattenNavItems(learning.items).some(
+        (item) => item.query?.type === "QUIZ" && navHref(item.href, "app") !== null,
+      ),
+    ).toBe(true)
+  })
+
+  it("moves Code submissions out of Collaboration and under Assessments", () => {
+    const group = section(learning.items, "Assessments")
+    expect(group.children!.map((child) => child.label)).toContain("Code submissions")
+    // Collaboration is left with peer evaluation only — a per-assessment
+    // workspace is not a collaborative activity.
+    expect(flattenNavItems(collaboration.items).map((item) => item.label)).toEqual([
+      "Peer evaluation",
+    ])
+  })
+
+  it("adds the previously-unreachable Write page, app-only", () => {
+    const group = section(learning.items, "Assessments")
+    const write = group.children!.find((child) => child.label === "Write")!
+    expect(write.href).toBe("/student/write")
+    expect(write.appOnly).toBe(true)
+    // Filtered out of the mockup tree, which has no page for it.
+    expect(
+      flattenNavItems(navSectionsFor("student", "mockup").flatMap((s) => s.items)),
+    ).not.toContain(write)
+    // Present in the app tree.
+    expect(
+      flattenNavItems(navSectionsFor("student", "app").flatMap((s) => s.items)).map((i) => i.href),
+    ).toContain("/student/write")
+  })
+
+  it("does not advertise a Grades entry the route does not have yet", () => {
+    // Phase 2 owns /student/grades; a rail link pointing at a non-existent route
+    // would be a dangling affordance.
+    expect(leafLabels(learning.items)).not.toContain("Grades")
   })
 })

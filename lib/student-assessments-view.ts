@@ -1,3 +1,4 @@
+import type { AssessmentType } from "@/lib/generated/prisma/enums"
 import type { StudentAssessmentItem, SubmissionState } from "@/lib/student-assessments"
 
 /**
@@ -22,6 +23,58 @@ import type { StudentAssessmentItem, SubmissionState } from "@/lib/student-asses
 
 /** The status filter the list offers. */
 export type AssessmentStatusFilter = "all" | "graded" | "pending" | "overdue"
+
+/**
+ * The type filter the list offers.
+ *
+ * `WRITTEN` is a **filter grouping, not a stored type**: it matches the
+ * `DESCRIPTIVE` and `ASSIGNMENT` kinds, which the enum keeps separate and a
+ * student thinks of as one thing ("writing"). It exists because the sidebar's
+ * Assessments menu lists them together, and inventing a stored enum value to
+ * make a menu read well would be the wrong trade.
+ */
+export type AssessmentTypeFilter = "all" | AssessmentType | "WRITTEN"
+
+const ASSESSMENT_TYPES = [
+  "QUIZ",
+  "DESCRIPTIVE",
+  "CODE",
+  "GROUP_PROJECT",
+  "ASSIGNMENT",
+] as const satisfies readonly AssessmentType[]
+
+/** The stored kinds the `WRITTEN` grouping expands to. */
+const WRITTEN_TYPES: readonly AssessmentType[] = ["DESCRIPTIVE", "ASSIGNMENT"]
+
+/**
+ * Whether an item matches the type filter.
+ *
+ * The single definition shared by the Select and the sidebar's `?type=` links,
+ * so the menu and the control cannot disagree about what "Written and
+ * assignments" means.
+ */
+export function matchesTypeFilter(
+  item: Pick<StudentAssessmentItem, "type">,
+  filter: AssessmentTypeFilter,
+): boolean {
+  if (filter === "all") return true
+  if (filter === "WRITTEN") return WRITTEN_TYPES.includes(item.type)
+  return item.type === filter
+}
+
+/**
+ * Read a `?type=` value from the URL, falling back to `all`.
+ *
+ * An unknown value is ignored rather than passed to the filter, so a stale or
+ * hand-edited link shows the list rather than an empty one.
+ */
+export function parseAssessmentTypeFilter(value: string | null | undefined): AssessmentTypeFilter {
+  if (value === "WRITTEN") return "WRITTEN"
+  if (value && (ASSESSMENT_TYPES as readonly string[]).includes(value)) {
+    return value as AssessmentType
+  }
+  return "all"
+}
 
 /**
  * The states in which the student has handed the work in.

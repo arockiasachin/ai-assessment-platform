@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
 import { Loader2, RefreshCw } from "lucide-react"
 
+import { QuestionPrompt } from "@/components/question-prompt"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Callout } from "@/components/ui/callout"
@@ -202,9 +203,12 @@ export function StudentAdaptiveRetake({
                   return (
                     <div key={question.id} className="rounded-lg border border-border/70 px-3 py-3">
                       <div className="flex items-start justify-between gap-2">
-                        <p className="text-sm font-medium">
-                          {index + 1}. {question.prompt}
-                        </p>
+                        <QuestionPrompt
+                          as="h3"
+                          index={index + 1}
+                          text={question.prompt}
+                          className="min-w-0 flex-1"
+                        />
                         {previous && previous.selectedOptionIds.length === 0 && (
                           <Badge variant="outline">unanswered</Badge>
                         )}

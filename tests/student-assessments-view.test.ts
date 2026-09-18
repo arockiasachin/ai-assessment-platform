@@ -5,7 +5,10 @@ import {
   dueLabel,
   isHandedIn,
   matchesStatusFilter,
+  matchesTypeFilter,
+  parseAssessmentTypeFilter,
 } from "@/lib/student-assessments-view"
+import type { AssessmentType } from "@/lib/generated/prisma/enums"
 
 /**
  * Assessments-list view logic.
@@ -73,6 +76,44 @@ describe("matchesStatusFilter", () => {
     expect(matchesStatusFilter({ isPastDue: false, submissionState: "draft" }, "overdue")).toBe(
       false,
     )
+  })
+})
+
+describe("matchesTypeFilter", () => {
+  const item = (type: AssessmentType) => ({ type })
+
+  it("matches everything for All", () => {
+    expect(matchesTypeFilter(item("QUIZ"), "all")).toBe(true)
+  })
+
+  it("matches one stored kind exactly", () => {
+    expect(matchesTypeFilter(item("QUIZ"), "QUIZ")).toBe(true)
+    expect(matchesTypeFilter(item("CODE"), "QUIZ")).toBe(false)
+  })
+
+  it("expands WRITTEN to the descriptive and assignment kinds", () => {
+    // The sidebar lists "Written and assignments" as one entry, so the filter has
+    // to mean the two stored kinds it covers — not a third one invented for it.
+    expect(matchesTypeFilter(item("DESCRIPTIVE"), "WRITTEN")).toBe(true)
+    expect(matchesTypeFilter(item("ASSIGNMENT"), "WRITTEN")).toBe(true)
+    expect(matchesTypeFilter(item("QUIZ"), "WRITTEN")).toBe(false)
+    expect(matchesTypeFilter(item("CODE"), "WRITTEN")).toBe(false)
+    expect(matchesTypeFilter(item("GROUP_PROJECT"), "WRITTEN")).toBe(false)
+  })
+})
+
+describe("parseAssessmentTypeFilter", () => {
+  it("reads the values the sidebar links carry", () => {
+    expect(parseAssessmentTypeFilter("QUIZ")).toBe("QUIZ")
+    expect(parseAssessmentTypeFilter("WRITTEN")).toBe("WRITTEN")
+  })
+
+  it("falls back to All for a missing or unknown value", () => {
+    // A stale or hand-edited link shows the list rather than an empty page.
+    expect(parseAssessmentTypeFilter(null)).toBe("all")
+    expect(parseAssessmentTypeFilter(undefined)).toBe("all")
+    expect(parseAssessmentTypeFilter("")).toBe("all")
+    expect(parseAssessmentTypeFilter("NOT_A_TYPE")).toBe("all")
   })
 })
 

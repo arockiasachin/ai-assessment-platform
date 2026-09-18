@@ -6,6 +6,7 @@ import { AppShell, PageHeader } from "@/components/shell"
 import { findNavItemByAppPath } from "@/components/shell/nav-config"
 import { TeacherAnalyticsDashboard } from "@/components/teacher-analytics-dashboard"
 import { getSessionUser } from "@/lib/auth"
+import { breadcrumbTrail } from "@/lib/navigation"
 import {
   getAnalyticsSettingsForTeacher,
   getAssessmentItemAnalysisForTeacher,
@@ -88,7 +89,11 @@ export default async function TeacherAnalyticsPage({
           roleLabel: roleLabelFromRole(user.role),
         }}
       >
-        <PageHeader title="Analytics" description={findNavItemByAppPath(HREF)?.item.description} />
+        <PageHeader
+          title="Analytics"
+          breadcrumbs={breadcrumbTrail(HREF, "Analytics")}
+          description={findNavItemByAppPath(HREF)?.item.description}
+        />
         <TeacherAnalyticsDashboard
           offerings={offerings}
           initialOfferingId={initialOfferingId}

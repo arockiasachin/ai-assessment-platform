@@ -26,6 +26,7 @@ import { StatusPill } from "@/components/ui/status-pill"
 import { Timeline, type TimelineItem } from "@/components/ui/timeline"
 import { TruncatedText } from "@/components/ui/truncated-text"
 import { getSessionUser } from "@/lib/auth"
+import { breadcrumbTrail } from "@/lib/navigation"
 import type {
   GroupAnalysisResponse,
   GroupMemberResponse,
@@ -560,6 +561,7 @@ export default async function TeacherGroupsPage({
               : undefined
           }
           title="Groups"
+          breadcrumbs={breadcrumbTrail("/teacher/groups", "Groups")}
           description="Teams, peer evaluation, contribution evidence, and milestones. Contribution signals are evidence only, never a grade."
           actions={
             <>

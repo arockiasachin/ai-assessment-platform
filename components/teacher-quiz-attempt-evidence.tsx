@@ -3,6 +3,7 @@
 import { useState } from "react"
 import { CheckCircle2, ListChecks, Loader2, XCircle } from "lucide-react"
 
+import { QuestionPrompt } from "@/components/question-prompt"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { formatDateTime, trimNumber } from "@/lib/format"
@@ -155,9 +156,12 @@ export function TeacherQuizAttemptEvidence({
                     className="rounded border border-border/70 bg-muted/20 p-3"
                   >
                     <div className="flex flex-wrap items-start justify-between gap-2">
-                      <p className="text-sm font-medium">
-                        {index + 1}. {response.prompt}
-                      </p>
+                      <QuestionPrompt
+                        as="h3"
+                        index={index + 1}
+                        text={response.prompt}
+                        className="min-w-0 flex-1"
+                      />
                       <span className="flex items-center gap-1.5">
                         {response.isCorrect === true && (
                           <Badge

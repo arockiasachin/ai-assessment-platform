@@ -14,6 +14,7 @@ import {
   Library,
   LifeBuoy,
   ListChecks,
+  PenLine,
   RefreshCw,
   Settings2,
   Share2,
@@ -72,6 +73,22 @@ export type NavItem = {
    * passes it through unchanged.
    */
   appOnly?: boolean
+  /**
+   * Extra query for a link that narrows an existing page rather than naming a
+   * new one — the Assessments menu's type filters are the only users. Keeping it
+   * out of `href` is deliberate: `navHref`, `isActiveHref` and the page-existence
+   * tests all reason about the **path**, and a query inside `href` would make
+   * "which page is this?" unanswerable.
+   */
+  query?: Record<string, string>
+  /**
+   * Sub-links. When present, the item is a **disclosure group**, not a link:
+   * `SideNav` expands it and `href` is only data (its destination is already one
+   * of the children). `flattenNavItems` reaches the leaves for every consumer
+   * that needs a real page — the mockup index, the page-existence tests and
+   * `findNavItem`.
+   */
+  children?: NavItem[]
 }
 
 export type NavSection = {
@@ -320,16 +337,70 @@ export const NAV_SECTIONS: Record<MockupRole, NavSection[]> = {
           description: "Enrolled courses, materials, and course ratings.",
         },
         {
+          // A disclosure, not a destination: the hub remains reachable through
+          // its "All assessments" child, and each type is a filtered view of the
+          // same page. The standalone Quizzes entry is gone — a quiz is one of
+          // these types, so a second top-level link to the same idea was noise.
           label: "Assessments",
           href: "/mockup/student/assessments",
           icon: ClipboardList,
           description: "Every assessment with due date, submission state, and marks.",
-        },
-        {
-          label: "Quizzes",
-          href: "/mockup/student/quizzes",
-          icon: ClipboardCheck,
-          description: "Attempts, per-question feedback, and explanations.",
+          children: [
+            {
+              label: "All assessments",
+              href: "/mockup/student/assessments",
+              icon: ClipboardList,
+              description: "Every assessment with due date, submission state, and marks.",
+            },
+            {
+              label: "Quizzes",
+              href: "/mockup/student/assessments",
+              query: { type: "QUIZ" },
+              icon: ClipboardCheck,
+              description: "Attempts, per-question feedback, and explanations.",
+            },
+            {
+              // `WRITTEN` is a filter grouping, not a stored type: it matches the
+              // DESCRIPTIVE and ASSIGNMENT kinds, which a student thinks of as one
+              // thing ("writing") and the enum does not.
+              label: "Written and assignments",
+              href: "/mockup/student/assessments",
+              query: { type: "WRITTEN" },
+              icon: PenLine,
+              description: "Descriptive answers and written assignments.",
+            },
+            {
+              label: "Code tasks",
+              href: "/mockup/student/assessments",
+              query: { type: "CODE" },
+              icon: Terminal,
+              description: "Sandboxed programming tasks and their runs.",
+            },
+            {
+              label: "Group projects",
+              href: "/mockup/student/assessments",
+              query: { type: "GROUP_PROJECT" },
+              icon: Users,
+              description: "Team projects handed in as a group.",
+            },
+            {
+              // Moved out of "Collaboration": code work is per-assessment, not a
+              // collaborative activity, and that grouping was simply wrong.
+              label: "Code submissions",
+              href: "/mockup/student/code-submissions",
+              icon: Terminal,
+              description: "Submit code, see test results, and read the reviewer feedback.",
+            },
+            {
+              // Real page only: the writing workspace has no mockup counterpart,
+              // and it was previously unreachable from the nav altogether.
+              label: "Write",
+              href: "/student/write",
+              icon: PenLine,
+              description: "Compose and submit a written answer for an assessment.",
+              appOnly: true,
+            },
+          ],
         },
         {
           label: "Resources",
@@ -348,12 +419,6 @@ export const NAV_SECTIONS: Record<MockupRole, NavSection[]> = {
           href: "/mockup/student/peer-evaluation",
           icon: Users,
           description: "Rate teammates on the five CATME dimensions.",
-        },
-        {
-          label: "Code submissions",
-          href: "/mockup/student/code-submissions",
-          icon: Terminal,
-          description: "Submit code, see test results, and read the reviewer feedback.",
         },
       ],
     },
@@ -553,18 +618,61 @@ export function brandHref(scope: NavScope, role: MockupRole = "teacher"): string
   return scope === "mockup" ? BRAND.indexHref : roleHome(role, scope)
 }
 
+/**
+ * Every link an item tree leads to: the leaves, group nodes removed.
+ *
+ * A group is a disclosure, not a destination, so anything asking "what pages
+ * does this nav reach?" — the mockup index, `findNavItem`, the page-existence
+ * tests — must walk through it. A **flat** section is unchanged by this: with no
+ * `children`, every item is already a leaf.
+ */
+export function flattenNavItems(items: NavItem[]): NavItem[] {
+  return items.flatMap((item) =>
+    item.children && item.children.length > 0 ? flattenNavItems(item.children) : [item],
+  )
+}
+
+/**
+ * The link target for a nav item in a scope, carrying its query (if any).
+ *
+ * `null` means the item has no real page in this scope. Kept separate from
+ * `navHref` so the query never contaminates path comparisons.
+ */
+export function resolveNavLink(
+  item: NavItem,
+  scope: NavScope,
+): { href: string; query?: Record<string, string> } | null {
+  const href = navHref(item.href, scope)
+  if (href === null) return null
+  return item.query ? { href, query: item.query } : { href }
+}
+
+/**
+ * Filter an item tree for a scope, recursing into groups.
+ *
+ * A group survives only while it still has a child to show, so a group whose
+ * children are all app-only (or all page-less) disappears rather than rendering
+ * an expandable empty row. Flat sections are handled by the same leaves branch.
+ */
+function filterNavItems(items: NavItem[], scope: NavScope): NavItem[] {
+  return items.flatMap((item) => {
+    if (item.children && item.children.length > 0) {
+      const children = filterNavItems(item.children, scope)
+      return children.length > 0 ? [{ ...item, children }] : []
+    }
+    const keep =
+      scope === "mockup"
+        ? // No mockup counterpart exists to link to.
+          !item.appOnly
+        : navHref(item.href, scope) !== null
+    return keep ? [item] : []
+  })
+}
+
 /** Nav sections for `role`, without the items that cannot be linked in `scope`. */
 export function navSectionsFor(role: MockupRole, scope: NavScope): NavSection[] {
   return NAV_SECTIONS[role]
-    .map((section) => ({
-      ...section,
-      items: section.items.filter((item) =>
-        scope === "mockup"
-          ? // No mockup counterpart exists to link to.
-            !item.appOnly
-          : navHref(item.href, scope) !== null,
-      ),
-    }))
+    .map((section) => ({ ...section, items: filterNavItems(section.items, scope) }))
     .filter((section) => section.items.length > 0)
 }
 
@@ -591,7 +699,10 @@ export function roleFromPathname(pathname: string, scope: NavScope = "mockup"): 
 export function allNavItems(): { role: MockupRole; section: NavSection; item: NavItem }[] {
   return MOCKUP_ROLES.flatMap((role) =>
     NAV_SECTIONS[role].flatMap((section) =>
-      section.items.filter((item) => !item.appOnly).map((item) => ({ role, section, item })),
+      flattenNavItems(section.items)
+        // A group has no page of its own; only its leaves do.
+        .filter((item) => !item.appOnly)
+        .map((item) => ({ role, section, item })),
     ),
   )
 }
@@ -625,7 +736,7 @@ export function findNavItemByAppPath(
   return (
     MOCKUP_ROLES.flatMap((role) =>
       NAV_SECTIONS[role].flatMap((section) =>
-        section.items.map((item) => ({ role, section, item })),
+        flattenNavItems(section.items).map((item) => ({ role, section, item })),
       ),
     ).find((entry) => navHref(entry.item.href, "app") === path) ?? null
   )

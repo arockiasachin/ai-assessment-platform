@@ -177,7 +177,7 @@ export function EditorWorkspace({
           onPointerCancel={endDrag}
           onKeyDown={resizeWithKeyboard}
           className={cn(
-            "group hidden shrink-0 touch-none cursor-col-resize items-center justify-center outline-none md:flex",
+            "group hidden shrink-0 touch-none cursor-col-resize items-center justify-center rounded-full outline-none focus-visible:ring-3 focus-visible:ring-ring/50 md:flex",
             dragging && "cursor-col-resize",
           )}
         >

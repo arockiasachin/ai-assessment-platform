@@ -29,6 +29,7 @@ import {
 } from "lucide-react"
 
 import { AssessmentPicker, type AssessmentPickerOption } from "@/components/assessment-picker"
+import { BackLink } from "@/components/back-link"
 import { CollapsibleSection } from "@/components/collapsible-section"
 import { EditorWorkspace } from "@/components/editor-workspace"
 import { Button } from "@/components/ui/button"
@@ -425,6 +426,7 @@ export function StudentWriteEditor({
           assessment" card and the long page description are gone. */}
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <div className="min-w-0">
+          <BackLink pathname="/student/write" className="mb-1" />
           <p className="text-xs font-semibold tracking-wider text-muted-foreground uppercase">
             Write
           </p>

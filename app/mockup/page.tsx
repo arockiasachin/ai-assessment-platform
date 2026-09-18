@@ -15,6 +15,7 @@ import {
   PREVIEW_ROLES,
   ROLE_META,
   allNavItems,
+  flattenNavItems,
   navSectionsFor,
 } from "@/components/shell/nav-config"
 import { PageHeader } from "@/components/shell/page-header"
@@ -64,7 +65,11 @@ const STANDALONE_SCREENS: { href: string; label: string; description: string; ic
  * separately because they deliberately sit outside that navigation.
  */
 export default function MockupIndexPage() {
-  const totalPages = allNavItems().length
+  // Unique destinations, not nav rows: the Assessments group lists several
+  // filtered views of one page, and counting each would overstate the tree.
+  const totalPages = new Set(
+    flattenNavItems(allNavItems().map((entry) => entry.item)).map((item) => item.href),
+  ).size
 
   return (
     <>
@@ -152,7 +157,13 @@ export default function MockupIndexPage() {
                 </h3>
                 <ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
                   {section.items.map((item) => (
-                    <li key={item.href}>
+                    <li
+                      key={item.href}
+                      // A disclosure group spans the row and lists its children
+                      // beneath its card, so a nested page is still reachable
+                      // from the index without a card per filtered view.
+                      className={item.children ? "sm:col-span-2 xl:col-span-3" : undefined}
+                    >
                       <PageLinkCard
                         href={item.href}
                         label={item.label}
@@ -164,6 +175,23 @@ export default function MockupIndexPage() {
                           )
                         }
                       />
+                      {item.children && (
+                        <ul className="mt-2 flex flex-wrap gap-x-3 gap-y-1 pl-1 text-xs">
+                          {item.children
+                            // App-only children have no mockup page to link to.
+                            .filter((child) => !child.appOnly)
+                            .map((child) => (
+                              <li key={`${child.href}:${child.label}`}>
+                                <Link
+                                  href={child.href}
+                                  className="rounded-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-1 focus-visible:outline-ring"
+                                >
+                                  {child.label}
+                                </Link>
+                              </li>
+                            ))}
+                        </ul>
+                      )}
                     </li>
                   ))}
                 </ul>

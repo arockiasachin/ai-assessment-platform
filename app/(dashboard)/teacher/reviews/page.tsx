@@ -6,6 +6,7 @@ import { AppShell, PageHeader } from "@/components/shell"
 import { findNavItemByAppPath } from "@/components/shell/nav-config"
 import { TeacherReviewQueue } from "@/components/teacher-review-queue"
 import { getSessionUser } from "@/lib/auth"
+import { breadcrumbTrail } from "@/lib/navigation"
 import { gradeReviewStatusSchema } from "@/lib/contracts/grading"
 import { listEvaluationCandidatesForTeacher, listReviewQueueForTeacher } from "@/lib/rubric-grading"
 import type { GradeReviewStatusValue } from "@/lib/contracts/grading"
@@ -78,6 +79,7 @@ export default async function TeacherReviewsPage({
       >
         <PageHeader
           title={findNavItemByAppPath(HREF)?.item.label ?? "Reviews"}
+          breadcrumbs={breadcrumbTrail(HREF, "Reviews")}
           description="Inspect per-criterion AI suggestions with evidence and confidence, then accept, override, reject, or flag. Nothing publishes without your approval."
         />
         <TeacherReviewQueue

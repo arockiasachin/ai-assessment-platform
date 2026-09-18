@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import { CheckCheck, ClipboardCheck, History, Loader2, Play, Send } from "lucide-react"
 
+import { QuestionPrompt } from "@/components/question-prompt"
 import { Button } from "@/components/ui/button"
 import { Callout } from "@/components/ui/callout"
 import { SectionCard } from "@/components/ui/section-card"
@@ -517,7 +518,7 @@ export function StudentQuizAttempts({ initialQuizzes, initialAttempt = null }: P
               if (isTextQuestionType(question)) {
                 return (
                   <div key={question.id} className="rounded-lg border border-border p-3">
-                    <p className="text-sm font-medium">{question.prompt}</p>
+                    <QuestionPrompt as="h3" text={question.prompt} />
                     <p className="mt-1 text-xs text-muted-foreground">
                       {question.points} mark{question.points === 1 ? "" : "s"} · written answer
                     </p>
@@ -544,7 +545,7 @@ export function StudentQuizAttempts({ initialQuizzes, initialAttempt = null }: P
               }
               return (
                 <div key={question.id} className="rounded-lg border border-border p-3">
-                  <p className="text-sm font-medium">{question.prompt}</p>
+                  <QuestionPrompt as="h3" text={question.prompt} />
                   <div className="mt-2 grid gap-1">
                     {question.options.map((option, optionIndex) => {
                       const isChosen = result
