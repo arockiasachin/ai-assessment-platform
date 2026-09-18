@@ -497,7 +497,14 @@ describe("completedCourseTotal", () => {
 })
 
 describe("catGateGauge", () => {
-  const cat = { markedCount: 4, totalCount: 6, completionRatio: 4 / 6, status: "eligible" }
+  const cat = {
+    markedCount: 4,
+    totalCount: 6,
+    completionRatio: 4 / 6,
+    status: "eligible",
+    percent: 65,
+    minimumPercent: 30,
+  }
 
   it("omits the gauge when there is no CAT/FAT split or nothing in the pool", () => {
     expect(catGateGauge(null)).toBeNull()
@@ -516,7 +523,29 @@ describe("catGateGauge", () => {
       totalCount: 6,
       ratio: 4 / 6,
       status: "eligible",
+      percent: 65,
+      minimumPercent: 30,
     })
+  })
+
+  it("carries the CAT standing against the requirement, not only the verdict", () => {
+    // The verdict names the requirement once it is already breached. The gauge needs the
+    // standing and the requirement together so it can show where a student stands before
+    // that point — the whole reason `minimumPercent` was surfaced.
+    const gauge = catGateGauge({ finalAssessment: { published: false }, cat })
+    expect(gauge?.percent).toBe(65)
+    expect(gauge?.minimumPercent).toBe(30)
+  })
+
+  it("reports an unknown minimum as null rather than inventing one", () => {
+    // An offering with no gate set has no requirement to compare against, and absence
+    // must not render as zero.
+    const gauge = catGateGauge({
+      finalAssessment: { published: false },
+      cat: { markedCount: 4, totalCount: 6, completionRatio: 4 / 6, status: "eligible" },
+    })
+    expect(gauge?.minimumPercent).toBeNull()
+    expect(gauge?.percent).toBeNull()
   })
 })
 
