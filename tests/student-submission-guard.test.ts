@@ -187,4 +187,35 @@ describe("student submission state guard", () => {
       await prisma.submission.count({ where: { assessmentId: assignment.id, studentId } }),
     ).toBe(0)
   })
+
+  it("refuses an assessment the student is not enrolled in, indistinguishably from a missing one", async () => {
+    // TN-69 at the last student surface that still split 403 from 404. The lookup
+    // refuses a missing or unreleased assessment with 404, so if the enrollment
+    // branch answered 403 a student could tell a released-but-foreign assessment
+    // from a nonexistent one. Asserting the two match is stronger than pinning
+    // either status alone.
+    const { f, assignment, studentId } = await seedAssignment()
+    await prisma.enrollment.deleteMany({ where: { offeringId: f.offering.id } })
+
+    const notEnrolled = submissionRequest(assignment.id, {
+      contentText: "not mine",
+      action: "submit",
+    })
+    const notEnrolledResponse = await POST(notEnrolled.request, notEnrolled.context)
+
+    const missing = submissionRequest("no-such-assessment-zzz", {
+      contentText: "not mine",
+      action: "submit",
+    })
+    const missingResponse = await POST(missing.request, missing.context)
+
+    expect(notEnrolledResponse.status).toBe(404)
+    expect(notEnrolledResponse.status).toBe(missingResponse.status)
+    await expect(notEnrolledResponse.json()).resolves.toEqual(await missingResponse.json())
+
+    // The refusal must still refuse: nothing is written for the unenrolled student.
+    expect(
+      await prisma.submission.count({ where: { assessmentId: assignment.id, studentId } }),
+    ).toBe(0)
+  })
 })

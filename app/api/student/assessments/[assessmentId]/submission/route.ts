@@ -104,8 +104,21 @@ export async function POST(
     return jsonError("Only written assessments support text submissions.", 409)
   }
 
+  /*
+   * Existence, release and enrollment answer identically (TN-69).
+   *
+   * The lookup above already refuses a missing or unreleased assessment with the
+   * same 404, so leaving this branch as a 403 would reopen the oracle one step
+   * later: a student could tell a released-but-foreign assessment (403) from a
+   * nonexistent one (404) and so confirm that an assessment they cannot see
+   * exists. The cost is that an unenrolled student is no longer told they are
+   * unenrolled — the accepted trade-off, stated in `lib/assessment-release.ts`.
+   * The write is still refused; only the confirmation that the assessment exists
+   * is removed. Same fold as the sibling student readers in
+   * `lib/quiz-attempts/service.ts`.
+   */
   if (assessment.offering.enrollments.length === 0) {
-    return jsonError("You are not enrolled in this assessment offering.", 403)
+    return jsonError("Assessment not found.", 404)
   }
 
   /*
