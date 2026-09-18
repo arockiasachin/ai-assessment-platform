@@ -3,7 +3,10 @@ import { NextResponse } from "next/server"
 import { jsonError, parseJsonBody } from "@/lib/api"
 import { requireRole } from "@/lib/authz"
 import { courseEnrollRequestSchema } from "@/lib/contracts"
+import { findEnrollmentBlockingArrear, type ArrearHold } from "@/lib/enrollment-arrear-gate"
+import { logEvent } from "@/lib/observability/event"
 import { prisma } from "@/lib/prisma"
+import { arrearRefusalMessage } from "@/lib/student-courses-view"
 
 type EnrollOutcome =
   | { kind: "not-found" }
@@ -13,6 +16,7 @@ type EnrollOutcome =
   | { kind: "already-waitlisted"; courseName: string }
   | { kind: "not-open" }
   | { kind: "closed" }
+  | { kind: "arrear-blocked"; arrear: ArrearHold }
 
 export async function POST(request: Request) {
   const auth = await requireRole("student")
@@ -68,6 +72,18 @@ export async function POST(request: Request) {
       return { kind: "closed" }
     }
 
+    // Prior-results gate, next to the window checks so it is evaluated before capacity (a
+    // waitlist place is still a registration). An outstanding arrear refuses a *new* course;
+    // registering for the arrear's own course stays allowed — that is how it is cleared — and an
+    // arrear the student has acknowledged no longer refuses. `not-judged` is not an arrear, so
+    // mid-term incompleteness never reaches this branch (lib/arrears.ts).
+    const arrear = await findEnrollmentBlockingArrear({
+      user: auth.user,
+      studentId: student.id,
+      targetCourseId: offering.courseId,
+    })
+    if (arrear) return { kind: "arrear-blocked", arrear }
+
     const activeCount = await tx.enrollment.count({
       where: { offeringId, status: "active" },
     })
@@ -98,6 +114,17 @@ export async function POST(request: Request) {
       return jsonError("Registration has not opened yet.", 409)
     case "closed":
       return jsonError("Registration window is closed.", 409)
+    case "arrear-blocked": {
+      // Structured rather than a plain `jsonError`: the UI needs the course and the reason to
+      // render the acknowledgement affordance, not only a sentence. The message is built from the
+      // same copy the catalog uses, so the two cannot drift.
+      const message = arrearRefusalMessage(outcome.arrear)
+      logEvent("debug", "http.error_response", { status: 409, message })
+      return NextResponse.json(
+        { success: false, kind: "arrear-blocked", message, arrear: outcome.arrear },
+        { status: 409 },
+      )
+    }
     case "already-enrolled":
       return NextResponse.json({
         success: true,

@@ -2,7 +2,15 @@
 
 import { useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
-import { BookOpenCheck, CalendarClock, CheckCheck, Search, Star, UserPlus } from "lucide-react"
+import {
+  AlertTriangle,
+  BookOpenCheck,
+  CalendarClock,
+  CheckCheck,
+  Search,
+  Star,
+  UserPlus,
+} from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Callout } from "@/components/ui/callout"
@@ -27,7 +35,11 @@ import type {
   CourseRegistrationStatus,
   StudentCoursesPayload,
 } from "@/lib/student-courses"
-import { courseRunWindowLabel, registrationWindowLabel } from "@/lib/student-courses-view"
+import {
+  courseRunWindowLabel,
+  arrearReasonLabel,
+  registrationWindowLabel,
+} from "@/lib/student-courses-view"
 
 /**
  * Student course workspace.
@@ -44,6 +56,12 @@ import { courseRunWindowLabel, registrationWindowLabel } from "@/lib/student-cou
  */
 
 type Props = { initialPayload: StudentCoursesPayload }
+
+/** The blocking arrear the server attached to a catalog row, if any. */
+type ArrearHold = NonNullable<CourseCatalogItem["arrearHold"]>
+
+/** A refusal returned by the enrolment route, with the offering the student was registering for. */
+type ArrearNotice = { offeringId: string; arrear: ArrearHold }
 
 /**
  * Dates are formatted in `lib/student-courses-view.ts` with an explicit locale and
@@ -130,7 +148,14 @@ const CATALOG_COLUMNS: Column<CourseCatalogItem>[] = [
     header: "Registration",
     cell: (course) => {
       const meta = REGISTRATION_STATUS[course.registrationStatus]
-      return <StatusPill status={meta.key} label={meta.label} dot />
+      return (
+        <div className="flex flex-col items-start gap-1">
+          <StatusPill status={meta.key} label={meta.label} dot />
+          {/* Extends the registration vocabulary with the prior-results state rather than
+              re-labelling the window: the window is still open, but this student is held. */}
+          {course.arrearHold && <StatusPill status="flagged" label="Arrear hold" dot />}
+        </div>
+      )
     },
   },
   {
@@ -157,6 +182,7 @@ export function StudentCoursesView({ initialPayload }: Props) {
   const [pendingId, setPendingId] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [arrearNotice, setArrearNotice] = useState<ArrearNotice | null>(null)
 
   const enrolled = initialPayload.enrolledCourses
   const offered = initialPayload.offeredCourses
@@ -188,15 +214,57 @@ export function StudentCoursesView({ initialPayload }: Props) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ offeringId }),
       })
-      const data = (await response.json().catch(() => ({}))) as { message?: string }
+      const data = (await response.json().catch(() => ({}))) as {
+        message?: string
+        kind?: string
+        arrear?: ArrearHold
+      }
       if (!response.ok) {
+        // The prior-results gate is not a dead end: surface the arrear with its reason and the
+        // one-click acknowledgement instead of a bare error. `arrearNotice` renders that panel.
+        if (data.kind === "arrear-blocked" && data.arrear) {
+          setArrearNotice({ offeringId, arrear: data.arrear })
+          return
+        }
         setError(data.message ?? "Unable to enroll right now.")
         return
       }
+      setArrearNotice(null)
       setMessage(data.message ?? "Enrollment updated.")
       router.refresh()
     } catch {
       setError("Unable to enroll right now.")
+    } finally {
+      setPendingId(null)
+    }
+  }
+
+  /**
+   * Acknowledge the arrear, then retry the registration the server refused.
+   *
+   * Two requests rather than one: the acknowledgement is a durable record, not a flag on the
+   * enrolment, so it is written by its own endpoint and the retry re-runs the same checked
+   * transaction. The server still decides — this only removes the hold.
+   */
+  async function acknowledgeAndEnroll(offeringId: string, arrear: ArrearHold) {
+    setPendingId(offeringId)
+    setMessage(null)
+    setError(null)
+    try {
+      const response = await fetch("/api/student/courses/enroll/acknowledge", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ offeringId: arrear.offeringId }),
+      })
+      const data = (await response.json().catch(() => ({}))) as { message?: string }
+      if (!response.ok) {
+        setError(data.message ?? "Unable to record the acknowledgement right now.")
+        return
+      }
+      setArrearNotice(null)
+      await enroll(offeringId)
+    } catch {
+      setError("Unable to record the acknowledgement right now.")
     } finally {
       setPendingId(null)
     }
@@ -277,6 +345,30 @@ export function StudentCoursesView({ initialPayload }: Props) {
             {error}
           </Callout>
         </div>
+      )}
+      {arrearNotice && (
+        <Callout
+          tone="warning"
+          role="alert"
+          icon={AlertTriangle}
+          title={`Arrear hold — ${arrearNotice.arrear.courseName} (${arrearNotice.arrear.courseCode})`}
+          action={
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() =>
+                void acknowledgeAndEnroll(arrearNotice.offeringId, arrearNotice.arrear)
+              }
+              disabled={pendingId === arrearNotice.offeringId}
+            >
+              Acknowledge &amp; register
+            </Button>
+          }
+        >
+          {arrearReasonLabel(arrearNotice.arrear.reason)}. Acknowledging records that you have seen
+          this and removes the hold; it does not clear the arrear. Re-register for{" "}
+          {arrearNotice.arrear.courseCode} to clear it.
+        </Callout>
       )}
 
       <SectionCard
@@ -546,14 +638,35 @@ export function StudentCoursesView({ initialPayload }: Props) {
               // you can act on needs a control.
               if (course.isEnrolled || course.isWaitlisted) return null
               const canJoinWaitlist = course.registrationStatus === "full"
+              const actionable = course.canRegister || canJoinWaitlist
+              const hold = course.arrearHold
+
+              // A held registration swaps the control's label and handler rather than adding a
+              // second action: the same click either registers, or acknowledges and registers.
+              if (hold && actionable) {
+                return (
+                  <div className="flex flex-col items-end gap-1">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => void acknowledgeAndEnroll(course.offeringId, hold)}
+                      disabled={pendingId === course.offeringId}
+                    >
+                      Acknowledge &amp; register
+                    </Button>
+                    <span className="text-xs text-muted-foreground">
+                      Arrear in {hold.courseCode}: {arrearReasonLabel(hold.reason)}
+                    </span>
+                  </div>
+                )
+              }
+
               return (
                 <Button
                   size="sm"
                   variant="outline"
                   onClick={() => void enroll(course.offeringId)}
-                  disabled={
-                    (!course.canRegister && !canJoinWaitlist) || pendingId === course.offeringId
-                  }
+                  disabled={!actionable || pendingId === course.offeringId}
                 >
                   {canJoinWaitlist ? "Join waitlist" : "Register"}
                 </Button>

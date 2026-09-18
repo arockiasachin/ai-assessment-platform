@@ -1,6 +1,7 @@
 import "server-only"
 
 import { classroomLabel } from "@/lib/classroom-label"
+import { listBlockingArrears, type ArrearHold } from "@/lib/enrollment-arrear-gate"
 import { prisma } from "@/lib/prisma"
 import type { AuthUser } from "@/lib/session"
 
@@ -48,6 +49,18 @@ export type CourseCatalogItem = {
   isEnrolled: boolean
   isWaitlisted: boolean
   isCompleted: boolean
+  /**
+   * The outstanding arrear that would refuse a registration for **this** offering's course, or
+   * `null` when nothing would.
+   *
+   * The catalog shows the acknowledgement affordance before the student clicks, rather than
+   * letting the server refuse and then explaining — so the row states the hold the register
+   * control would hit. It is `null` for the arrear's own course (re-registering is how the arrear
+   * is cleared) and for an arrear the student has already acknowledged. The enrolment route
+   * re-checks the same rule (`lib/enrollment-arrear-gate.ts`), so this is a hint, never the
+   * enforcement.
+   */
+  arrearHold: ArrearHold | null
   studentRating: number | null
   studentRatingComment: string | null
   /** Null means "no ratings yet" and must render as `—`, never `0`. */
@@ -187,6 +200,14 @@ export async function listStudentCourses(user: AuthUser): Promise<StudentCourses
     orderBy: [{ academicYear: "desc" }, { term: "asc" }],
   })
 
+  // One call for the whole catalog: the outcome reader is the expensive part, and every offering
+  // asks the same question. Courses with no hold are simply absent from the map.
+  const arrearHolds = await listBlockingArrears({
+    user,
+    studentId: student.id,
+    targetCourseIds: offerings.map((offering) => offering.courseId),
+  })
+
   const items: CourseCatalogItem[] = offerings.map((offering) => {
     const myEnrollment = offering.enrollments.find((e) => e.studentId === student.id)
     const isEnrolled = myEnrollment?.status === "active"
@@ -242,6 +263,7 @@ export async function listStudentCourses(user: AuthUser): Promise<StudentCourses
       isEnrolled,
       isWaitlisted,
       isCompleted,
+      arrearHold: arrearHolds.get(offering.courseId) ?? null,
       studentRating: ownRating?.rating ?? null,
       studentRatingComment: ownRating?.comment ?? null,
       averageRating,
