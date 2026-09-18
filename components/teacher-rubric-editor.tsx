@@ -259,7 +259,16 @@ export function TeacherRubricEditor({
         <CardContent className="space-y-4">
           <div className="grid gap-2 sm:max-w-xl">
             <Label htmlFor="rubric-assessment">Assessment</Label>
-            <Select value={selectedId} onValueChange={(value) => selectAssessment(value ?? "")}>
+            <Select
+              value={selectedId}
+              onValueChange={(value) => selectAssessment(value ?? "")}
+              // Base UI's trigger shows the raw assessment id without this map (TN-7); it
+              // mirrors the popup options exactly, including the "(rubric)" suffix.
+              items={assessments.map((assessment) => ({
+                value: assessment.id,
+                label: `${assessment.title}${assessment.rubric ? " (rubric)" : ""}`,
+              }))}
+            >
               <SelectTrigger id="rubric-assessment">
                 <SelectValue placeholder="Choose an assessment" />
               </SelectTrigger>

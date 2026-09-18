@@ -89,7 +89,16 @@ export function TeacherRatingsReport({ offerings }: { offerings: CourseOfferingR
       <div className="flex flex-wrap items-end gap-3">
         <label className="grid gap-1 text-sm">
           <span className="text-xs text-muted-foreground">Show</span>
-          <Select value={coverage} onValueChange={(value) => setCoverage(value ?? "all")}>
+          <Select
+            value={coverage}
+            onValueChange={(value) => setCoverage(value ?? "all")}
+            // Base UI's trigger shows the raw value (`all`) without this map (TN-7).
+            items={[
+              { value: "all", label: "All offerings" },
+              { value: "with", label: "With feedback only" },
+              { value: "without", label: "Without feedback only" },
+            ]}
+          >
             <SelectTrigger className="w-56" aria-label="Filter offerings by feedback">
               <SelectValue />
             </SelectTrigger>

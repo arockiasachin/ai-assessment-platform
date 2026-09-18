@@ -236,7 +236,18 @@ export function TeacherLmsExport({ offerings, initialOfferingId, initialExport }
               >
                 Course offering
               </label>
-              <Select value={offeringId} onValueChange={(value) => selectOffering(value ?? "")}>
+              <Select
+                value={offeringId}
+                onValueChange={(value) => selectOffering(value ?? "")}
+                // Base UI's `Select.Value` renders the raw value unless the root knows the
+                // value→label map, so the trigger would show `demo-offering-active` instead of
+                // the offering name (TN-7). The same options array the popup renders keeps the
+                // two in agreement by construction — the pattern `filter-bar.tsx` uses.
+                items={offerings.map((offering) => ({
+                  value: offering.id,
+                  label: offeringLabel(offering),
+                }))}
+              >
                 <SelectTrigger id="export-offering">
                   <SelectValue placeholder="Select an offering" />
                 </SelectTrigger>

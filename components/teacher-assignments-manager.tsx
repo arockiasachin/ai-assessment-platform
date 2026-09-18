@@ -74,6 +74,23 @@ export function TeacherAssignmentsManager({
     () => offerings.filter((offering) => !isOfferingClosed(offering.endsOn)),
     [offerings],
   )
+  /**
+   * The value→label map Base UI's `Select.Value` needs to render a label in the trigger
+   * instead of the raw id (TN-7). It is the same data the popup options render, so the two
+   * cannot disagree.
+   */
+  const offeringItems = useMemo(
+    () =>
+      openOfferings.map((offering) => ({
+        value: offering.id,
+        label: `${offering.courseName} — ${offering.className} (${offering.term} ${offering.academicYear})`,
+      })),
+    [openOfferings],
+  )
+  const kindItems = useMemo(
+    () => ASSESSMENT_KINDS.map((kind) => ({ value: kind, label: ASSESSMENT_KIND_LABEL[kind] })),
+    [],
+  )
   const router = useRouter()
 
   const [offeringId, setOfferingId] = useState("")
@@ -297,6 +314,7 @@ export function TeacherAssignmentsManager({
               <Select
                 value={selectedOfferingId}
                 onValueChange={(value) => setOfferingId(value ?? "")}
+                items={offeringItems}
               >
                 <SelectTrigger id="assignment-offering">
                   <SelectValue placeholder="Select an offering" />
@@ -319,6 +337,7 @@ export function TeacherAssignmentsManager({
                 onValueChange={(value) =>
                   setAssignmentKind((value as CreateAssessmentRequest["type"]) ?? "ASSIGNMENT")
                 }
+                items={kindItems}
               >
                 <SelectTrigger id="assignment-kind">
                   <SelectValue />
@@ -388,6 +407,7 @@ export function TeacherAssignmentsManager({
             <Select
               value={quizSelectedOfferingId}
               onValueChange={(value) => setQuizOfferingId(value ?? "")}
+              items={offeringItems}
             >
               <SelectTrigger id="quiz-offering">
                 <SelectValue placeholder="Select an offering" />

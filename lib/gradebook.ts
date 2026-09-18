@@ -30,6 +30,13 @@ export type Student = {
   email: string
   registerNumber?: string | null
   profilePicUrl?: string | null
+  /**
+   * The offerings this student is enrolled in, among the ones the caller is allowed to see.
+   * The teacher gradebook payload annotates it so the marks grid can be scoped to one
+   * offering instead of rendering every student against every assessment (TN-47). Absent
+   * on payloads that make no such claim, which scoping treats as "no known enrolment".
+   */
+  offeringIds?: string[]
 }
 
 export type Assessment = {

@@ -133,6 +133,12 @@ export function GroupsOfferingPicker({
         if (!value) return
         router.push(`${pathname}?offeringId=${encodeURIComponent(value)}`)
       }}
+      // Base UI renders the raw value in the trigger unless the root knows the value→label
+      // map (TN-7); the same options the popup renders keep the two in agreement.
+      items={offerings.map((offering) => ({
+        value: offering.id,
+        label: `${offering.courseCode} · ${offering.className} · ${offering.term} ${offering.academicYear}`,
+      }))}
     >
       <SelectTrigger className="w-[22rem] max-w-full" aria-label="Course offering">
         <SelectValue placeholder="Select an offering" />
@@ -355,6 +361,14 @@ export function GroupFormationPanel({
             onValueChange={(value: string | null) =>
               setNewGroupAssessmentId(!value || value === "__none__" ? "" : value)
             }
+            // The trigger shows the raw value without this map (TN-7); it mirrors the popup.
+            items={[
+              { value: "__none__", label: "No project assessment" },
+              ...projectAssessments.map((assessment) => ({
+                value: assessment.id,
+                label: assessment.title,
+              })),
+            ]}
           >
             <SelectTrigger
               id="new-group-project"

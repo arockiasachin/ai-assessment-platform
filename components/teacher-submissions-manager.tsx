@@ -220,6 +220,13 @@ export function TeacherSubmissionsManager({ rows }: { rows: TeacherSubmissionRow
             onValueChange={(value) =>
               setStatusFilter((value as "all" | "pending" | "graded") ?? "all")
             }
+            // Base UI shows the raw value without the map (TN-7), so the trigger read `all`
+            // rather than "All submissions".
+            items={[
+              { value: "all", label: "All submissions" },
+              { value: "pending", label: "Pending grading" },
+              { value: "graded", label: "Graded" },
+            ]}
           >
             <SelectTrigger aria-label="Filter by grading status">
               <SelectValue placeholder="Status" />

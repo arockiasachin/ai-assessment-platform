@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo } from "react"
+import { useMemo, useState } from "react"
 import { Search } from "lucide-react"
 
 import { GradebookTable } from "@/components/gradebook-table"
@@ -14,7 +14,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { filterAssessments } from "@/lib/analytics"
+import { scopeGradebookToOffering } from "@/lib/gradebook-view"
 
 /**
  * The editable marks grid, lifted out of `TeacherView` when the dashboard was
@@ -27,19 +27,35 @@ import { filterAssessments } from "@/lib/analytics"
  *
  * It reads the gradebook from context — seeded on the server by
  * `app/(dashboard)/layout.tsx` — because `GradebookTable` is itself a context
- * consumer and owns the per-cell editing state. Filtering stays here rather than in
- * the table because `GradebookTable` narrows by the context's `search` while the
- * course filter changes which *columns* exist; putting the course filter here keeps
- * one component deciding what the grid shows.
+ * consumer and owns the per-cell editing state.
+ *
+ * The grid is scoped to **one offering** (TN-47). It used to render the union of every
+ * student and every assessment across the teacher's offerings, so most cells were a
+ * student crossed with another class's assessment and were refused on write. The offering
+ * selector is the scope control; both axes come from `scopeGradebookToOffering`, so the
+ * rectangle is entirely writable by construction.
  */
 export function TeacherMarksView() {
-  const { courses, assessments, isLoading, courseFilter, setCourseFilter, search, setSearch } =
-    useGradebook()
+  const { students, assessments, offerings, isLoading, search, setSearch } = useGradebook()
 
-  const filtered = useMemo(
-    () => filterAssessments(assessments, courseFilter),
-    [assessments, courseFilter],
+  // Empty means "not chosen yet"; the first offering is the default. Resolving rather than
+  // syncing into state keeps it derived from the payload, so a refreshed payload is honoured.
+  const [offeringId, setOfferingId] = useState("")
+  const selectedOfferingId = offeringId || offerings[0]?.id || ""
+
+  const scoped = useMemo(
+    () => scopeGradebookToOffering(students, assessments, selectedOfferingId),
+    [students, assessments, selectedOfferingId],
   )
+
+  /**
+   * The value→label map Base UI's `Select.Value` needs to render a label instead of the raw
+   * offering id in the trigger (TN-7). It is the same data the popup renders.
+   */
+  const offeringItems = offerings.map((offering) => ({
+    value: offering.id,
+    label: `${offering.courseCode} · ${offering.className} · ${offering.term} ${offering.academicYear}`,
+  }))
 
   if (isLoading) {
     return <p className="py-10 text-center text-sm text-muted-foreground">Loading gradebook…</p>
@@ -48,7 +64,7 @@ export function TeacherMarksView() {
   return (
     <SectionCard
       title="Marks"
-      description="Filter by course and search students to quickly update marks."
+      description="Choose an offering and search students to quickly update marks."
       contentClassName="px-2 pb-2"
       action={
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
@@ -62,23 +78,29 @@ export function TeacherMarksView() {
               className="pl-8 sm:w-56"
             />
           </div>
-          <Select value={courseFilter} onValueChange={(value) => setCourseFilter(value ?? "all")}>
-            <SelectTrigger className="sm:w-44" aria-label="Filter by course">
-              <SelectValue placeholder="All courses" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All courses</SelectItem>
-              {courses.map((course) => (
-                <SelectItem key={course.id} value={course.id}>
-                  {course.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          {offerings.length > 0 && (
+            <Select
+              value={selectedOfferingId}
+              onValueChange={(value) => setOfferingId(value ?? "")}
+              items={offeringItems}
+            >
+              <SelectTrigger className="sm:w-64" aria-label="Course offering">
+                <SelectValue placeholder="Select an offering" />
+              </SelectTrigger>
+              <SelectContent>
+                {offerings.map((offering) => (
+                  <SelectItem key={offering.id} value={offering.id}>
+                    {offering.courseCode} · {offering.className} · {offering.term}{" "}
+                    {offering.academicYear}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
         </div>
       }
     >
-      <GradebookTable assessments={filtered} />
+      <GradebookTable students={scoped.students} assessments={scoped.assessments} />
     </SectionCard>
   )
 }

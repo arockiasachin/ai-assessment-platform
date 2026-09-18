@@ -202,17 +202,31 @@ export async function getGradebookPayloadForSessionUser(
       endsOn: o.endsOn?.toISOString() ?? null,
     }))
 
-    const studentPool: Student[] = uniqById(
-      offerings.flatMap((offering) =>
-        offering.enrollments.map((e) => ({
-          id: e.student.id,
-          name: e.student.fullName,
-          email: e.student.user.email,
-          registerNumber: e.student.registerNumber,
-          profilePicUrl: e.student.profilePicUrl,
-        })),
-      ),
-    )
+    // A student is annotated with *which* of this teacher's offerings they are enrolled in,
+    // not just the union. Without it the marks grid could not be scoped to one offering and
+    // rendered every student against every assessment, so most cells were refused by the
+    // write path (TN-47). A student enrolled in two of the teacher's offerings gets both ids.
+    const studentPool: Student[] = []
+    const studentById = new Map<string, Student>()
+    for (const offering of offerings) {
+      for (const enrollment of offering.enrollments) {
+        const existing = studentById.get(enrollment.student.id)
+        if (existing) {
+          existing.offeringIds?.push(offering.id)
+          continue
+        }
+        const student: Student = {
+          id: enrollment.student.id,
+          name: enrollment.student.fullName,
+          email: enrollment.student.user.email,
+          registerNumber: enrollment.student.registerNumber,
+          profilePicUrl: enrollment.student.profilePicUrl,
+          offeringIds: [offering.id],
+        }
+        studentById.set(student.id, student)
+        studentPool.push(student)
+      }
+    }
 
     const assessmentPool = offerings.flatMap((offering) => offering.assessments)
 

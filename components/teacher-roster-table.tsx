@@ -333,6 +333,11 @@ export function TeacherRosterTable({
               <Select
                 value={effectiveAddStudentId}
                 onValueChange={(value) => setAddStudentId(value ?? "")}
+                // Base UI's trigger shows the raw student id without this map (TN-7).
+                items={addCandidates.map((student) => ({
+                  value: student.id,
+                  label: `${student.name} (${student.registerNumber ?? student.email})`,
+                }))}
               >
                 <SelectTrigger id="roster-add-student">
                   <SelectValue placeholder="Select a student" />
@@ -351,6 +356,8 @@ export function TeacherRosterTable({
               <Select
                 value={effectiveAddOfferingId}
                 onValueChange={(value) => setAddOfferingId(value ?? "")}
+                // Base UI's trigger shows the raw offering id without this map (TN-7).
+                items={offerings.map((option) => ({ value: option.id, label: option.label }))}
               >
                 <SelectTrigger id="roster-add-offering">
                   <SelectValue placeholder="Select an offering" />

@@ -550,7 +550,15 @@ export function TeacherQuizGenerator({
         <CardContent className="space-y-4">
           <div className="grid gap-2 sm:max-w-xl">
             <Label htmlFor="quiz-assessment">Assessment</Label>
-            <Select value={selectedId} onValueChange={(value) => setSelectedId(value ?? "")}>
+            <Select
+              value={selectedId}
+              onValueChange={(value) => setSelectedId(value ?? "")}
+              // Base UI's trigger shows the raw value without the value→label map (TN-7).
+              items={initialAssessments.map((assessment) => ({
+                value: assessment.id,
+                label: assessment.title,
+              }))}
+            >
               <SelectTrigger id="quiz-assessment">
                 <SelectValue placeholder="Choose an assessment" />
               </SelectTrigger>
@@ -596,7 +604,16 @@ export function TeacherQuizGenerator({
             </div>
             <div className="grid gap-2">
               <Label htmlFor="quiz-difficulty">Difficulty target</Label>
-              <Select value={difficulty} onValueChange={(value) => setDifficulty(value ?? "mixed")}>
+              <Select
+                value={difficulty}
+                onValueChange={(value) => setDifficulty(value ?? "mixed")}
+                items={[
+                  { value: "easy", label: "Easy" },
+                  { value: "medium", label: "Medium" },
+                  { value: "hard", label: "Hard" },
+                  { value: "mixed", label: "Mixed" },
+                ]}
+              >
                 <SelectTrigger id="quiz-difficulty">
                   <SelectValue />
                 </SelectTrigger>
