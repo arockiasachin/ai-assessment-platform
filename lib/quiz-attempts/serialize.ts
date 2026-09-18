@@ -58,6 +58,13 @@ export function serializeAttemptSummary(input: {
   attempt: AttemptRow
   assessmentTitle: string
   dueDate: Date
+  /**
+   * Whether the assessment's grade for this student is published. Every caller
+   * already reads the `Grade` (the teacher reads carry it as `gradePublishedAt`,
+   * the student reads load it for this field), so the pending-versus-published
+   * state travels with the score instead of being re-derived by each client.
+   */
+  gradePublished: boolean
 }): QuizAttemptSummary {
   const { attempt } = input
   return {
@@ -72,6 +79,7 @@ export function serializeAttemptSummary(input: {
     submittedAt: attempt.submittedAt?.toISOString() ?? null,
     dueDate: input.dueDate.toISOString(),
     isLate: attempt.submittedAt !== null && attempt.submittedAt.getTime() > input.dueDate.getTime(),
+    gradePublished: input.gradePublished,
   }
 }
 

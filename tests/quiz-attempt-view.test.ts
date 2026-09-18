@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest"
 
 import type { QuizAttemptView } from "@/lib/contracts/quiz-attempts"
 import {
+  attemptScoreState,
+  isPublishedScore,
   isTextQuestionType,
   resumableAttempt,
   unansweredQuestionCount,
@@ -84,5 +86,58 @@ describe("resumableAttempt", () => {
   it("returns null when nothing is open", () => {
     expect(resumableAttempt([{ id: "a1", status: "SUBMITTED" }] as const)).toBeNull()
     expect(resumableAttempt([])).toBeNull()
+  })
+})
+
+describe("attemptScoreState", () => {
+  it("reports an unscored attempt as unscored, whatever the publication flag says", () => {
+    // The flag only qualifies a score that exists; an in-progress attempt has none.
+    expect(attemptScoreState({ score: null, maxScore: null, gradePublished: false })).toEqual({
+      kind: "unscored",
+    })
+    expect(attemptScoreState({ score: null, maxScore: 20, gradePublished: true })).toEqual({
+      kind: "unscored",
+    })
+  })
+
+  it("keeps an auto-score pending until the teacher releases the grade (SN-11)", () => {
+    // The server records the auto-score at submit so the grade pipeline has a suggestion, but
+    // it is not the student's mark until a teacher publishes it.
+    expect(attemptScoreState({ score: 10, maxScore: 20, gradePublished: false })).toEqual({
+      kind: "pending",
+      autoScore: 10,
+      maxScore: 20,
+    })
+  })
+
+  it("exposes a published score as published", () => {
+    expect(attemptScoreState({ score: 20, maxScore: 20, gradePublished: true })).toEqual({
+      kind: "published",
+      score: 20,
+      maxScore: 20,
+    })
+  })
+
+  it("treats a zero score as scored, not missing", () => {
+    // `score: 0` is a real released mark; only `null` means "not scored".
+    expect(attemptScoreState({ score: 0, maxScore: 20, gradePublished: true })).toEqual({
+      kind: "published",
+      score: 0,
+      maxScore: 20,
+    })
+  })
+})
+
+describe("isPublishedScore", () => {
+  it("counts only a released mark", () => {
+    expect(isPublishedScore({ score: 10, gradePublished: true })).toBe(true)
+    expect(isPublishedScore({ score: 0, gradePublished: true })).toBe(true)
+    expect(isPublishedScore({ score: 10, gradePublished: false })).toBe(false)
+    expect(isPublishedScore({ score: null, gradePublished: true })).toBe(false)
+  })
+
+  it("tolerates a missing latest attempt", () => {
+    expect(isPublishedScore(null)).toBe(false)
+    expect(isPublishedScore(undefined)).toBe(false)
   })
 })

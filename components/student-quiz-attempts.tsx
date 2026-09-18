@@ -10,6 +10,8 @@ import { StatCard } from "@/components/ui/stat-card"
 import { StatusPill, type StatusKey } from "@/components/ui/status-pill"
 import { formatDateTime } from "@/lib/format"
 import {
+  attemptScoreState,
+  isPublishedScore,
   isTextQuestionType,
   resumableAttempt,
   unansweredQuestionCount,
@@ -326,6 +328,7 @@ export function StudentQuizAttempts({ initialQuizzes, initialAttempt = null }: P
     (view?.results ?? []).map((result) => [result.questionId, result]),
   )
   const unanswered = view ? unansweredQuestionCount(view, answers, textAnswers) : 0
+  const viewScoreState = view ? attemptScoreState(view) : null
 
   return (
     <div className="grid gap-6">
@@ -351,20 +354,18 @@ export function StudentQuizAttempts({ initialQuizzes, initialAttempt = null }: P
           icon={History}
         />
         <StatCard
-          label="Latest attempt scored"
+          label="Latest attempt released"
           value={
             quizzes.length === 0
               ? // A zero here reads as "the latest attempt scored 0", which is a fabricated
                 // number when there are no quizzes at all (SN-17).
                 "—"
-              : String(
-                  quizzes.filter((quiz) => (quiz.latestAttempt?.score ?? null) !== null).length,
-                )
+              : String(quizzes.filter((quiz) => isPublishedScore(quiz.latestAttempt)).length)
           }
           hint={
             quizzes.length === 0
               ? "No quizzes assigned to you yet"
-              : "A quiz counts here only if its most recent attempt has a score"
+              : "A quiz counts here only once your teacher has released its most recent mark"
           }
           icon={CheckCheck}
         />
@@ -452,6 +453,7 @@ export function StudentQuizAttempts({ initialQuizzes, initialAttempt = null }: P
             )}
             {attempts.map((attempt) => {
               const state = attemptStatus(attempt.status)
+              const scoreState = attemptScoreState(attempt)
               return (
                 <button
                   key={attempt.id}
@@ -469,9 +471,17 @@ export function StudentQuizAttempts({ initialQuizzes, initialAttempt = null }: P
                   </span>
                   <span className="flex items-center gap-2">
                     {attempt.isLate && <StatusPill status="late" label="Late" dot />}
-                    {attempt.score !== null && (
+                    {scoreState.kind === "published" && (
                       <span className="text-xs text-muted-foreground">
-                        {attempt.score}/{attempt.maxScore ?? selected.maxMarks}
+                        {scoreState.score}/{scoreState.maxScore ?? selected.maxMarks}
+                      </span>
+                    )}
+                    {/* The auto-score is recorded at submit, but only a teacher releases the
+                        mark. Showing the number here would present an unapproved auto-score as
+                        the student's score (SN-11), so the row states the pending state instead. */}
+                    {scoreState.kind === "pending" && (
+                      <span className="text-xs text-muted-foreground">
+                        Awaiting teacher approval
                       </span>
                     )}
                     <StatusPill status={state.key} label={state.label} dot />
@@ -491,9 +501,13 @@ export function StudentQuizAttempts({ initialQuizzes, initialAttempt = null }: P
               ? // The copy used to claim every question must be answered, while Submit
                 // accepted and scored blanks as zero (SL-3). It now says what happens.
                 "In progress — answer the questions you can, then submit. Unanswered questions score zero."
-              : view.score !== null
-                ? `Scored ${view.score}/${view.maxScore ?? ""}`
-                : "Submitted"
+              : viewScoreState?.kind === "published"
+                ? `Scored ${viewScoreState.score}/${viewScoreState.maxScore ?? ""} — released by your teacher`
+                : viewScoreState?.kind === "pending"
+                  ? // The auto-score exists on the attempt so the grade pipeline can suggest it,
+                    // but it is not the student's mark until a teacher releases it (SN-11).
+                    "Auto-scored — awaiting your teacher's approval"
+                  : "Submitted"
           }
         >
           <div className="grid gap-4">

@@ -54,3 +54,38 @@ export function resumableAttempt<T extends Pick<QuizAttemptSummary, "id" | "stat
 ): T | null {
   return attempts.find((attempt) => attempt.status === "IN_PROGRESS") ?? null
 }
+
+/**
+ * How an attempt's score may be presented, given its publication state.
+ *
+ * The server records the auto-score at submit so the grade pipeline has
+ * something to suggest, but only a teacher's `accept`/`override` releases the
+ * mark (`docs/features/quiz-grading.md`). Presenting the auto-score as the
+ * student's score before that is the SN-11 defect, so the three states are
+ * resolved here — one definition shared by the history rows, the attempt
+ * heading and the summary tile — rather than each re-testing `gradePublished`.
+ */
+export type AttemptScoreState =
+  | { kind: "unscored" }
+  | { kind: "pending"; autoScore: number; maxScore: number | null }
+  | { kind: "published"; score: number; maxScore: number | null }
+
+export function attemptScoreState(
+  attempt: Pick<QuizAttemptSummary, "score" | "maxScore" | "gradePublished">,
+): AttemptScoreState {
+  if (attempt.score === null) return { kind: "unscored" }
+  if (!attempt.gradePublished) {
+    return { kind: "pending", autoScore: attempt.score, maxScore: attempt.maxScore }
+  }
+  return { kind: "published", score: attempt.score, maxScore: attempt.maxScore }
+}
+
+/**
+ * Whether an attempt's mark has been released, so a summary tile counts
+ * published scores rather than auto-scores awaiting approval (SN-11).
+ */
+export function isPublishedScore(
+  attempt: Pick<QuizAttemptSummary, "score" | "gradePublished"> | null | undefined,
+): boolean {
+  return attempt != null && attempt.score !== null && attempt.gradePublished
+}

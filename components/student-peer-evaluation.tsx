@@ -24,6 +24,11 @@ import type {
   TeammateResponse,
 } from "@/lib/contracts/groups"
 import { PEER_EVALUATION_DIMENSIONS } from "@/lib/groups/dimensions"
+import {
+  peerDisclosureCopy,
+  peerDisclosureState,
+  peerThresholdNotice,
+} from "@/lib/peer-evaluation-view"
 
 /**
  * Student peer-evaluation workspace.
@@ -235,6 +240,16 @@ function GroupPanel({
       evaluation.evaluateeId === group.teammates.find((teammate) => teammate.isSelf)?.studentId,
   )
   const others = group.teammates.filter((teammate) => !teammate.isSelf)
+  // The disclosure threshold is a confidentiality minimum, so a team smaller than it can never
+  // open the gate. Resolving the state once keeps the round-progress notice and the panel from
+  // disagreeing, and stops the panel rendering "x of y needed" toward an unreachable count (SN-30).
+  const disclosure = peerDisclosureState({
+    withheld: received.withheld,
+    ratingCount: received.ratingCount,
+    minRatersRequired: received.minRatersRequired,
+    otherMemberCount: others.length,
+  })
+  const disclosureCopy = peerDisclosureCopy(disclosure)
   // A submitted record exists. The route's upsert overwrites it, so the UI has to say so
   // rather than let a second press silently replace it (SN-39).
   const alreadySubmitted = group.myEvaluations.some(
@@ -339,9 +354,9 @@ function GroupPanel({
             />
           </div>
           <Callout tone="info" icon={Lock}>
-            {/* The threshold comes from the server, never a local constant. */}
-            Results appear only after at least {received.minRatersRequired} of your teammates have
-            rated you, so no individual rating can be attributed. You will never see who rated you.
+            {/* The threshold comes from the server, never a local constant, and the sentence is
+                resolved for the team size so it never names a count this team cannot reach. */}
+            {peerThresholdNotice(disclosure)}
           </Callout>
         </div>
       </SectionCard>
@@ -473,24 +488,17 @@ function GroupPanel({
       >
         {received.withheld ? (
           <div className="space-y-3">
-            <Callout tone="warning" title="Not shown yet">
-              {received.reason}
+            <Callout tone={disclosureCopy.tone} title={disclosureCopy.title}>
+              {disclosureCopy.detail}
             </Callout>
-            <MetricRow
-              label="Ratings received"
-              value={`${received.ratingCount} of ${received.minRatersRequired} needed`}
-              // A three-person team can never reach three non-self raters, so "2 of 3
-              // needed" implied progress toward a gate that cannot open. When the team is
-              // too small, say that instead of showing a count that will never fill.
-              hint={
-                received.ratingCount < received.minRatersRequired &&
-                others.length < received.minRatersRequired
-                  ? `Your team has only ${others.length} other member${
-                      others.length === 1 ? "" : "s"
-                    }, fewer than the ${received.minRatersRequired} this rule needs, so results stay private.`
-                  : undefined
-              }
-            />
+            {/* A progress count is only meaningful when the threshold is reachable; when the
+                team is smaller than the rule needs, the panel says that and shows no count. */}
+            {disclosureCopy.showProgress && (
+              <MetricRow
+                label="Ratings received"
+                value={`${received.ratingCount} of ${received.minRatersRequired} needed`}
+              />
+            )}
           </div>
         ) : (
           <div className="space-y-4">

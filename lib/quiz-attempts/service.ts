@@ -356,6 +356,13 @@ export async function listStudentQuizzes(user: AuthUser): Promise<StudentQuizSum
       // The student's own retake request for an APPROVAL assessment, so the list can say "awaiting
       // approval" instead of offering a Start button the start route refuses (SN-36).
       retakeRequests: { where: { studentId }, select: { status: true }, take: 1 },
+      // Whether a teacher has released this student's mark, so an auto-scored attempt is not
+      // presented as the student's score before approval (SN-11).
+      finalGrades: {
+        where: { studentId },
+        select: { publishedAt: true },
+        take: 1,
+      },
     },
   })
 
@@ -421,6 +428,7 @@ export async function listStudentQuizzes(user: AuthUser): Promise<StudentQuizSum
             attempt: latest,
             assessmentTitle: assessment.title,
             dueDate: assessment.dueDate,
+            gradePublished: assessment.finalGrades[0]?.publishedAt != null,
           })
         : null,
     }
@@ -461,7 +469,7 @@ export async function getStudentAttempt(
 ): Promise<QuizAttemptView> {
   const { attempt, studentId } = await loadOwnedAttempt(user, attemptId)
 
-  const [allQuestions, responses, settings] = await Promise.all([
+  const [allQuestions, responses, settings, grade] = await Promise.all([
     prisma.question.findMany({
       where: { assessmentId: attempt.assessmentId },
       orderBy: { order: "asc" },
@@ -479,6 +487,12 @@ export async function getStudentAttempt(
       },
     }),
     attemptSettings(studentId, attempt.assessmentId, attempt.assessment.maxAttempts),
+    prisma.grade.findUnique({
+      where: {
+        assessmentId_studentId: { assessmentId: attempt.assessmentId, studentId },
+      },
+      select: { publishedAt: true },
+    }),
   ])
   // Serve the published subset only (TN-41). A draft is not part of the quiz, so
   // it must not appear in the sitting the student reads or the results built from it.
@@ -490,6 +504,7 @@ export async function getStudentAttempt(
       attempt,
       assessmentTitle: attempt.assessment.title,
       dueDate: attempt.assessment.dueDate,
+      gradePublished: grade?.publishedAt != null,
     }),
     settings,
     questions: questions.map(serializeStudentQuestion),
@@ -584,28 +599,35 @@ export async function listStudentAttempts(
   })
   if (!assessment) throw new QuizAttemptError(404, "Assessment not found.")
 
-  const attempts = await prisma.quizAttempt.findMany({
-    // Graded only. This payload carries review status and marks, and a practice sitting has
-    // neither — rendered in this list it would read as "submitted and never marked". Showing
-    // practice history is a decision for the retake surface, which can label it.
-    where: { assessmentId, studentId, kind: GRADED },
-    orderBy: { attemptNumber: "asc" },
-    select: {
-      id: true,
-      assessmentId: true,
-      attemptNumber: true,
-      status: true,
-      score: true,
-      maxScore: true,
-      startedAt: true,
-      submittedAt: true,
-    },
-  })
+  const [attempts, grade] = await Promise.all([
+    prisma.quizAttempt.findMany({
+      // Graded only. This payload carries review status and marks, and a practice sitting has
+      // neither — rendered in this list it would read as "submitted and never marked". Showing
+      // practice history is a decision for the retake surface, which can label it.
+      where: { assessmentId, studentId, kind: GRADED },
+      orderBy: { attemptNumber: "asc" },
+      select: {
+        id: true,
+        assessmentId: true,
+        attemptNumber: true,
+        status: true,
+        score: true,
+        maxScore: true,
+        startedAt: true,
+        submittedAt: true,
+      },
+    }),
+    prisma.grade.findUnique({
+      where: { assessmentId_studentId: { assessmentId, studentId } },
+      select: { publishedAt: true },
+    }),
+  ])
   return attempts.map((attempt) =>
     serializeAttemptSummary({
       attempt,
       assessmentTitle: assessment.title,
       dueDate: assessment.dueDate,
+      gradePublished: grade?.publishedAt != null,
     }),
   )
 }
@@ -1109,6 +1131,7 @@ export async function listTeacherAttempts(
         attempt,
         assessmentTitle: owned.title,
         dueDate: owned.dueDate,
+        gradePublished: grade?.publishedAt != null,
       }),
       studentId: attempt.studentId,
       studentName: attempt.student.fullName,
@@ -1190,6 +1213,7 @@ export async function getTeacherAttempt(
         attempt,
         assessmentTitle: owned.title,
         dueDate: owned.dueDate,
+        gradePublished: grade?.publishedAt != null,
       }),
       studentId: attempt.studentId,
       studentName: attempt.student.fullName,

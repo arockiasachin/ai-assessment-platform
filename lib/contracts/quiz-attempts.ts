@@ -107,6 +107,12 @@ export const quizAttemptSummarySchema = z.object({
   assessmentTitle: z.string(),
   attemptNumber: z.number().int().positive(),
   status: quizAttemptStatusSchema,
+  /**
+   * The attempt's auto-computed score. It is a **suggestion** until a teacher
+   * releases the mark: `gradePublished` below says whether it is the student's
+   * published grade. The UI must not present this as a released mark while
+   * `gradePublished` is false (SN-11).
+   */
   score: z.number().nullable(),
   maxScore: z.number().nullable(),
   startedAt: z.string(),
@@ -114,6 +120,13 @@ export const quizAttemptSummarySchema = z.object({
   dueDate: z.string(),
   /** True when the attempt was submitted after the assessment due date. */
   isLate: z.boolean(),
+  /**
+   * Whether a teacher has published the grade for this assessment/student. The
+   * score is still recorded at submit for the grade pipeline, but only a human
+   * `accept`/`override` sets `Grade.publishedAt` (`docs/features/quiz-grading.md`),
+   * so this is the pending-versus-published state the student UI needs.
+   */
+  gradePublished: z.boolean(),
 })
 export type QuizAttemptSummary = z.infer<typeof quizAttemptSummarySchema>
 
