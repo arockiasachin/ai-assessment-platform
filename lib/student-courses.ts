@@ -1,5 +1,6 @@
 import "server-only"
 
+import { classroomLabel } from "@/lib/classroom-label"
 import { prisma } from "@/lib/prisma"
 import type { AuthUser } from "@/lib/session"
 
@@ -226,7 +227,7 @@ export async function listStudentCourses(user: AuthUser): Promise<StudentCourses
       description: offering.course.description,
       credits: offering.course.credits,
       teacherName: offering.teacher.fullName,
-      className: `${offering.classRoom.name}${offering.classRoom.section ? ` ${offering.classRoom.section}` : ""}`,
+      className: classroomLabel(offering.classRoom.name, offering.classRoom.section),
       term: offering.term,
       academicYear: offering.academicYear,
       startsOn: offering.startsOn?.toISOString() ?? null,

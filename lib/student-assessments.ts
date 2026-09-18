@@ -2,6 +2,7 @@ import "server-only"
 
 import { releasedAssessmentWhere } from "@/lib/assessment-visibility"
 import { supportsTextSubmission } from "@/lib/assessment-submission-rules"
+import { classroomLabel } from "@/lib/classroom-label"
 import { liveEnrollmentStatuses } from "@/lib/enrollment-scope"
 import { evaluateFatGateForStudent } from "@/lib/grading/offering-config-service"
 import { toAssessmentScale } from "@/lib/gradebook"
@@ -346,7 +347,10 @@ export async function listStudentAssessments(
         courseId: assessment.courseId,
         courseCode: assessment.course.code,
         courseName: assessment.course.name,
-        className: `${assessment.offering.classRoom.name}${assessment.offering.classRoom.section ? ` ${assessment.offering.classRoom.section}` : ""}`,
+        className: classroomLabel(
+          assessment.offering.classRoom.name,
+          assessment.offering.classRoom.section,
+        ),
         term: assessment.offering.term,
         academicYear: assessment.offering.academicYear,
         teacherName: assessment.offering.teacher.fullName,
