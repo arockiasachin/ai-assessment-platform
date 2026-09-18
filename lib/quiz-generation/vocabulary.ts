@@ -99,20 +99,35 @@ export function partitionByVocabulary(
 /**
  * The tags to constrain generation to, given what the request asked for and what the course stores.
  *
- * **A request that names tags declares them.** That is how a teacher sets the vocabulary: the
- * generation form already takes subtopics, so supplying them defines the course's list rather than
- * being a one-off hint that the next request cannot see. Without this, the vocabulary could only ever
- * be set by a separate editor, and the tags a teacher had already typed would be discarded.
+ * **A request that names tags declares them — and adds to the course's list rather than
+ * replacing it.** That is how a teacher sets the vocabulary: the generation form already
+ * takes subtopics, so supplying them defines the course's list rather than being a one-off
+ * hint the next request cannot see.
  *
- * An empty request falls back to the stored list, and an undeclared course stays undeclared — an
- * empty list, meaning generation is unconstrained exactly as it was before this existed.
+ * The merge is what makes the Topics panel's claim true. It renders the stored list as
+ * the course's declared vocabulary, but a generation that replaced the column would
+ * quietly drop every tag the panel was showing — the next request undoing what the panel
+ * said was persisted (TN-65). Stored tags keep their order and casing; a requested tag
+ * that is already present case-insensitively is not appended twice.
+ *
+ * An empty request falls back to the stored list, and an undeclared course stays
+ * undeclared — an empty list, meaning generation is unconstrained exactly as it was
+ * before this existed.
  */
 export function resolveVocabulary(input: {
   requested: readonly string[]
   stored: readonly string[]
 }): { vocabulary: string[]; declared: boolean } {
   const requested = cleanVocabulary(input.requested)
-  if (requested.length > 0) return { vocabulary: requested, declared: true }
   const stored = cleanVocabulary(input.stored)
-  return { vocabulary: stored, declared: stored.length > 0 }
+  if (requested.length === 0) return { vocabulary: stored, declared: stored.length > 0 }
+
+  const vocabulary = [...stored]
+  const seen = new Set(stored.map(key))
+  for (const tag of requested) {
+    if (seen.has(key(tag))) continue
+    seen.add(key(tag))
+    vocabulary.push(tag)
+  }
+  return { vocabulary, declared: true }
 }

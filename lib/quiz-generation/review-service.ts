@@ -4,6 +4,7 @@ import {
   type GeneratedQuestionResponse,
   type GenerationAssessmentSummary,
 } from "@/lib/contracts/quiz-generation"
+import { classroomLabel } from "@/lib/classroom-label"
 import { writeAuditLog } from "@/lib/grading/audit"
 import { partialUpdate } from "@/lib/partial-update"
 import { prisma } from "@/lib/prisma"
@@ -69,7 +70,6 @@ export async function listGenerationAssessmentsForTeacher(
       if (status === "published") publishedCount += 1
       else draftCount += 1
     }
-    const section = assessment.offering.classRoom.section
     return {
       id: assessment.id,
       title: assessment.title,
@@ -78,7 +78,10 @@ export async function listGenerationAssessmentsForTeacher(
       dueDate: assessment.dueDate.toISOString(),
       courseCode: assessment.offering.course.code,
       courseName: assessment.offering.course.name,
-      className: `${assessment.offering.classRoom.name}${section ? ` ${section}` : ""}`,
+      className: classroomLabel(
+        assessment.offering.classRoom.name,
+        assessment.offering.classRoom.section,
+      ),
       generatedQuestionCount: draftCount + publishedCount,
       draftCount,
       publishedCount,

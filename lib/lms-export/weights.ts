@@ -149,3 +149,18 @@ export function categoryForAssessment(
 ): FinalGradeCategoryConfig | null {
   return config.categories.find((category) => category.assessmentIds.includes(assessmentId)) ?? null
 }
+
+/**
+ * The OneRoster line-item category label for an assessment.
+ *
+ * `categoryForAssessment` returns `null` only when the config genuinely omits the
+ * assessment: the equal-weight default puts every assessment in one category, so a
+ * null means the weighted total excludes this line item. "Uncategorized" read as
+ * "counted, but no category"; "Not in final grade" says what is actually true and
+ * matches the final-grade row beside it (TN-67).
+ */
+export const EXCLUDED_FROM_FINAL_GRADE_CATEGORY = "Not in final grade"
+
+export function assessmentCategoryLabel(config: FinalGradeConfig, assessmentId: string): string {
+  return categoryForAssessment(config, assessmentId)?.name ?? EXCLUDED_FROM_FINAL_GRADE_CATEGORY
+}

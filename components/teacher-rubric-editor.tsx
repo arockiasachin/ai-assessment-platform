@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import { useRouter } from "next/navigation"
-import { Plus, Save, Trash2 } from "lucide-react"
+import { ArrowDown, ArrowUp, Plus, Save, Trash2 } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -27,15 +27,27 @@ import type { RubricResponse, TeacherAssessmentSummary } from "@/lib/rubric-grad
  * form.
  */
 
+type LevelDraft = {
+  label: string
+  descriptor: string
+  points: string
+}
+
 type CriterionDraft = {
   label: string
   description: string
   weight: string
   maxPoints: string
+  /** Behaviourally-anchored levels. Stored in `RubricCriterion.levelsJson`; authored here (TN-66). */
+  levels: LevelDraft[]
 }
 
 function emptyCriterion(): CriterionDraft {
-  return { label: "", description: "", weight: "1", maxPoints: "5" }
+  return { label: "", description: "", weight: "1", maxPoints: "5", levels: [] }
+}
+
+function emptyLevel(): LevelDraft {
+  return { label: "", descriptor: "", points: "" }
 }
 
 function toDraft(rubric: RubricResponse | null, fallbackTitle: string) {
@@ -54,6 +66,11 @@ function toDraft(rubric: RubricResponse | null, fallbackTitle: string) {
       description: criterion.description ?? "",
       weight: String(criterion.weight),
       maxPoints: String(criterion.maxPoints),
+      levels: criterion.levels.map((level) => ({
+        label: level.label,
+        descriptor: level.descriptor ?? "",
+        points: String(level.points),
+      })),
     })),
   }
 }
@@ -102,6 +119,37 @@ export function TeacherRubricEditor({
     )
   }
 
+  /**
+   * Move a criterion one position. Order is meaningful — the API stores each criterion's
+   * index as `order`, and the rubric reads top-to-bottom — and there was no way to change
+   * it once a criterion was added (TN-66).
+   */
+  function moveCriterion(index: number, delta: -1 | 1) {
+    setCriteria((prev) => {
+      const target = index + delta
+      if (target < 0 || target >= prev.length) return prev
+      const next = [...prev]
+      const [moved] = next.splice(index, 1)
+      next.splice(target, 0, moved)
+      return next
+    })
+  }
+
+  function updateLevel(criterionIndex: number, levelIndex: number, patch: Partial<LevelDraft>) {
+    setCriteria((prev) =>
+      prev.map((criterion, position) =>
+        position === criterionIndex
+          ? {
+              ...criterion,
+              levels: criterion.levels.map((level, levelPosition) =>
+                levelPosition === levelIndex ? { ...level, ...patch } : level,
+              ),
+            }
+          : criterion,
+      ),
+    )
+  }
+
   async function save() {
     if (!selected) {
       setError("Select an assessment first.")
@@ -123,6 +171,15 @@ export function TeacherRubricEditor({
             description: criterion.description.trim() || undefined,
             weight: Number(criterion.weight),
             maxPoints: Number(criterion.maxPoints),
+            // A level row the teacher added but left unlabelled is not a level; dropping
+            // it here keeps a half-filled row from failing the whole save.
+            levels: criterion.levels
+              .filter((level) => level.label.trim() !== "")
+              .map((level) => ({
+                label: level.label.trim(),
+                descriptor: level.descriptor.trim() || undefined,
+                points: Number(level.points),
+              })),
           })),
         }),
       })
@@ -258,6 +315,35 @@ export function TeacherRubricEditor({
               key={index}
               className="space-y-3 rounded-lg border border-border/70 bg-muted/10 p-3"
             >
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-medium text-muted-foreground">
+                  Criterion {index + 1}
+                </span>
+                {/* Order is stored as `order` and read top-to-bottom; there was no way to
+                    change it once a criterion existed (TN-66). */}
+                <div className="flex items-center gap-1">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon-sm"
+                    disabled={index === 0}
+                    onClick={() => moveCriterion(index, -1)}
+                    aria-label={`Move criterion ${index + 1} up`}
+                  >
+                    <ArrowUp />
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon-sm"
+                    disabled={index === criteria.length - 1}
+                    onClick={() => moveCriterion(index, 1)}
+                    aria-label={`Move criterion ${index + 1} down`}
+                  >
+                    <ArrowDown />
+                  </Button>
+                </div>
+              </div>
               <div className="grid gap-3 sm:grid-cols-2">
                 <div className="grid gap-2">
                   <Label htmlFor={`criterion-label-${index}`}>Criterion label</Label>
@@ -319,6 +405,86 @@ export function TeacherRubricEditor({
                     <Trash2 />
                   </Button>
                 </div>
+              </div>
+
+              {/* Levels. Stored in `levelsJson` and always read by the grader, but there was
+                  no authoring surface at all, so the feature existed only for rubrics written
+                  through the API (TN-66). */}
+              <div className="space-y-2 rounded-md border border-border/60 bg-background/60 p-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-medium text-muted-foreground">
+                    Levels ({criterion.levels.length})
+                  </span>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={criterion.levels.length >= 20}
+                    onClick={() =>
+                      updateCriterion(index, { levels: [...criterion.levels, emptyLevel()] })
+                    }
+                  >
+                    <Plus />
+                    Add level
+                  </Button>
+                </div>
+                {criterion.levels.length === 0 ? (
+                  <p className="text-xs text-muted-foreground">
+                    No levels — the model scores against the criterion descriptor alone.
+                  </p>
+                ) : (
+                  criterion.levels.map((level, levelIndex) => (
+                    <div
+                      key={levelIndex}
+                      className="grid gap-2 sm:grid-cols-[1fr_2fr_5rem_auto] sm:items-center"
+                    >
+                      <Input
+                        value={level.label}
+                        onChange={(event) =>
+                          updateLevel(index, levelIndex, { label: event.target.value })
+                        }
+                        maxLength={120}
+                        placeholder="Label (e.g. Excellent)"
+                        aria-label={`Criterion ${index + 1} level ${levelIndex + 1} label`}
+                      />
+                      <Input
+                        value={level.descriptor}
+                        onChange={(event) =>
+                          updateLevel(index, levelIndex, { descriptor: event.target.value })
+                        }
+                        maxLength={2000}
+                        placeholder="Behavioural descriptor"
+                        aria-label={`Criterion ${index + 1} level ${levelIndex + 1} descriptor`}
+                      />
+                      <Input
+                        type="number"
+                        min={0}
+                        step={0.5}
+                        value={level.points}
+                        onChange={(event) =>
+                          updateLevel(index, levelIndex, { points: event.target.value })
+                        }
+                        placeholder="Points"
+                        aria-label={`Criterion ${index + 1} level ${levelIndex + 1} points`}
+                      />
+                      <Button
+                        type="button"
+                        variant="destructive"
+                        size="icon-sm"
+                        onClick={() =>
+                          updateCriterion(index, {
+                            levels: criterion.levels.filter(
+                              (_, position) => position !== levelIndex,
+                            ),
+                          })
+                        }
+                        aria-label={`Remove criterion ${index + 1} level ${levelIndex + 1}`}
+                      >
+                        <Trash2 />
+                      </Button>
+                    </div>
+                  ))
+                )}
               </div>
             </div>
           ))}

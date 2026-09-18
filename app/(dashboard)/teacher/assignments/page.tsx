@@ -52,7 +52,7 @@ export default async function TeacherAssignmentsPage() {
       >
         <PageHeader
           title="Assignments"
-          description="Create assignments manually or import quiz assessments from JSON."
+          description="Create assessments manually or import quiz packs from JSON."
         />
         <TeacherAssignmentsManager submissionRows={submissionRows} />
         <div className="mt-6">

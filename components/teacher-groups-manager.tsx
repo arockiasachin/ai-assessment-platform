@@ -30,6 +30,7 @@ import type {
   RosterStudent,
   TeacherOfferingSummary,
 } from "@/lib/contracts/groups"
+import { formationOutcome } from "@/lib/groups/formation-summary"
 import { milestoneCreatePayload } from "@/lib/groups/milestone-form"
 
 /**
@@ -327,9 +328,8 @@ export function GroupFormationPanel({
       const { ok, data } = await readJson<{ formation: FormationResultValue }>(response)
       if (!ok) throw new Error(data.message ?? "Unable to form teams.")
       setFormation(data.formation)
-      setNotice(
-        `Formed ${data.formation.teams.length} teams with worst-team score ${data.formation.objective.toFixed(3)}.`,
-      )
+      const outcome = formationOutcome(data.formation.criteria, data.formation.objective)
+      setNotice(`Formed ${data.formation.teams.length} teams. ${outcome.headline}`)
       if (persistFormation) router.refresh()
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Unable to form teams.")
@@ -465,20 +465,37 @@ export function GroupFormationPanel({
         <Notice notice={notice} error={error} />
         {formation && (
           <div className="rounded-md border border-border p-2 text-sm">
-            <p className="font-medium">
-              Worst-team score {formation.objective.toFixed(3)} · {formation.teams.length} teams ·
-              schedule compatible: {formation.scheduleCompatible ? "yes" : "no"}
-            </p>
-            <ul className="mt-1 space-y-1">
-              {formation.teams.map((team) => (
-                <li key={team.index}>
-                  Team {team.index + 1} (score {team.score.toFixed(3)}):{" "}
-                  {team.memberIds
-                    .map((id) => roster.find((student) => student.studentId === id)?.fullName ?? id)
-                    .join(", ")}
-                </li>
-              ))}
-            </ul>
+            {(() => {
+              const outcome = formationOutcome(formation.criteria, formation.objective)
+              return (
+                <>
+                  <p className="font-medium">
+                    {outcome.headline} · {formation.teams.length} teams · schedule compatible:{" "}
+                    {formation.scheduleCompatible ? "yes" : "no"}
+                  </p>
+                  {outcome.inactiveCriteria.length > 0 && (
+                    <p className="mt-0.5 text-xs text-muted-foreground">
+                      Not applied: {outcome.inactiveCriteria.join(", ")} — no roster profile has the
+                      attribute they read.
+                    </p>
+                  )}
+                  <ul className="mt-1 space-y-1">
+                    {formation.teams.map((team) => (
+                      <li key={team.index}>
+                        Team {team.index + 1}
+                        {outcome.scored ? ` (score ${team.score.toFixed(3)})` : ""}:{" "}
+                        {team.memberIds
+                          .map(
+                            (id) =>
+                              roster.find((student) => student.studentId === id)?.fullName ?? id,
+                          )
+                          .join(", ")}
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              )
+            })()}
           </div>
         )}
       </div>

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 
-import { parseJsonBody } from "@/lib/api"
+import { parseJsonBody, rejectQueryParam } from "@/lib/api"
 import { requireRole } from "@/lib/authz"
 import {
   codeEvalErrorResponse,
@@ -19,9 +19,18 @@ export const dynamic = "force-dynamic"
  * limits, instructions, starter code, submission cap) on one owned CODE
  * assessment.
  */
-export async function GET() {
+export async function GET(request?: Request) {
   const auth = await requireRole("teacher")
   if (!auth.authorized) return auth.response
+
+  // Reports across every owned offering, so an `offeringId` is rejected rather than
+  // ignored (TN-27).
+  const unsupported = rejectQueryParam(
+    request,
+    "offeringId",
+    "This list covers all of your assessments and does not accept an offeringId.",
+  )
+  if (unsupported) return unsupported
 
   try {
     const tasks = await listTeacherCodeTasks(auth.user)

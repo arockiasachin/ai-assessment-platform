@@ -1,5 +1,6 @@
 import "server-only"
 
+import { classroomLabel } from "@/lib/classroom-label"
 import { writeAuditLog } from "@/lib/grading/audit"
 import { prisma } from "@/lib/prisma"
 import type { AuthUser } from "@/lib/session"
@@ -93,9 +94,7 @@ export function offeringLabel(offering: {
   /** `CourseOffering.academicYear` is an `Int` in the schema. */
   academicYear: number
 }): string {
-  const room = offering.classRoom.section
-    ? `${offering.classRoom.name} ${offering.classRoom.section}`
-    : offering.classRoom.name
+  const room = classroomLabel(offering.classRoom.name, offering.classRoom.section)
   return `${offering.course.code} · ${offering.course.name} — ${room} · ${offering.academicYear} ${offering.term}`
 }
 

@@ -114,3 +114,59 @@ export function actorKindOptions(items: readonly GradeActivityItem[]): ActivityO
 export function withheldDecisionCount(items: readonly GradingDecisionItem[]): number {
   return items.filter((item) => item.publishedAt === null).length
 }
+
+/**
+ * The id-valued keys an audit summary can carry, and how to label and look up
+ * each. `studentId`/`assessmentId` are the only two the graders write.
+ */
+const SUMMARY_ID_KEYS: Record<string, { label: string; lookup: keyof SummaryNameLookup }> = {
+  studentId: { label: "student", lookup: "student" },
+  assessmentId: { label: "assessment", lookup: "assessment" },
+}
+
+export type SummaryNameLookup = {
+  student?: ReadonlyMap<string, string>
+  assessment?: ReadonlyMap<string, string>
+}
+
+/**
+ * Replace raw ids in an audit summary with the names used everywhere else in
+ * the product (TN-29).
+ *
+ * The audit log deliberately stores ids so it survives a user deletion, which
+ * means the display name is a lookup, not a stored fact — an id that no longer
+ * resolves stays visible rather than being invented away. The key is relabelled
+ * at the same time (`studentId: demo-student-4` becomes `student: Aarav Mehta`),
+ * because a raw id rendered under a column name is the defect, not just the
+ * value.
+ */
+export function humanizeSummary(summary: unknown, names: SummaryNameLookup): unknown {
+  if (!summary || typeof summary !== "object" || Array.isArray(summary)) return summary
+
+  const out: Record<string, unknown> = {}
+  for (const [key, value] of Object.entries(summary as Record<string, unknown>)) {
+    const relabel = SUMMARY_ID_KEYS[key]
+    if (relabel && typeof value === "string") {
+      out[relabel.label] = names[relabel.lookup]?.get(value) ?? value
+    } else {
+      out[key] = value
+    }
+  }
+  return out
+}
+
+/** The student and assessment ids a summary references, for a batched lookup. */
+export function summaryReferenceIds(summary: unknown): {
+  studentIds: string[]
+  assessmentIds: string[]
+} {
+  const studentIds: string[] = []
+  const assessmentIds: string[] = []
+  if (!summary || typeof summary !== "object" || Array.isArray(summary)) {
+    return { studentIds, assessmentIds }
+  }
+  const record = summary as Record<string, unknown>
+  if (typeof record.studentId === "string") studentIds.push(record.studentId)
+  if (typeof record.assessmentId === "string") assessmentIds.push(record.assessmentId)
+  return { studentIds, assessmentIds }
+}

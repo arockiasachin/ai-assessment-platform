@@ -1,3 +1,4 @@
+import { classroomLabel } from "@/lib/classroom-label"
 import type { Prisma } from "@/lib/generated/prisma/client"
 import { writeAuditLog } from "@/lib/grading/audit"
 import { prisma } from "@/lib/prisma"
@@ -98,7 +99,6 @@ function toSummary(
   },
   locked: boolean,
 ): TeacherAssessmentSummary {
-  const section = assessment.offering.classRoom.section
   return {
     id: assessment.id,
     title: assessment.title,
@@ -107,7 +107,10 @@ function toSummary(
     dueDate: assessment.dueDate.toISOString(),
     courseCode: assessment.offering.course.code,
     courseName: assessment.offering.course.name,
-    className: `${assessment.offering.classRoom.name}${section ? ` ${section}` : ""}`,
+    className: classroomLabel(
+      assessment.offering.classRoom.name,
+      assessment.offering.classRoom.section,
+    ),
     rubric: assessment.rubric,
     // TN-44: the freeze is a state the caller can see, not a surprise thrown at
     // Save time. A rubric is locked only once it exists *and* a published grade

@@ -4,6 +4,7 @@ import { useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
 import { BookOpenCheck, FileUp, ListChecks, PlusCircle, Sparkles } from "lucide-react"
 import { useGradebook } from "@/components/gradebook-provider"
+import { isOfferingClosed } from "@/lib/offering-window"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -63,6 +64,16 @@ export function TeacherAssignmentsManager({
   submissionRows: TeacherSubmissionRow[]
 }) {
   const { offerings, refresh } = useGradebook()
+  /**
+   * Offerings a new assessment can be authored into: the ones whose term has not
+   * finished. A completed 2025 offering used to sit in the picker with no guard, so a
+   * teacher could author into a closed term and see it appear in the current-term grid
+   * and planner (TN-62). A term with no `endsOn` is unscheduled, not closed.
+   */
+  const openOfferings = useMemo(
+    () => offerings.filter((offering) => !isOfferingClosed(offering.endsOn)),
+    [offerings],
+  )
   const router = useRouter()
 
   const [offeringId, setOfferingId] = useState("")
@@ -89,10 +100,10 @@ export function TeacherAssignmentsManager({
   const [error, setError] = useState<string | null>(null)
 
   // Derive the effective offering rather than syncing it into state via an effect.
-  const selectedOfferingId = offeringId || offerings[0]?.id || ""
+  const selectedOfferingId = offeringId || openOfferings[0]?.id || ""
   // The quiz import targets its own offering: a teacher may import a quiz while
   // the assignment form is pointed at a different class.
-  const quizSelectedOfferingId = quizOfferingId || offerings[0]?.id || ""
+  const quizSelectedOfferingId = quizOfferingId || openOfferings[0]?.id || ""
 
   const canCreateAssignment = useMemo(() => {
     const max = Number(assignmentMaxMarks)
@@ -100,9 +111,18 @@ export function TeacherAssignmentsManager({
       Boolean(assignmentTitle.trim()) &&
       Boolean(selectedOfferingId) &&
       Number.isFinite(max) &&
+      // The API's schema takes an integer; without this the raw zod message
+      // ("Invalid input: expected int, received number") reached the teacher (TN-61).
+      Number.isInteger(max) &&
       max > 0
     )
   }, [assignmentMaxMarks, assignmentTitle, selectedOfferingId])
+
+  const maxMarksIsWhole = useMemo(() => {
+    if (assignmentMaxMarks.trim() === "") return true
+    const max = Number(assignmentMaxMarks)
+    return Number.isFinite(max) && Number.isInteger(max)
+  }, [assignmentMaxMarks])
 
   const importedQuestionCount = useMemo(() => {
     if (!quizPayload?.questions) return 0
@@ -131,7 +151,7 @@ export function TeacherAssignmentsManager({
 
       const data = (await response.json()) as AssignmentCreateResponse
       if (!response.ok) {
-        setError(data.message ?? "Unable to create assignment.")
+        setError(data.message ?? "Unable to create assessment.")
         return
       }
 
@@ -147,7 +167,7 @@ export function TeacherAssignmentsManager({
       // Re-run the server component so the registry list below reflects the new row.
       router.refresh()
     } catch {
-      setError("Unable to create assignment.")
+      setError("Unable to create assessment.")
     } finally {
       setIsSavingAssignment(false)
     }
@@ -221,7 +241,7 @@ export function TeacherAssignmentsManager({
               Assessment studio
             </Badge>
             <p className="text-sm font-semibold">
-              Create assignments and import quiz packs from JSON
+              Create assessments and import quiz packs from JSON
             </p>
             <p className="text-xs text-muted-foreground">
               Everything you publish here is scoped to your teacher-owned offerings.
@@ -254,10 +274,10 @@ export function TeacherAssignmentsManager({
         <CardHeader>
           <CardTitle className="inline-flex items-center gap-2 text-base">
             <BookOpenCheck className="size-4 text-primary" />
-            Create assignment
+            Create assessment
           </CardTitle>
           <p className="text-sm text-muted-foreground">
-            Create a standard assignment for a selected course.
+            Create a standard assessment for a selected course.
           </p>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -282,7 +302,7 @@ export function TeacherAssignmentsManager({
                   <SelectValue placeholder="Select an offering" />
                 </SelectTrigger>
                 <SelectContent>
-                  {offerings.map((offering) => (
+                  {openOfferings.map((offering) => (
                     <SelectItem key={offering.id} value={offering.id}>
                       {offering.courseName} — {offering.className} ({offering.term}{" "}
                       {offering.academicYear})
@@ -329,9 +349,15 @@ export function TeacherAssignmentsManager({
                 id="assignment-max-marks"
                 type="number"
                 min={1}
+                step={1}
                 value={assignmentMaxMarks}
                 onChange={(event) => setAssignmentMaxMarks(event.target.value)}
               />
+              {!maxMarksIsWhole && (
+                <p className="text-xs text-destructive" role="alert">
+                  Max marks must be a whole number.
+                </p>
+              )}
             </div>
           </div>
 
@@ -341,7 +367,7 @@ export function TeacherAssignmentsManager({
             disabled={!canCreateAssignment || isSavingAssignment}
           >
             <PlusCircle className="size-4" />
-            {isSavingAssignment ? "Creating..." : "Create assignment"}
+            {isSavingAssignment ? "Creating..." : "Create assessment"}
           </Button>
         </CardContent>
       </Card>
@@ -367,7 +393,7 @@ export function TeacherAssignmentsManager({
                 <SelectValue placeholder="Select an offering" />
               </SelectTrigger>
               <SelectContent>
-                {offerings.map((offering) => (
+                {openOfferings.map((offering) => (
                   <SelectItem key={offering.id} value={offering.id}>
                     {offering.courseName} — {offering.className} ({offering.term}{" "}
                     {offering.academicYear})

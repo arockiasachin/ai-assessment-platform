@@ -55,6 +55,8 @@ export function OfferingGradingPolicy({ offeringId }: { offeringId: string }) {
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  /** "Could not load" vs "Could not save"; a load failure titled "Could not save" misleads (TN-21). */
+  const [errorTitle, setErrorTitle] = useState("Could not save")
   const [message, setMessage] = useState<string | null>(null)
 
   const load = async () => {
@@ -65,12 +67,17 @@ export function OfferingGradingPolicy({ offeringId }: { offeringId: string }) {
         cache: "no-store",
       })
       if (!response.ok) {
+        setErrorTitle("Could not load")
         setError("Unable to load the grading policy.")
         return
       }
       const data = (await response.json()) as OfferingGradingResponse
       setPayload(data)
       setDraft(toGradingDraft(data))
+    } catch {
+      // A network failure used to reject silently with no message at all (TN-21).
+      setErrorTitle("Could not load")
+      setError("Unable to load the grading policy.")
     } finally {
       setLoading(false)
     }
@@ -96,8 +103,9 @@ export function OfferingGradingPolicy({ offeringId }: { offeringId: string }) {
     // Validation and body-building live in `lib/grading/policy-view.ts`, where they are tested
     // without a DOM. A rejection here is the same rule the contract enforces, surfaced inline so the
     // teacher sees it beside the field rather than as a round trip.
-    const request = gradingDraftToRequest(draft)
+    const request = gradingDraftToRequest(draft, payload?.config)
     if (!request.ok) {
+      setErrorTitle("Could not save")
       setError(request.message)
       return
     }
@@ -113,6 +121,7 @@ export function OfferingGradingPolicy({ offeringId }: { offeringId: string }) {
       })
       const data = (await response.json()) as OfferingGradingResponse | { message?: string }
       if (!response.ok) {
+        setErrorTitle("Could not save")
         setError(("message" in data && data.message) || "Unable to save the grading policy.")
         return
       }
@@ -120,6 +129,10 @@ export function OfferingGradingPolicy({ offeringId }: { offeringId: string }) {
       setPayload(saved)
       setDraft(toGradingDraft(saved))
       setMessage("Grading policy saved.")
+    } catch {
+      // Previously an unhandled rejection: the panel showed nothing at all (TN-21).
+      setErrorTitle("Could not save")
+      setError("Unable to save the grading policy.")
     } finally {
       setSaving(false)
     }
@@ -145,7 +158,7 @@ export function OfferingGradingPolicy({ offeringId }: { offeringId: string }) {
           {loading && <p className="text-sm text-muted-foreground">Loading…</p>}
 
           {error && (
-            <Callout tone="warning" title="Could not save">
+            <Callout tone="warning" title={errorTitle}>
               {error}
             </Callout>
           )}
@@ -158,7 +171,14 @@ export function OfferingGradingPolicy({ offeringId }: { offeringId: string }) {
 
           {payload && draft && !loading && (
             <>
-              {payload.usingDefaults && (
+              {payload.storedPolicyInvalid && (
+                <Callout tone="warning" title="Stored policy is unreadable">
+                  This offering has a grading policy stored, but it cannot be parsed — a hand-edited
+                  or older-format value. The CAT 40 / FAT 60 default below is what is currently in
+                  force. Saving replaces the unreadable value.
+                </Callout>
+              )}
+              {!payload.storedPolicyInvalid && payload.usingDefaults && (
                 <Callout tone="info" title="No policy stored yet">
                   The CAT 40 / FAT 60 split below is the institutional default, offered as a
                   starting point. <strong>Nothing is in force until you save it</strong> — the

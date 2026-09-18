@@ -457,7 +457,9 @@ export function TeacherClassesManager() {
       {filteredRows.length === 0 && (
         <Card>
           <CardContent className="py-8 text-center text-sm text-muted-foreground">
-            No classes match this filter.
+            {rows.length === 0
+              ? "You have no classes yet. An offering appears here once you are assigned to teach one."
+              : "No classes match this filter."}
           </CardContent>
         </Card>
       )}

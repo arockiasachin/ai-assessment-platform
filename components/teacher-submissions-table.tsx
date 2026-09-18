@@ -269,10 +269,17 @@ export function TeacherSubmissionsTable({ rows }: { rows: TeacherSubmissionRow[]
             </Link>
           )}
           empty={
-            <EmptyState
-              title="No submissions match"
-              description="Adjust the filters, or clear the search to see everything."
-            />
+            rows.length === 0 ? (
+              <EmptyState
+                title="No submissions yet"
+                description="Submissions appear here once students hand work in for an offering you teach. If you have no classes yet, there is nothing to show."
+              />
+            ) : (
+              <EmptyState
+                title="No submissions match"
+                description="Adjust the filters, or clear the search to see everything."
+              />
+            )
           }
         />
       </SectionCard>

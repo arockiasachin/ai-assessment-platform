@@ -129,11 +129,26 @@ describe("resolveVocabulary", () => {
     expect(result).toEqual({ vocabulary: ["slope", "intercepts"], declared: true })
   })
 
-  it("lets a request replace a stored list, since the teacher is editing it", () => {
+  it("adds a request's tags to the stored list rather than replacing it (TN-65)", () => {
+    // The stored list is what the Topics panel shows as the course's declared vocabulary;
+    // replacing it here would make the next generation silently drop every tag the panel
+    // was displaying. The teacher's new tag is appended, the stored ones survive.
     const result = resolveVocabulary({ requested: ["graphs"], stored: ["slope", "intercepts"] })
 
-    expect(result.vocabulary).toEqual(["graphs"])
+    expect(result.vocabulary).toEqual(["slope", "intercepts", "graphs"])
     expect(result.declared).toBe(true)
+  })
+
+  it("does not append a requested tag the stored list already has, ignoring case", () => {
+    const result = resolveVocabulary({ requested: ["Slope", "graphs"], stored: ["slope"] })
+
+    expect(result.vocabulary).toEqual(["slope", "graphs"])
+  })
+
+  it("keeps the request's casing for a genuinely new tag", () => {
+    const result = resolveVocabulary({ requested: ["Calvin Cycle"], stored: ["light reactions"] })
+
+    expect(result.vocabulary).toEqual(["light reactions", "Calvin Cycle"])
   })
 
   it("falls back to the stored list when the request names none", () => {

@@ -3,6 +3,7 @@ import type { Metadata } from "next"
 
 import { RoleGuard } from "@/components/role-guard"
 import { AppShell, PageHeader } from "@/components/shell"
+import { findNavItemByAppPath } from "@/components/shell/nav-config"
 import { TeacherReviewQueue } from "@/components/teacher-review-queue"
 import { getSessionUser } from "@/lib/auth"
 import { gradeReviewStatusSchema } from "@/lib/contracts/grading"
@@ -12,6 +13,8 @@ import { initialsFromEmail, roleLabelFromRole } from "@/lib/user-identity"
 
 // The root layout supplies the "· Rubrix" suffix.
 export const dynamic = "force-dynamic"
+
+const HREF = "/teacher/reviews"
 
 // Matches the nav label ("Reviews"). The Wave 0 pilot predated this convention;
 // every sibling page sets both, and the plan's §8 recommends it explicitly.
@@ -74,7 +77,7 @@ export default async function TeacherReviewsPage({
         }}
       >
         <PageHeader
-          title="Review queue"
+          title={findNavItemByAppPath(HREF)?.item.label ?? "Reviews"}
           description="Inspect per-criterion AI suggestions with evidence and confidence, then accept, override, reject, or flag. Nothing publishes without your approval."
         />
         <TeacherReviewQueue

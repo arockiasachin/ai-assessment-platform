@@ -142,8 +142,11 @@ function toPayload(
     courseName: offering.course.name,
     config,
     // A stored-but-unusable policy is reported as defaulted, because that is what is in
-    // force. The editor shows a warning distinguishing it from a never-configured offering.
+    // force. `storedPolicyInvalid` is what distinguishes it from a never-configured
+    // offering, so the editor can say which case it is rather than calling both "no
+    // policy stored yet" (TN-22).
     usingDefaults: source !== "stored",
+    storedPolicyInvalid: source === "stored-invalid",
     assessments: offering.assessments.map(toAssessmentOption),
     derived: membership,
     roster,

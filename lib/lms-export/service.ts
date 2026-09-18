@@ -8,6 +8,7 @@ import type {
   LtiConfigStatus,
   StudentFinalGrade,
 } from "@/lib/contracts/lms-export"
+import { classroomLabel } from "@/lib/classroom-label"
 import { prisma } from "@/lib/prisma"
 import type { AuthUser } from "@/lib/session"
 
@@ -46,7 +47,11 @@ import {
   type OneRosterInput,
 } from "./oneroster"
 import type { AssessmentType } from "@/lib/generated/prisma/client"
-import { categoryForAssessment, defaultFinalGradeConfig, validateFinalGradeConfig } from "./weights"
+import {
+  assessmentCategoryLabel,
+  defaultFinalGradeConfig,
+  validateFinalGradeConfig,
+} from "./weights"
 import { resolveFinalGradeConfig, resolveGradingPolicy } from "@/lib/grading/offering-config"
 
 /**
@@ -293,7 +298,7 @@ function toLmsAssessments(context: ExportContext): LmsAssessment[] {
     type: assessment.type,
     dueDate: assessment.dueDate.toISOString(),
     maxMarks: assessment.maxMarks,
-    category: categoryForAssessment(context.config, assessment.id)?.name ?? "Uncategorized",
+    category: assessmentCategoryLabel(context.config, assessment.id),
   }))
 }
 
@@ -344,7 +349,7 @@ function buildOneRoster(context: ExportContext, students: StudentFinalGrade[]): 
     title: assessment.title,
     dueDate: assessment.dueDate.toISOString(),
     maxMarks: assessment.maxMarks,
-    category: categoryForAssessment(context.config, assessment.id)?.name ?? "Uncategorized",
+    category: assessmentCategoryLabel(context.config, assessment.id),
   }))
 
   const results: OneRosterInput["results"][number][] = []
@@ -654,9 +659,7 @@ export async function listTeacherExportOfferings(user: AuthUser): Promise<LmsOff
     id: offering.id,
     courseCode: offering.course.code,
     courseName: offering.course.name,
-    className: offering.classRoom.section
-      ? `${offering.classRoom.name} ${offering.classRoom.section}`
-      : offering.classRoom.name,
+    className: classroomLabel(offering.classRoom.name, offering.classRoom.section),
     term: offering.term,
     academicYear: offering.academicYear,
   }))
@@ -684,9 +687,7 @@ export async function listStudentExportOfferings(user: AuthUser): Promise<LmsOff
     id: offering.id,
     courseCode: offering.course.code,
     courseName: offering.course.name,
-    className: offering.classRoom.section
-      ? `${offering.classRoom.name} ${offering.classRoom.section}`
-      : offering.classRoom.name,
+    className: classroomLabel(offering.classRoom.name, offering.classRoom.section),
     term: offering.term,
     academicYear: offering.academicYear,
   }))

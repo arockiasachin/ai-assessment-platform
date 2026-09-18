@@ -40,6 +40,7 @@ const PAYLOAD: OfferingGradingResponse = {
     minimumCatPercent: 30,
   },
   usingDefaults: false,
+  storedPolicyInvalid: false,
   assessments: [],
   derived: null,
   roster: [],
@@ -197,6 +198,21 @@ describe("gradingDraftToRequest", () => {
     const result = gradingDraftToRequest(toGradingDraft({ ...PAYLOAD, config: stored }))
 
     expect(result.ok && result.body.minimumCatPercent).toBeNull()
+  })
+
+  it("carries a stored minimumCatCompletionRatio through a save the form does not expose", () => {
+    // TN-22: the editor has no field for this ratio, and the PUT replaces the whole
+    // config, so without this an opening-and-saving teacher silently deleted it.
+    const stored = { ...PAYLOAD.config, minimumCatCompletionRatio: 0.75 }
+    const result = gradingDraftToRequest(toGradingDraft({ ...PAYLOAD, config: stored }), stored)
+
+    expect(result.ok && result.body.minimumCatCompletionRatio).toBe(0.75)
+  })
+
+  it("omits the ratio when nothing was stored, rather than inventing a default", () => {
+    const result = gradingDraftToRequest(draft(), PAYLOAD.config)
+
+    expect(result.ok && "minimumCatCompletionRatio" in result.body).toBe(false)
   })
 })
 

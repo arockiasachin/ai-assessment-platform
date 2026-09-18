@@ -198,3 +198,18 @@ export function buildAtRiskRoster(
 function relativeBoundary(decision: { mean: number; standardDeviation: number }): number {
   return Math.min(Math.round((decision.mean - 2 * decision.standardDeviation) * 100) / 100, 50)
 }
+
+/**
+ * The pass line an offering's own numbers resolve to, for any percentage-based
+ * pass rate (TN-20).
+ *
+ * The overview's per-assessment `passRate` and the item-analysis cohort's
+ * `passThreshold` were both computed against VIT's fixed 50 while the regime
+ * callout beside them named the relative class boundary (33.74 for one DSA
+ * section). This is the same rule the at-risk roster already uses, exposed so a
+ * pass rate and the bands next to it cannot disagree.
+ */
+export async function resolvePassBoundaryForOffering(offeringId: string): Promise<number> {
+  const decision = resolveRegimeForCourse(await gatherRegimeInputs(offeringId))
+  return decision.regime === "relative" ? relativeBoundary(decision) : ABSOLUTE_PASS_MARK
+}

@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { useRouter } from "next/navigation"
 import { CheckCircle2, Loader2, Plus, Save, Send, Sparkles, Trash2 } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
@@ -171,8 +172,15 @@ function QuestionEditor({
         published?: GeneratedQuestionResponse[]
       }
       const published = data.published?.[0]
-      if (!response.ok || !published) {
+      if (!response.ok) {
         setError(data.message ?? "Unable to publish the question.")
+        return
+      }
+      if (!published) {
+        // A successful publish that returns no question means it was already published.
+        // This used to fall into the error branch and render the API's success text
+        // ("Questions published.") in a red destructive banner (TN-64).
+        setStatus(data.message ?? "This question is already published.")
         return
       }
       onSaved(published)
@@ -393,6 +401,7 @@ export function TeacherQuizGenerator({
   subtopicBreakdowns: Record<string, SubtopicBreakdownValue>
 }) {
   const first = initialAssessments[0] ?? null
+  const router = useRouter()
   const [questions, setQuestions] = useState(initialQuestions)
   const [selectedId, setSelectedId] = useState(first?.id ?? "")
   const [topic, setTopic] = useState("")
@@ -450,6 +459,10 @@ export function TeacherQuizGenerator({
       setMessage(
         `${created.length} draft question${created.length === 1 ? "" : "s"} generated. Review, edit, then publish.`,
       )
+      // A generation can add tags to the course's subtopic vocabulary, which the
+      // server-fetched Topics panel renders. Without this the panel and the message
+      // above it described different states of the same screen (TN-64).
+      router.refresh()
     } catch {
       setError("Unable to generate questions.")
     } finally {

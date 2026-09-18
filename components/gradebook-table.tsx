@@ -155,7 +155,9 @@ export function GradebookTable({ assessments }: { assessments: Assessment[] }) {
                 colSpan={assessments.length + 2}
                 className="px-4 py-10 text-center text-sm text-muted-foreground"
               >
-                No students match &ldquo;{search}&rdquo;.
+                {students.length === 0
+                  ? "No students to mark yet. This grid fills once an offering you teach has enrolled students."
+                  : `No students match “${search}”.`}
               </td>
             </tr>
           )}

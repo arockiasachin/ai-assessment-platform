@@ -1,5 +1,6 @@
 import "server-only"
 
+import { classroomLabel } from "@/lib/classroom-label"
 import { toAssessmentScale } from "@/lib/gradebook"
 import type { AssessmentType, SubmissionStatus } from "@/lib/generated/prisma/enums"
 import { prisma } from "@/lib/prisma"
@@ -105,7 +106,7 @@ export type SubmissionQueryRow = {
 
 /** `Main Hall` + section `A` → `Main Hall A`; no section → just the room name. */
 function classLabel(classRoom: { name: string; section: string | null }): string {
-  return classRoom.section ? `${classRoom.name} ${classRoom.section}` : classRoom.name
+  return classroomLabel(classRoom.name, classRoom.section)
 }
 
 /**

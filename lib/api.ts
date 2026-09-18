@@ -23,6 +23,25 @@ export function jsonSuccess(body: Record<string, unknown> = {}): NextResponse {
 }
 
 /**
+ * Reject a query parameter this route does not support, rather than ignoring it.
+ *
+ * `offeringId` is honoured by `/api/teacher/analytics` and the offering grading route,
+ * which scope to one owned offering and answer 403 for someone else's. Routes that
+ * deliberately report across *every* owned offering used to drop the same parameter
+ * silently, so "offeringId=…" sometimes scoped and sometimes did not, and a caller had
+ * no way to tell which (TN-27). Saying so is the one consistent rule.
+ */
+export function rejectQueryParam(
+  request: Request | undefined,
+  name: string,
+  explanation: string,
+): NextResponse | null {
+  if (!request) return null
+  if (!new URL(request.url).searchParams.has(name)) return null
+  return jsonError(explanation, 400)
+}
+
+/**
  * True when an error originated inside Prisma. Route handlers must never echo a
  * database error's `message` to a client: Prisma validation errors embed the
  * generated schema, internal file paths, and query fragments. Duck-typed rather

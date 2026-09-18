@@ -4,6 +4,7 @@ import { redirect } from "next/navigation"
 
 import { RoleGuard } from "@/components/role-guard"
 import { AppShell, PageHeader } from "@/components/shell"
+import { OfferingTabs } from "@/components/offering-tabs"
 import { TeacherObservabilityView } from "@/components/teacher-observability-view"
 import { listTeacherOfferingsForAnalytics } from "@/lib/analytics/service"
 import { getSessionUser } from "@/lib/auth"
@@ -100,33 +101,18 @@ export default async function TeacherObservabilityPage({
             {/* The offering selector is kept from the previous page: the readers are
                 per-offering, so without it a teacher with two offerings could only
                 ever see the first. It is a real control, not a mockup affordance. */}
-            <nav aria-label="Offering" className="flex flex-wrap gap-2">
-              {offerings.map((offering) => {
-                const isActive = offering.id === selected?.id
-                return (
-                  <Link
-                    key={offering.id}
-                    href={`/teacher/observability?offeringId=${offering.id}`}
-                    aria-current={isActive ? "page" : undefined}
-                    className={[
-                      "rounded-lg border px-3 py-1.5 text-xs transition-colors",
-                      "focus-visible:ring-3 focus-visible:ring-ring/50",
-                      isActive
-                        ? "border-primary/40 bg-primary/10 text-primary"
-                        : "border-border bg-background hover:bg-muted",
-                    ].join(" ")}
-                  >
-                    {offering.courseCode} · {offering.term} {offering.academicYear}
-                  </Link>
-                )
-              })}
-            </nav>
+            <OfferingTabs
+              offerings={offerings}
+              selectedId={selected?.id ?? null}
+              basePath="/teacher/observability"
+            />
 
             {activity && decisions ? (
               <>
                 <TeacherObservabilityView
                   activity={activity.items}
                   decisions={decisions.items}
+                  decisionsTruncated={decisions.truncated}
                   total={activity.total}
                   page={page}
                   pageSize={ACTIVITY_PAGE_SIZE}

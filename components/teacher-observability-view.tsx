@@ -1,6 +1,7 @@
 "use client"
 
 import { useMemo, useState } from "react"
+import { usePathname, useSearchParams } from "next/navigation"
 import { Gavel, History } from "lucide-react"
 
 import { DataTable, type Column } from "@/components/ui/data-table"
@@ -19,6 +20,7 @@ import {
   filterActivity,
   isActivityFiltered,
   isAutomated,
+  withheldDecisionCount,
   type ActorKindFilter,
 } from "@/lib/observability-view"
 
@@ -87,6 +89,35 @@ function actionTone(action: string): StatusKey {
   return ACTION_TONES[action] ?? "active"
 }
 
+/**
+ * The grading-decisions card's description.
+ *
+ * The reader bounds the table with a safety `take`; when it bites, saying so is
+ * the difference between "these are all the overrides" and "these are the first
+ * fifty" (TN-30). The withheld count comes from the shared pure helper rather
+ * than a second filter here, so the count and the column cannot disagree.
+ */
+function decisionsDescription(
+  decisions: readonly GradingDecisionItem[],
+  truncated: boolean,
+): string {
+  const withheld = withheldDecisionCount(decisions)
+  const parts = [
+    "Every mark a teacher changed rather than accepted, with the reason kept as calibration data.",
+  ]
+  if (truncated) {
+    parts.push(
+      `Showing the ${decisions.length} most recent — more overrides exist on this offering than this table lists.`,
+    )
+  }
+  if (withheld > 0) {
+    parts.push(
+      `${withheld} of these ${withheld === 1 ? "is" : "are"} still withheld from students.`,
+    )
+  }
+  return parts.join(" ")
+}
+
 /** The scalar fields of an audit summary, flattened for display. Never nested objects. */
 function summaryText(item: GradeActivityItem): string | null {
   const summary = item.summary
@@ -103,20 +134,60 @@ function summaryText(item: GradeActivityItem): string | null {
 export function TeacherObservabilityView({
   activity,
   decisions,
+  decisionsTruncated,
   total,
   page,
   pageSize,
 }: {
   activity: GradeActivityItem[]
   decisions: GradingDecisionItem[]
+  /** True when more overrides exist than the reader's safety bound returned (TN-30). */
+  decisionsTruncated: boolean
   /** Every matching activity row, so the count is never the page (TN-17). */
   total: number
   page: number
   pageSize: number
 }) {
-  const [search, setSearch] = useState("")
-  const [action, setAction] = useState("all")
-  const [actorKind, setActorKind] = useState<ActorKindFilter>("all")
+  const pathname = usePathname()
+  const searchParams = useSearchParams()
+  // Filters are seeded from the URL and written back to it, so a refresh keeps them
+  // (TN-15). The offering and page params are carried through untouched.
+  const [search, setSearch] = useState(() => searchParams.get("q") ?? "")
+  const [action, setAction] = useState(() => searchParams.get("action") ?? "all")
+  const [actorKind, setActorKind] = useState<ActorKindFilter>(
+    () => (searchParams.get("actor") as ActorKindFilter | null) ?? "all",
+  )
+
+  /**
+   * Write one filter to the URL without a navigation.
+   *
+   * `replaceState` rather than a router change: the filtering is client-side over rows
+   * already on the page, so navigating would re-run the server reads for a value the
+   * client already has. An empty or `all` value is removed, so the URL does not carry
+   * defaults.
+   */
+  function syncFilter(key: "q" | "action" | "actor", value: string) {
+    const params = new URLSearchParams(searchParams.toString())
+    if (value === "" || value === "all") params.delete(key)
+    else params.set(key, value)
+    const query = params.toString()
+    window.history.replaceState(null, "", query ? `${pathname}?${query}` : pathname)
+  }
+
+  function changeSearch(value: string) {
+    setSearch(value)
+    syncFilter("q", value)
+  }
+
+  function changeAction(value: string) {
+    setAction(value)
+    syncFilter("action", value)
+  }
+
+  function changeActorKind(value: ActorKindFilter) {
+    setActorKind(value)
+    syncFilter("actor", value)
+  }
 
   const actionOptions = useMemo(() => activityActionOptions(activity, actionLabel), [activity])
   const actorOptions = useMemo(() => actorKindOptions(activity), [activity])
@@ -228,21 +299,21 @@ export function TeacherObservabilityView({
         searchLabel="Search the log"
         searchPlaceholder="Search action, entity or summary…"
         searchValue={search}
-        onSearchChange={setSearch}
+        onSearchChange={changeSearch}
         selects={[
           {
             id: "filter-actor-kind",
             label: "Actor",
             value: actorKind,
             options: actorOptions,
-            onValueChange: (value) => setActorKind(value as ActorKindFilter),
+            onValueChange: (value) => changeActorKind(value as ActorKindFilter),
           },
           {
             id: "filter-action",
             label: "Action",
             value: action,
             options: actionOptions,
-            onValueChange: setAction,
+            onValueChange: changeAction,
           },
         ]}
         resultCount={filtered.length}
@@ -271,7 +342,7 @@ export function TeacherObservabilityView({
 
       <SectionCard
         title="Grading decisions"
-        description="Every mark a teacher changed rather than accepted, with the reason kept as calibration data."
+        description={decisionsDescription(decisions, decisionsTruncated)}
         action={<Gavel className="size-4 text-muted-foreground" aria-hidden="true" />}
       >
         <DataTable

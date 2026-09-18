@@ -1,6 +1,7 @@
 "use client"
 
 import { useMemo, useState } from "react"
+import { usePathname, useSearchParams } from "next/navigation"
 
 import { AssessmentReleaseControl } from "@/components/assessment-release-control"
 import { DataTable, type Column } from "@/components/ui/data-table"
@@ -53,11 +54,28 @@ export function TeacherPlannerView({
   deadlines: TeacherDeadlineItem[]
   upcoming: CalendarEventItem[]
 }) {
-  const [search, setSearch] = useState("")
-  const [kind, setKind] = useState<CalendarKindFilter>("all")
-  const [month, setMonth] = useState("all")
-  const [deadlineSearch, setDeadlineSearch] = useState("")
-  const [release, setRelease] = useState<ReleaseFilter>("all")
+  const pathname = usePathname()
+  const searchParams = useSearchParams()
+  // Filters are seeded from the URL and written back to it, so a refresh keeps them
+  // (TN-15).
+  const [search, setSearch] = useState(() => searchParams.get("eq") ?? "")
+  const [kind, setKind] = useState<CalendarKindFilter>(
+    () => (searchParams.get("kind") as CalendarKindFilter | null) ?? "all",
+  )
+  const [month, setMonth] = useState(() => searchParams.get("month") ?? "all")
+  const [deadlineSearch, setDeadlineSearch] = useState(() => searchParams.get("dq") ?? "")
+  const [release, setRelease] = useState<ReleaseFilter>(
+    () => (searchParams.get("release") as ReleaseFilter | null) ?? "all",
+  )
+
+  /** Write one filter to the URL without navigating; see `TeacherObservabilityView`. */
+  function syncFilter(key: string, value: string) {
+    const params = new URLSearchParams(searchParams.toString())
+    if (value === "" || value === "all") params.delete(key)
+    else params.set(key, value)
+    const query = params.toString()
+    window.history.replaceState(null, "", query ? `${pathname}?${query}` : pathname)
+  }
 
   // Assessments are removed before anything else, so the kind filter is built from
   // a list in which "Assessment" cannot appear as a dead option (decision E3).
@@ -210,14 +228,20 @@ export function TeacherPlannerView({
             searchLabel="Search deadlines"
             searchPlaceholder="Search by title or course…"
             searchValue={deadlineSearch}
-            onSearchChange={setDeadlineSearch}
+            onSearchChange={(value) => {
+              setDeadlineSearch(value)
+              syncFilter("dq", value)
+            }}
             selects={[
               {
                 id: "deadline-release",
                 label: "Release",
                 value: release,
                 options: releaseOptions(),
-                onValueChange: (value) => setRelease(value as ReleaseFilter),
+                onValueChange: (value) => {
+                  setRelease(value as ReleaseFilter)
+                  syncFilter("release", value)
+                },
               },
             ]}
             resultCount={filteredDeadlines.length}
@@ -255,21 +279,30 @@ export function TeacherPlannerView({
           searchLabel="Search events"
           searchPlaceholder="Search by title or class…"
           searchValue={search}
-          onSearchChange={setSearch}
+          onSearchChange={(value) => {
+            setSearch(value)
+            syncFilter("eq", value)
+          }}
           selects={[
             {
               id: "planner-month",
               label: "Month",
               value: month,
               options: monthOptions,
-              onValueChange: setMonth,
+              onValueChange: (value) => {
+                setMonth(value)
+                syncFilter("month", value)
+              },
             },
             {
               id: "planner-kind",
               label: "Kind",
               value: kind,
               options: kindOptions,
-              onValueChange: (value) => setKind(value as CalendarKindFilter),
+              onValueChange: (value) => {
+                setKind(value as CalendarKindFilter)
+                syncFilter("kind", value)
+              },
             },
           ]}
           resultCount={filteredEvents.length}

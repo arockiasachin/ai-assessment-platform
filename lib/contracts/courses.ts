@@ -134,6 +134,12 @@ export const offeringGradingResponseSchema = z.object({
   config: offeringGradingConfigSchema,
   /** True when nothing is stored and the code defaults apply. */
   usingDefaults: z.boolean(),
+  /**
+   * True when a value **is** stored but cannot be parsed, so the defaults are what is in
+   * force. Distinct from `usingDefaults`: "never configured" and "configured, but the
+   * stored value is unusable" look identical to the numbers but need different words (TN-22).
+   */
+  storedPolicyInvalid: z.boolean(),
   /** The offering's assessments, so the editor can offer them. */
   assessments: z.array(gradingAssessmentOptionSchema),
   /**

@@ -1,5 +1,6 @@
 import "server-only"
 
+import { classroomLabel } from "@/lib/classroom-label"
 import type { CourseOfferingRatingsReport } from "@/lib/contracts/gradebook"
 import { prisma } from "@/lib/prisma"
 import type { AuthUser } from "@/lib/session"
@@ -144,7 +145,7 @@ export async function getTeacherRatingsReport(
       offeringId: offering.id,
       courseCode: offering.course.code,
       courseName: offering.course.name,
-      className: `${offering.classRoom.name}${offering.classRoom.section ? ` ${offering.classRoom.section}` : ""}`,
+      className: classroomLabel(offering.classRoom.name, offering.classRoom.section),
       term: offering.term,
       academicYear: offering.academicYear,
       ratingsCount: count,

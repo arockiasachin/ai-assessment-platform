@@ -36,12 +36,22 @@ const HREF = "/teacher/analytics"
  * The description is read from the nav rather than duplicated, so the label and the heading
  * cannot drift. That is the pattern the mockup used for the same reason.
  */
-export default async function TeacherAnalyticsPage() {
+export default async function TeacherAnalyticsPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>
+}) {
   const user = await getSessionUser()
   if (!user || user.role !== "teacher") redirect("/login")
 
+  const params = await searchParams
+  const requested = typeof params.offeringId === "string" ? params.offeringId : null
   const offerings = await listTeacherOfferingsForAnalytics(user)
-  const initialOfferingId = offerings[0]?.id ?? null
+  // The selected offering is read from the URL, so a hard refresh keeps it and a deep
+  // link can target one (TN-14). A requested id the teacher does not own falls back to
+  // the first rather than being honoured.
+  const initialOffering = offerings.find((candidate) => candidate.id === requested) ?? offerings[0]
+  const initialOfferingId = initialOffering?.id ?? null
 
   let initialOverview: TeacherAnalyticsOverviewResponse | null = null
   let initialItems: AssessmentItemAnalysisResponse | null = null

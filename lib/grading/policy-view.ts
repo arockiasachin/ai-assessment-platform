@@ -75,7 +75,19 @@ export function toGradingDraft(payload: OfferingGradingResponse): GradingDraft {
 export type DraftValidation =
   { ok: true; body: OfferingGradingConfigValue } | { ok: false; message: string }
 
-export function gradingDraftToRequest(draft: GradingDraft): DraftValidation {
+/**
+ * The request body for a draft, or the reason it cannot be sent.
+ *
+ * `previous` is the policy currently stored, and it exists for one field: the editor
+ * does not expose `minimumCatCompletionRatio`, but the API replaces the whole config on
+ * save, so omitting it from the body would silently delete a stored ratio the teacher
+ * never saw or edited (TN-22). Carrying it through is the difference between "save what
+ * the form shows" and "overwrite the parts the form does not show".
+ */
+export function gradingDraftToRequest(
+  draft: GradingDraft,
+  previous?: OfferingGradingConfigValue,
+): DraftValidation {
   const cat = Number(draft.catWeight)
   const fat = Number(draft.fatWeight)
 
@@ -115,6 +127,9 @@ export function gradingDraftToRequest(draft: GradingDraft): DraftValidation {
       fatWeight: fat,
       finalAssessmentId: draft.finalAssessmentId === "" ? null : draft.finalAssessmentId,
       minimumCatPercent,
+      ...(previous?.minimumCatCompletionRatio !== undefined
+        ? { minimumCatCompletionRatio: previous.minimumCatCompletionRatio }
+        : {}),
     },
   }
 }

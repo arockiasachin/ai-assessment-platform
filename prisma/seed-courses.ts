@@ -1261,7 +1261,9 @@ async function createCalendarEvents(assessments: AssessmentSeed[]): Promise<void
         offeringId: null,
         assessmentId: null,
         title: "Mid-semester break",
-        description: "No classes for the postgraduate CSE cohort this week.",
+        // Unscoped (`offeringId: null`), so it is shown to every student. Naming one
+        // cohort here made an institution-wide event carry course-specific copy (TN-11).
+        description: "No classes are scheduled during the mid-semester break.",
         eventType: "HOLIDAY" as const,
         startAt: fromNow(17, 0),
         endAt: fromNow(21, 0),

@@ -1,3 +1,4 @@
+import { classroomLabel } from "@/lib/classroom-label"
 import { prisma } from "@/lib/prisma"
 import type { AuthUser } from "@/lib/session"
 
@@ -48,14 +49,13 @@ export async function loadOwnedOffering(
   })
   if (!offering) throw new GroupError(404, "Course offering not found.")
   if (offering.teacherId !== staffId) throw new GroupError(403, "Forbidden")
-  const section = offering.classRoom.section
   return {
     id: offering.id,
     teacherId: offering.teacherId,
     courseId: offering.courseId,
     courseCode: offering.course.code,
     courseName: offering.course.name,
-    className: `${offering.classRoom.name}${section ? ` ${section}` : ""}`,
+    className: classroomLabel(offering.classRoom.name, offering.classRoom.section),
   }
 }
 

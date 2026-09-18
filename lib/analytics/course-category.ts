@@ -1,5 +1,6 @@
 import "server-only"
 
+import { classroomLabel } from "@/lib/classroom-label"
 import { prisma } from "@/lib/prisma"
 import { writeAuditLog } from "@/lib/grading/audit"
 import type { AuthUser } from "@/lib/session"
@@ -147,7 +148,7 @@ export type AdminCourseGradingRow = {
 }
 
 function classLabel(name: string, section: string | null): string {
-  return section ? `${name} ${section}` : name
+  return classroomLabel(name, section)
 }
 
 /**

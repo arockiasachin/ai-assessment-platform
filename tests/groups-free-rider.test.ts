@@ -145,4 +145,32 @@ describe("summarizeMilestones", () => {
     expect(groups.find((group) => group.groupId === "g3")?.lopsided).toBe(true)
     expect(groups.find((group) => group.groupId === "g1")?.behind).toBe(false)
   })
+
+  it("does not call a brand-new group with no milestones behind (TN-58)", () => {
+    const progress = summarizeMilestones([], now)
+
+    expect(progress.total).toBe(0)
+    expect(progress.behind).toBe(false)
+  })
+
+  it("does not flag an unplanned group as behind the cohort norm", () => {
+    const completed = {
+      status: "COMPLETED",
+      weight: 1,
+      dueDate: "2026-09-01",
+      completedAt: "2026-09-01",
+    }
+    const groups = analyzeCohortProgress(
+      [
+        { groupId: "g1", milestones: [completed, completed, completed] },
+        { groupId: "g2", milestones: [completed, completed, completed] },
+        { groupId: "g3", milestones: [] },
+      ],
+      now,
+    )
+
+    expect(groups.find((group) => group.groupId === "g3")?.progress.total).toBe(0)
+    expect(groups.find((group) => group.groupId === "g3")?.behind).toBe(false)
+    expect(groups.find((group) => group.groupId === "g3")?.lopsided).toBe(false)
+  })
 })

@@ -12,6 +12,7 @@ import {
   type RosterStudent,
 } from "@/lib/contracts/groups"
 import type { Prisma } from "@/lib/generated/prisma/client"
+import { classroomLabel } from "@/lib/classroom-label"
 import { writeAuditLog } from "@/lib/grading/audit"
 import { partialUpdate } from "@/lib/partial-update"
 import { prisma } from "@/lib/prisma"
@@ -144,12 +145,11 @@ export async function listTeacherOfferings(user: AuthUser): Promise<TeacherOffer
     take: 200,
   })
   return offerings.map((offering) => {
-    const section = offering.classRoom.section
     return {
       id: offering.id,
       courseCode: offering.course.code,
       courseName: offering.course.name,
-      className: `${offering.classRoom.name}${section ? ` ${section}` : ""}`,
+      className: classroomLabel(offering.classRoom.name, offering.classRoom.section),
       term: offering.term,
       academicYear: offering.academicYear,
       groupCount: offering._count.groups,

@@ -9,6 +9,7 @@ import type {
   TeacherAnalyticsOverviewResponse,
 } from "@/lib/contracts/analytics"
 import { updateAnalyticsSettingsRequestSchema } from "@/lib/contracts/analytics"
+import { classroomLabel } from "@/lib/classroom-label"
 import type { Prisma } from "@/lib/generated/prisma/client"
 import { summarizeContributions } from "@/lib/groups/contribution"
 import { prisma } from "@/lib/prisma"
@@ -29,9 +30,9 @@ import {
   type CohortScore,
 } from "./cohort"
 import { gatherRegimeInputs } from "./grading-regime"
-import { buildRosterForOffering } from "./at-risk"
+import { buildRosterForOffering, resolvePassBoundaryForOffering } from "./at-risk"
 import { buildTrendForOffering } from "./trend"
-import { resolveRegimeForCourse } from "./grading-bands"
+import { ABSOLUTE_PASS_MARK, resolveRegimeForCourse } from "./grading-bands"
 import {
   loadOwnedAssessment,
   loadOwnedOffering,
@@ -125,9 +126,7 @@ export async function listTeacherOfferingsForAnalytics(
     id: offering.id,
     courseCode: offering.course.code,
     courseName: offering.course.name,
-    className: offering.classRoom.section
-      ? `${offering.classRoom.name} ${offering.classRoom.section}`
-      : offering.classRoom.name,
+    className: classroomLabel(offering.classRoom.name, offering.classRoom.section),
     term: offering.term,
     academicYear: offering.academicYear,
   }))
@@ -173,6 +172,18 @@ export async function getTeacherAnalyticsOverview(
     },
   })
 
+  // The regime is resolved before the per-assessment summaries, not after, because
+  // the pass rate each row reports is measured against this class's own pass line
+  // (TN-20). Resolving it later left the table comparing marks to VIT's fixed 50
+  // while the callout above it named a different boundary.
+  const [regimeInputs, atRisk, trend] = await Promise.all([
+    gatherRegimeInputs(offering.id),
+    buildRosterForOffering(offering.id),
+    buildTrendForOffering(offering.id),
+  ])
+  const regimeDecision = resolveRegimeForCourse(regimeInputs)
+  const passThreshold = atRisk.boundary ?? ABSOLUTE_PASS_MARK
+
   const summaries: AnalyticsAssessmentSummary[] = assessments.map((assessment) => {
     const latest = selectLatestAttempts(assessment.quizAttempts)
     const attemptPercentages = new Map(
@@ -191,7 +202,7 @@ export async function getTeacherAnalyticsOverview(
       attemptPercentages,
       publishedPercentages,
     })
-    const cohort = buildCohortDistribution(scores)
+    const cohort = buildCohortDistribution(scores, { passThreshold })
     return {
       id: assessment.id,
       title: assessment.title,
@@ -275,13 +286,6 @@ export async function getTeacherAnalyticsOverview(
   // The roster and the trend ride the same payload rather than a second request, because the
   // page already fetches per offering and a switch would otherwise cost two more round trips.
   // Each does its own queries; ownership was checked above.
-  const [regimeInputs, atRisk, trend] = await Promise.all([
-    gatherRegimeInputs(offering.id),
-    buildRosterForOffering(offering.id),
-    buildTrendForOffering(offering.id),
-  ])
-  const regimeDecision = resolveRegimeForCourse(regimeInputs)
-
   return {
     offerings,
     offeringId: offering.id,
@@ -444,7 +448,10 @@ export async function getAssessmentItemAnalysisForTeacher(
     studentId: attempt.studentId,
     percentage: attemptPercentage(attempt, assessment.maxMarks),
   }))
-  const cohort: CohortDistribution = buildCohortDistribution(scores)
+  // The class's own pass line, not VIT's fixed 50, so the "pass rate (≥ N%)" note
+  // beside the histogram agrees with the bands the regime callout names (TN-20).
+  const passThreshold = await resolvePassBoundaryForOffering(assessment.offeringId)
+  const cohort: CohortDistribution = buildCohortDistribution(scores, { passThreshold })
 
   return {
     assessment: {

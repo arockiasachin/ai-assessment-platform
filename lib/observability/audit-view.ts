@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma"
+import { humanizeSummary, summaryReferenceIds } from "@/lib/observability-view"
 
 import { ObservabilityError } from "./errors"
 
@@ -142,6 +143,48 @@ async function attachActorNames(items: GradeActivityItem[]): Promise<GradeActivi
 }
 
 /**
+ * Resolve the ids an audit summary carries to the names the rest of the product
+ * shows (TN-29).
+ *
+ * The graders write `{ studentId, assessmentId }` into `metadata`, and the page
+ * rendered those raw. Two batched lookups, never one per row, and an id that no
+ * longer resolves is left visible rather than blanked — the same rule that makes
+ * a deleted actor an em dash.
+ */
+async function attachSummaryNames(items: GradeActivityItem[]): Promise<GradeActivityItem[]> {
+  const studentIds = new Set<string>()
+  const assessmentIds = new Set<string>()
+  for (const item of items) {
+    const refs = summaryReferenceIds(item.summary)
+    for (const id of refs.studentIds) studentIds.add(id)
+    for (const id of refs.assessmentIds) assessmentIds.add(id)
+  }
+  if (studentIds.size === 0 && assessmentIds.size === 0) return items
+
+  const [students, assessments] = await Promise.all([
+    studentIds.size === 0
+      ? Promise.resolve([])
+      : prisma.studentProfile.findMany({
+          where: { id: { in: [...studentIds] } },
+          select: { id: true, fullName: true },
+        }),
+    assessmentIds.size === 0
+      ? Promise.resolve([])
+      : prisma.assessment.findMany({
+          where: { id: { in: [...assessmentIds] } },
+          select: { id: true, title: true },
+        }),
+  ])
+
+  const names = {
+    student: new Map(students.map((row) => [row.id, row.fullName])),
+    assessment: new Map(assessments.map((row) => [row.id, row.title])),
+  }
+
+  return items.map((item) => ({ ...item, summary: humanizeSummary(item.summary, names) }))
+}
+
+/**
  * Recent grade-pipeline activity for one offering, newest first.
  *
  * @throws {ObservabilityError} 403 when the caller does not own the offering,
@@ -207,20 +250,22 @@ export async function getRecentGradeActivityForTeacher(
   ])
 
   const truncated = rows.length > query.limit
-  const items = await attachActorNames(
-    rows.slice(0, query.limit).map<GradeActivityItem>((row) => ({
-      id: row.id,
-      action: row.action,
-      entityType: row.entityType,
-      entityId: row.entityId,
-      entityLabel: entityLabel(row.entityType),
-      assessmentId: assessmentByEntity.get(`${row.entityType}:${row.entityId}`) ?? null,
-      actorId: row.actorId,
-      actorRole: row.actorRole,
-      actorName: null,
-      createdAt: row.createdAt.toISOString(),
-      summary: row.metadata ?? row.after ?? null,
-    })),
+  const items = await attachSummaryNames(
+    await attachActorNames(
+      rows.slice(0, query.limit).map<GradeActivityItem>((row) => ({
+        id: row.id,
+        action: row.action,
+        entityType: row.entityType,
+        entityId: row.entityId,
+        entityLabel: entityLabel(row.entityType),
+        assessmentId: assessmentByEntity.get(`${row.entityType}:${row.entityId}`) ?? null,
+        actorId: row.actorId,
+        actorRole: row.actorRole,
+        actorName: null,
+        createdAt: row.createdAt.toISOString(),
+        summary: row.metadata ?? row.after ?? null,
+      })),
+    ),
   )
 
   return { offeringId, items, truncated, total }

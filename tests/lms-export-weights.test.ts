@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest"
 
 import type { FinalGradeConfig } from "@/lib/contracts/lms-export"
 import {
+  EXCLUDED_FROM_FINAL_GRADE_CATEGORY,
   LmsExportValidationError,
+  assessmentCategoryLabel,
   defaultFinalGradeConfig,
   totalWeight,
   validateFinalGradeConfig,
@@ -119,5 +121,32 @@ describe("defaultFinalGradeConfig", () => {
     expect(derived.categories[0].weight).toBe(100)
     expect(derived.categories[0].assessmentIds).toEqual(["a1", "a2"])
     expect(() => validateFinalGradeConfig(derived)).not.toThrow()
+  })
+})
+
+/**
+ * TN-67: with a custom category config, an assessment outside it was labelled
+ * "Uncategorized" in the OneRoster line items, which read as "counted, no category"
+ * while the final grade excluded it. The label says what is true.
+ */
+describe("assessmentCategoryLabel", () => {
+  it("returns the configured category name", () => {
+    const cfg = config({ id: "exams", name: "Exams", weight: 100, assessmentIds: ["a1"] })
+
+    expect(assessmentCategoryLabel(cfg, "a1")).toBe("Exams")
+  })
+
+  it("says an excluded assessment is not in the final grade, not Uncategorized", () => {
+    const cfg = config({ id: "exams", name: "Exams", weight: 100, assessmentIds: ["a1"] })
+
+    expect(assessmentCategoryLabel(cfg, "a2")).toBe(EXCLUDED_FROM_FINAL_GRADE_CATEGORY)
+    expect(assessmentCategoryLabel(cfg, "a2")).not.toBe("Uncategorized")
+  })
+
+  it("labels every assessment when the equal-weight default covers them all", () => {
+    const cfg = defaultFinalGradeConfig([{ id: "a1" }, { id: "a2" }])
+
+    expect(assessmentCategoryLabel(cfg, "a1")).toBe(cfg.categories[0].name)
+    expect(assessmentCategoryLabel(cfg, "a2")).toBe(cfg.categories[0].name)
   })
 })

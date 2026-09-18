@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { requireRole } from "@/lib/authz"
+import { classroomLabel } from "@/lib/classroom-label"
 import { prisma } from "@/lib/prisma"
 import { decideRetention, retentionCutoff } from "@/lib/retention/policy"
 
@@ -33,7 +34,7 @@ export async function GET() {
       id: offering.id,
       courseCode: offering.course.code,
       courseName: offering.course.name,
-      className: `${offering.classRoom.name}${offering.classRoom.section ? ` ${offering.classRoom.section}` : ""}`,
+      className: classroomLabel(offering.classRoom.name, offering.classRoom.section),
       term: offering.term,
       academicYear: offering.academicYear,
       studentLimit: offering.studentLimit,

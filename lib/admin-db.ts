@@ -1,5 +1,6 @@
 import "server-only"
 
+import { classroomLabel } from "@/lib/classroom-label"
 import type { AssessmentType } from "@/lib/generated/prisma/enums"
 import { prisma } from "@/lib/prisma"
 
@@ -136,7 +137,7 @@ export async function getAdminOfferingsList() {
     courseCode: offering.course.code,
     courseName: offering.course.name,
     classCode: offering.classRoom.code,
-    className: `${offering.classRoom.name}${offering.classRoom.section ? ` ${offering.classRoom.section}` : ""}`,
+    className: classroomLabel(offering.classRoom.name, offering.classRoom.section),
     teacherName: offering.teacher.fullName,
     teacherEmpId: offering.teacher.empId,
     academicYear: offering.academicYear,

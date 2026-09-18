@@ -24,10 +24,17 @@ export type MilestoneProgress = {
   weightedCompletion: number
   /** Milestones whose due date has passed and are not completed. */
   overdue: number
-  /** Incomplete milestones due within the next seven days. */
+  /** Due soon = incomplete milestones due within the next seven days. */
   dueSoon: number
   nextDueAt: string | null
-  /** Behind = any overdue milestone, or no milestones defined yet. */
+  /**
+   * Behind = at least one overdue milestone.
+   *
+   * A group with **no** milestones is not behind — it is unplanned. Folding the two
+   * together flagged every brand-new team "Behind" with a red pill before it had been
+   * given anything to do (TN-58); absence of a plan is a different fact from falling
+   * short of one, and the caller reports it as "not planned" rather than a failure.
+   */
   behind: boolean
 }
 
@@ -80,7 +87,7 @@ export function summarizeMilestones(
     overdue,
     dueSoon,
     nextDueAt: nextDue === null ? null : new Date(nextDue).toISOString(),
-    behind: milestones.length === 0 || overdue > 0,
+    behind: overdue > 0,
   }
 }
 
@@ -127,8 +134,14 @@ export function analyzeCohortProgress(
   const hasCohortNorm = raw.length >= 3
 
   return raw.map((entry) => {
+    // A group with nothing defined has not fallen behind a norm; its zero completion is
+    // "no plan", not "no progress", so it is excluded from the below-norm rule (TN-58).
+    const planned = entry.progress.total > 0
     const belowNorm =
-      hasCohortNorm && mean > 0 && entry.progress.weightedCompletion < mean - Math.max(stdDev, 0.1)
+      planned &&
+      hasCohortNorm &&
+      mean > 0 &&
+      entry.progress.weightedCompletion < mean - Math.max(stdDev, 0.1)
     const behind = entry.progress.behind || belowNorm
     return {
       groupId: entry.groupId,

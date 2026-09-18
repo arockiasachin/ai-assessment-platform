@@ -1,3 +1,4 @@
+import { classroomLabel } from "@/lib/classroom-label"
 import type { AIGradeSuggestion } from "@/lib/generated/prisma/client"
 import type { GradeReviewStatusValue, AiGradeSuggestionResponse } from "@/lib/contracts/grading"
 import { prisma } from "@/lib/prisma"
@@ -56,7 +57,7 @@ function ownershipFilter(staffId: string) {
 }
 
 function classNameFor(offering: { classRoom: { name: string; section: string | null } }): string {
-  return `${offering.classRoom.name}${offering.classRoom.section ? ` ${offering.classRoom.section}` : ""}`
+  return classroomLabel(offering.classRoom.name, offering.classRoom.section)
 }
 
 /** Newest suggestion per criterion (rubric criteria first, then any label bucket). */

@@ -380,16 +380,19 @@ describe("code evaluation pipeline", () => {
     expect(first).toHaveLength(3)
     expect(first.every((testCase) => testCase.status === "draft")).toBe(true)
 
+    // TN-57: the mock provider is deterministic, so a second Generate with the same focus
+    // returns the same three cases. They are exact duplicates of drafts already on the
+    // task and are dropped rather than appended at the next order.
     const second = await generateTestCaseDraftsForTeacher(
       teacher,
       assessment.id,
       { count: 3, focus: "input handling" },
       { provider },
     )
-    expect(second.map((testCase) => testCase.name)).toEqual(first.map((testCase) => testCase.name))
+    expect(second).toEqual([])
 
     const detail = await getCodeTaskForTeacher(teacher, assessment.id)
-    expect(detail.task.draftTestCaseCount).toBe(6)
+    expect(detail.task.draftTestCaseCount).toBe(3)
 
     const published = await publishGeneratedTestCasesForTeacher(teacher, assessment.id, {
       testCaseIds: first.map((testCase) => testCase.id),
@@ -398,7 +401,7 @@ describe("code evaluation pipeline", () => {
     expect(published.alreadyActive).toEqual([])
 
     const after = await getCodeTaskForTeacher(teacher, assessment.id)
-    expect(after.task.draftTestCaseCount).toBe(3)
+    expect(after.task.draftTestCaseCount).toBe(0)
     const publishedCase = after.testCases.find((testCase) => testCase.id === first[0].id)
     expect(publishedCase?.status).toBe("active")
 

@@ -6,9 +6,11 @@ import {
   activityActionOptions,
   actorKindOptions,
   filterActivity,
+  humanizeSummary,
   isActivityFiltered,
   isAutomated,
   searchableText,
+  summaryReferenceIds,
   withheldDecisionCount,
 } from "@/lib/observability-view"
 
@@ -263,5 +265,58 @@ describe("withheldDecisionCount", () => {
   it("is zero when every decision is published", () => {
     expect(withheldDecisionCount([decision()])).toBe(0)
     expect(withheldDecisionCount([])).toBe(0)
+  })
+})
+
+/**
+ * TN-29: the audit log stored `studentId`/`assessmentId` and the page rendered
+ * them raw. The lookup relabels the key and resolves the value; an id with no
+ * name stays visible rather than being blanked.
+ */
+describe("humanizeSummary", () => {
+  it("relabels id keys and resolves them to names", () => {
+    const names = {
+      student: new Map([["demo-student-4", "Aarav Mehta"]]),
+      assessment: new Map([["demo-assessment-week2", "Week 2 practice set"]]),
+    }
+    expect(
+      humanizeSummary(
+        { studentId: "demo-student-4", assessmentId: "demo-assessment-week2" },
+        names,
+      ),
+    ).toEqual({ student: "Aarav Mehta", assessment: "Week 2 practice set" })
+  })
+
+  it("keeps the id when it does not resolve, rather than inventing a name", () => {
+    expect(humanizeSummary({ studentId: "gone" }, { student: new Map() })).toEqual({
+      student: "gone",
+    })
+  })
+
+  it("leaves non-id keys and non-string values untouched", () => {
+    expect(humanizeSummary({ points: 37.5, published: true, note: "ok" }, {})).toEqual({
+      points: 37.5,
+      published: true,
+      note: "ok",
+    })
+  })
+
+  it("passes non-object summaries through unchanged", () => {
+    expect(humanizeSummary(null, {})).toBeNull()
+    expect(humanizeSummary("raw", {})).toBe("raw")
+    expect(humanizeSummary([1, 2], {})).toEqual([1, 2])
+  })
+})
+
+describe("summaryReferenceIds", () => {
+  it("collects both kinds of id", () => {
+    expect(summaryReferenceIds({ studentId: "s1", assessmentId: "a1", other: "x" })).toEqual({
+      studentIds: ["s1"],
+      assessmentIds: ["a1"],
+    })
+  })
+
+  it("returns empty lists for a non-object", () => {
+    expect(summaryReferenceIds(null)).toEqual({ studentIds: [], assessmentIds: [] })
   })
 })

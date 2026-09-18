@@ -1,6 +1,7 @@
 import "server-only"
 
 import { releasedAssessmentWhere } from "@/lib/assessment-visibility"
+import { classroomLabel } from "@/lib/classroom-label"
 import { isLiveEnrollmentStatus } from "@/lib/enrollment-scope"
 import type { AssessmentType } from "@/lib/generated/prisma/enums"
 import type { CreateAssessmentRequest, UpdateAssessmentRequest } from "@/lib/contracts"
@@ -195,9 +196,10 @@ export async function getGradebookPayloadForSessionUser(
       courseId: o.courseId,
       courseCode: o.course.code,
       courseName: o.course.name,
-      className: `${o.classRoom.name}${o.classRoom.section ? ` ${o.classRoom.section}` : ""}`,
+      className: classroomLabel(o.classRoom.name, o.classRoom.section),
       term: o.term,
       academicYear: o.academicYear,
+      endsOn: o.endsOn?.toISOString() ?? null,
     }))
 
     const studentPool: Student[] = uniqById(
@@ -803,9 +805,7 @@ type AssessmentRegistryRecord = {
 }
 
 function toTeacherAssessmentRow(record: AssessmentRegistryRecord): TeacherAssessmentRow {
-  const room = record.offering.classRoom.section
-    ? `${record.offering.classRoom.name} ${record.offering.classRoom.section}`
-    : record.offering.classRoom.name
+  const room = classroomLabel(record.offering.classRoom.name, record.offering.classRoom.section)
   return {
     id: record.id,
     title: record.title,

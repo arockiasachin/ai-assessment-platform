@@ -66,6 +66,8 @@ export function AnalyticsThresholdsPanel({
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  /** A load failure shown under a "Could not save" heading mislabels it (TN-21). */
+  const [errorTitle, setErrorTitle] = useState("Could not save")
   const [message, setMessage] = useState<string | null>(null)
 
   const load = useCallback(async (id: string) => {
@@ -78,12 +80,14 @@ export function AnalyticsThresholdsPanel({
       )
       const data = (await response.json()) as AnalyticsSettingsResponse & { message?: string }
       if (!response.ok) {
+        setErrorTitle("Could not load")
         setError(data.message ?? "Unable to load the analytics thresholds.")
         return
       }
       setPayload(data)
       setDraft(toThresholdDraft(data.settings))
     } catch {
+      setErrorTitle("Could not load")
       setError("Unable to load the analytics thresholds.")
     } finally {
       setLoading(false)
@@ -102,6 +106,7 @@ export function AnalyticsThresholdsPanel({
   const save = async () => {
     const result = thresholdDraftToSettings(draft, payload?.settings)
     if (!result.ok) {
+      setErrorTitle("Could not save")
       setError(result.message)
       return
     }
@@ -173,7 +178,7 @@ export function AnalyticsThresholdsPanel({
           {loading && <p className="text-sm text-muted-foreground">Loading…</p>}
 
           {error && (
-            <Callout tone="warning" title="Could not save">
+            <Callout tone="warning" title={errorTitle}>
               {error}
             </Callout>
           )}

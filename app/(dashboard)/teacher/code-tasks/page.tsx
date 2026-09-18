@@ -125,7 +125,9 @@ const runColumns: Column<TestRunResponse>[] = [
     header: "Diagnostics",
     hideBelow: "lg",
     cell: (run) =>
-      run.stderr === null ? (
+      run.stderr === null || run.stderr.trim() === "" ? (
+        // Serialization yields an empty string, not null, for empty stderr, so the old
+        // null-only check captioned an empty block "Captured stderr" (TN-59).
         <span className="text-muted-foreground">—</span>
       ) : (
         <StatusPill status={TEST_RUN_STATE_TO_STATUS[run.status]} label="Captured stderr" />
@@ -492,7 +494,7 @@ export default async function TeacherCodeTasksPage({
                                   </ul>
                                 )}
                                 <CodeBlock wrap maxHeight="sm">
-                                  {run.stderr ?? "No stderr captured."}
+                                  {run.stderr?.trim() ? run.stderr : "No stderr captured."}
                                 </CodeBlock>
                               </div>
                             </details>

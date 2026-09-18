@@ -137,7 +137,7 @@ One header row per file, RFC 4180 escaping (`"` doubled, fields containing `,`,
 | `dueDate`          | assessment due date (ISO)                                                                          |
 | `class`            | the offering id (OneRoster class)                                                                  |
 | `course`           | the course id                                                                                      |
-| `category`         | the configured category name, `Uncategorized` when unconfigured, or `Final Grade`                  |
+| `category`         | the configured category name, `Not in final grade` when the config excludes it, or `Final Grade`   |
 | `resultValueMin`   | `0`                                                                                                |
 | `resultValueMax`   | assessment `maxMarks`, or `100` for the final grade                                                |
 | `scoreScale`       | `scales-<assessmentId>` / `scales-final-<offeringId>`                                              |

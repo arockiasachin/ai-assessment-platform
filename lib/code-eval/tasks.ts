@@ -11,11 +11,14 @@ import {
   type PublishTestCasesResponse,
   type TestCaseResponse,
 } from "@/lib/contracts/code-eval"
+import { classroomLabel } from "@/lib/classroom-label"
 import { writeAuditLog } from "@/lib/grading/audit"
 import { getLlmProvider, type LlmGenerateResult, type LlmProvider } from "@/lib/llm"
 import { partialUpdate } from "@/lib/partial-update"
 import { prisma } from "@/lib/prisma"
 import type { AuthUser } from "@/lib/session"
+
+import { withoutDuplicateTestCases } from "./test-case-dedupe"
 
 import { loadOwnedAssessment, loadOwnedCodeTask, resolveTeacherStaffId } from "./authz"
 import { CodeEvalError } from "./errors"
@@ -106,7 +109,6 @@ export async function listTeacherCodeTasks(user: AuthUser): Promise<CodeTaskSumm
 
   return assessments.map((assessment) => {
     const draftIds = resolveDraftTestCaseIds(assessment.codeTask?.metadata)
-    const section = assessment.offering.classRoom.section
     return {
       assessmentId: assessment.id,
       assessmentTitle: assessment.title,
@@ -115,7 +117,10 @@ export async function listTeacherCodeTasks(user: AuthUser): Promise<CodeTaskSumm
       maxMarks: assessment.maxMarks,
       courseCode: assessment.offering.course.code,
       courseName: assessment.offering.course.name,
-      className: `${assessment.offering.classRoom.name}${section ? ` ${section}` : ""}`,
+      className: classroomLabel(
+        assessment.offering.classRoom.name,
+        assessment.offering.classRoom.section,
+      ),
       hasCodeTask: assessment.codeTask !== null,
       language: assessment.codeTask
         ? (assessment.codeTask.language as CodeTaskSummary["language"])
@@ -356,7 +361,7 @@ export async function generateTestCaseDraftsForTeacher(
 
   const existing = await prisma.testCase.findMany({
     where: { codeTaskId: codeTask.id },
-    select: { name: true, order: true },
+    select: { name: true, order: true, category: true, input: true, expectedOutput: true },
     orderBy: testCaseOrder,
   })
 
@@ -386,6 +391,10 @@ export async function generateTestCaseDraftsForTeacher(
   }
 
   const drafts = parseGeneratedTestCases(result.text, { expectedCount: request.count })
+  // A repeated *Generate* used to append identical rows at the next order, so two runs
+  // left the task with double the cases and a doubled point total (TN-57). The prompt
+  // asks the model to avoid existing names; this makes it true regardless of the model.
+  const newDrafts = withoutDuplicateTestCases(drafts, existing)
 
   const generationId = randomUUID()
   const metadata = readCodeEvalMetadata(codeTask.metadata) ?? buildMetadata(codeTask.metadata, 1)
@@ -393,7 +402,7 @@ export async function generateTestCaseDraftsForTeacher(
 
   const created = await prisma.$transaction(async (tx) => {
     const ids: string[] = []
-    for (const draft of drafts) {
+    for (const draft of newDrafts) {
       const testCase = await tx.testCase.create({
         data: {
           codeTaskId: codeTask.id,

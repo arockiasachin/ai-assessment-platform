@@ -1,3 +1,4 @@
+import { classroomLabel } from "@/lib/classroom-label"
 import { prisma } from "@/lib/prisma"
 import type { AuthUser } from "@/lib/session"
 
@@ -71,9 +72,7 @@ export async function loadOfferingMeta(offeringId: string): Promise<OwnedOfferin
     gradingConfig: offering.gradingConfig,
     courseCode: offering.course.code,
     courseName: offering.course.name,
-    className: offering.classRoom.section
-      ? `${offering.classRoom.name} ${offering.classRoom.section}`
-      : offering.classRoom.name,
+    className: classroomLabel(offering.classRoom.name, offering.classRoom.section),
   }
 }
 

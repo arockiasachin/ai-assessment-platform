@@ -349,14 +349,19 @@ export default async function TeacherGroupsPage({
       header: "Milestones",
       align: "right",
       hideBelow: "sm",
-      cell: (group) => (
-        <span className="font-mono tabular-nums">
-          {group.milestoneProgress.completed}/{group.milestoneProgress.total}
-          <span className="block text-xs text-muted-foreground">
-            {Math.round(group.milestoneProgress.weightedCompletion * 100)}% weighted
+      cell: (group) =>
+        group.milestoneProgress.total === 0 ? (
+          // Zero defined is "not planned", not "0/0 done" — and it is no longer flagged
+          // Behind (TN-58).
+          <span className="text-xs text-muted-foreground">No milestones</span>
+        ) : (
+          <span className="font-mono tabular-nums">
+            {group.milestoneProgress.completed}/{group.milestoneProgress.total}
+            <span className="block text-xs text-muted-foreground">
+              {Math.round(group.milestoneProgress.weightedCompletion * 100)}% weighted
+            </span>
           </span>
-        </span>
-      ),
+        ),
     },
     {
       id: "activity",

@@ -1,3 +1,4 @@
+import { classroomLabel } from "@/lib/classroom-label"
 import { prisma } from "@/lib/prisma"
 import type { AuthUser } from "@/lib/session"
 
@@ -26,7 +27,7 @@ export async function resolveTeacherStaffId(user: AuthUser): Promise<string> {
 }
 
 function offeringLabel(name: string, section: string | null): string {
-  return section ? `${name} ${section}` : name
+  return classroomLabel(name, section)
 }
 
 /** An owned offering plus its persisted analytics settings (raw JSON). */

@@ -3,6 +3,7 @@ import { redirect } from "next/navigation"
 
 import { RoleGuard } from "@/components/role-guard"
 import { AppShell, PageHeader } from "@/components/shell"
+import { findNavItemByAppPath } from "@/components/shell/nav-config"
 import { TeacherLmsExport } from "@/components/teacher-lms-export"
 import { getSessionUser } from "@/lib/auth"
 import type { TeacherGradeExportResponse } from "@/lib/contracts/lms-export"
@@ -10,6 +11,8 @@ import { getTeacherGradeExport, listTeacherExportOfferings } from "@/lib/lms-exp
 import { initialsFromEmail, roleLabelFromRole } from "@/lib/user-identity"
 
 export const dynamic = "force-dynamic"
+
+const HREF = "/teacher/export"
 
 export const metadata: Metadata = { title: "Final grades" }
 
@@ -50,7 +53,7 @@ export default async function TeacherExportPage() {
         }}
       >
         <PageHeader
-          title="Final grades"
+          title={findNavItemByAppPath(HREF)?.item.label ?? "Export"}
           description="Weighted final grades from published assessments, downloadable OneRoster 1.2 CSV (line items, results, score scales), and an offline LTI 1.3 AGS dry run."
         />
         <TeacherLmsExport

@@ -20,6 +20,8 @@ export type Offering = {
   className: string
   term: string
   academicYear: number
+  /** ISO end date, or null when the term is unscheduled. Used to keep closed offerings out of the authoring picker (TN-62). */
+  endsOn: string | null
 }
 
 export type Student = {

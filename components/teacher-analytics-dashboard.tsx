@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge"
 import { Callout } from "@/components/ui/callout"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { EmptyState } from "@/components/ui/empty-state"
 import {
   Select,
   SelectContent,
@@ -79,6 +80,22 @@ export function TeacherAnalyticsDashboard({
   const [items, setItems] = useState<AssessmentItemAnalysisResponse | null>(initialItems)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  /**
+   * Change the selected offering and put it in the URL.
+   *
+   * `replaceState` rather than a router navigation: the payload is client-fetched, so
+   * navigating would refetch what the client is already loading, and history entries
+   * for every toggle would make Back useless. The URL is what a refresh and a deep
+   * link read, which is the whole defect (TN-14) — it is never ignored if supplied.
+   */
+  function selectOffering(id: string) {
+    setOfferingId(id)
+    if (typeof window === "undefined") return
+    const url = new URL(window.location.href)
+    url.searchParams.set("offeringId", id)
+    window.history.replaceState(null, "", url.toString())
+  }
 
   const loadItems = useCallback(async (assessmentId: string) => {
     setBusy(true)
@@ -192,37 +209,47 @@ export function TeacherAnalyticsDashboard({
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="flex flex-wrap items-center gap-3">
-            <Select value={offeringId} onValueChange={(value) => setOfferingId(value ?? "")}>
-              <SelectTrigger className="w-full sm:w-80" aria-label="Course offering">
-                <SelectValue placeholder="Select an offering" />
-              </SelectTrigger>
-              <SelectContent>
-                {offerings.map((offering) => (
-                  <SelectItem key={offering.id} value={offering.id}>
-                    {offering.courseCode} · {offering.className} · {offering.term}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {busy && <Loader2 className="size-4 animate-spin text-muted-foreground" />}
-          </div>
-          {error && (
-            <p role="alert" className="text-sm text-destructive">
-              {error}
-            </p>
-          )}
-          {overview && (
-            <p className="text-xs text-muted-foreground">
-              Alerts use thresholds: class average &lt; {overview.thresholds.classAverageBelow}%,
-              one member ≥ {(overview.thresholds.contributionShareAtLeast * 100).toFixed(0)}% of
-              contribution weight, review queue ≥ {overview.thresholds.pendingReviewsAtLeast}.
-            </p>
+          {offerings.length === 0 ? (
+            <EmptyState
+              title="No course offerings yet"
+              description="Analytics reports on the offerings you teach. Nothing is assigned to you this term, so there is nothing to chart."
+            />
+          ) : (
+            <>
+              <div className="flex flex-wrap items-center gap-3">
+                <Select value={offeringId} onValueChange={(value) => selectOffering(value ?? "")}>
+                  <SelectTrigger className="w-full sm:w-80" aria-label="Course offering">
+                    <SelectValue placeholder="Select an offering" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {offerings.map((offering) => (
+                      <SelectItem key={offering.id} value={offering.id}>
+                        {offering.courseCode} · {offering.className} · {offering.term}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {busy && <Loader2 className="size-4 animate-spin text-muted-foreground" />}
+              </div>
+              {error && (
+                <p role="alert" className="text-sm text-destructive">
+                  {error}
+                </p>
+              )}
+              {overview && (
+                <p className="text-xs text-muted-foreground">
+                  Alerts use thresholds: class average &lt; {overview.thresholds.classAverageBelow}
+                  %, one member ≥ {(overview.thresholds.contributionShareAtLeast * 100).toFixed(0)}%
+                  of contribution weight, review queue ≥ {overview.thresholds.pendingReviewsAtLeast}
+                  .
+                </p>
+              )}
+            </>
           )}
         </CardContent>
       </Card>
 
-      {overview && overview.alerts.length > 0 && (
+      {overview && (
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="flex items-center gap-2 text-base">
@@ -230,18 +257,29 @@ export function TeacherAnalyticsDashboard({
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
-            {overview.alerts.map((alert, index) => (
-              <div
-                key={`${alert.type}-${index}`}
-                className="flex flex-col gap-1 rounded-lg border border-border/70 px-3 py-2"
-              >
-                <div className="flex items-center gap-2">
-                  <Badge variant={SEVERITY_VARIANT[alert.severity]}>{alert.severity}</Badge>
-                  <span className="text-sm font-medium">{alert.title}</span>
+            {overview.alerts.length === 0 ? (
+              // The card used to be omitted entirely when nothing fired, so the threshold
+              // sentence above it had no answer beside it: a teacher could not tell "the
+              // checks ran and found nothing" from "the alerts feature is missing here"
+              // (TL-5).
+              <p className="text-sm text-muted-foreground">
+                All clear — no intervention threshold fired for this offering. The checks above ran
+                against this offering&apos;s assessments and contribution data.
+              </p>
+            ) : (
+              overview.alerts.map((alert, index) => (
+                <div
+                  key={`${alert.type}-${index}`}
+                  className="flex flex-col gap-1 rounded-lg border border-border/70 px-3 py-2"
+                >
+                  <div className="flex items-center gap-2">
+                    <Badge variant={SEVERITY_VARIANT[alert.severity]}>{alert.severity}</Badge>
+                    <span className="text-sm font-medium">{alert.title}</span>
+                  </div>
+                  <p className="text-xs text-muted-foreground">{alert.message}</p>
                 </div>
-                <p className="text-xs text-muted-foreground">{alert.message}</p>
-              </div>
-            ))}
+              ))
+            )}
           </CardContent>
         </Card>
       )}
@@ -423,39 +461,53 @@ export function TeacherAnalyticsDashboard({
               <CardTitle className="text-base">Item analysis</CardTitle>
             </CardHeader>
             <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>#</TableHead>
-                    <TableHead>Correct</TableHead>
-                    <TableHead>Difficulty</TableHead>
-                    <TableHead>Discrimination</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {items.items.map((item) => (
-                    <TableRow key={item.questionId}>
-                      <TableCell>{item.questionOrder}</TableCell>
-                      <TableCell>
-                        {item.correctCount}/{item.answeredCount}
-                        {item.unansweredCount > 0 && (
-                          <span className="ml-1 text-xs text-muted-foreground">
-                            (+{item.unansweredCount} blank)
-                          </span>
-                        )}
-                      </TableCell>
-                      <TableCell>{formatIndex(item.difficultyIndex)}</TableCell>
-                      <TableCell>{formatIndex(item.discriminationIndex)}</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-              <p className="mt-3 text-xs text-muted-foreground">
-                Difficulty is 0 (easiest) to 1 (hardest). Discrimination is the 27% extreme-groups
-                index (−1 to 1). With fewer than {items.thresholds.minAttemptsForDifficulty}{" "}
-                answered responses or {items.thresholds.minAttemptsForDiscrimination} scored
-                responses an index is reported as insufficient data instead of a misleading number.
-              </p>
+              {items.items.length === 0 ? (
+                // An assessment with no questions (a written or descriptive task, or a quiz
+                // whose questions were never generated) used to render a bare header row and
+                // the footnote, which reads as a loading failure (TN-18).
+                <p className="text-sm text-muted-foreground">
+                  This assessment has no questions to analyse. Item analysis reads generated quiz
+                  questions, so a written, descriptive or code assessment reports nothing here.
+                </p>
+              ) : (
+                <>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>#</TableHead>
+                        <TableHead>Correct</TableHead>
+                        <TableHead>Difficulty</TableHead>
+                        <TableHead>Discrimination</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {items.items.map((item) => (
+                        <TableRow key={item.questionId}>
+                          {/* `Question.order` is 0-based; the page numbers from 1. */}
+                          <TableCell>{item.questionOrder + 1}</TableCell>
+                          <TableCell>
+                            {item.correctCount}/{item.answeredCount}
+                            {item.unansweredCount > 0 && (
+                              <span className="ml-1 text-xs text-muted-foreground">
+                                (+{item.unansweredCount} blank)
+                              </span>
+                            )}
+                          </TableCell>
+                          <TableCell>{formatIndex(item.difficultyIndex)}</TableCell>
+                          <TableCell>{formatIndex(item.discriminationIndex)}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                  <p className="mt-3 text-xs text-muted-foreground">
+                    Difficulty is 0 (easiest) to 1 (hardest). Discrimination is the 27%
+                    extreme-groups index (−1 to 1). With fewer than{" "}
+                    {items.thresholds.minAttemptsForDifficulty} answered responses or{" "}
+                    {items.thresholds.minAttemptsForDiscrimination} scored responses an index is
+                    reported as insufficient data instead of a misleading number.
+                  </p>
+                </>
+              )}
             </CardContent>
           </Card>
         </div>
