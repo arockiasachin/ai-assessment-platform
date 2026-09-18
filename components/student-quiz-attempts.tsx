@@ -239,6 +239,10 @@ export function StudentQuizAttempts({ initialQuizzes, initialAttempt = null }: P
     setView(null)
     setAnswers({})
     setTextAnswers({})
+    // Clear the previous quiz's history before the fetch. Without this the action
+    // button would read the previous quiz's `attempts` for a moment and offer to
+    // "Resume" a sitting that belongs to another assessment.
+    setAttempts([])
     setMessage(null)
     setError(null)
     setBusy(true)
