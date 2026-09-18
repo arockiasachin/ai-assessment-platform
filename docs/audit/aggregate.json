@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-09-17T23:03:39.116Z",
+  "generatedAt": "2026-09-17T23:52:46.122Z",
   "source": {
     "convention": "docs/audit/README.md",
     "files": [
@@ -185,9 +185,9 @@
           "severity": "minor",
           "category": "dead-control",
           "title": "Review-row Review action promises a specific item but navigates to the unfiltered queue",
-          "evidence": "components/teacher-dashboard.tsx links to /teacher/reviews?student=<id>, but the reviews page reads no searchParams, so the parameter is ignored and the teacher lands on the full queue rather than the item the control named.",
+          "evidence": "components/teacher-dashboard.tsx links to /teacher/reviews?student=<id>, but the reviews page reads no searchParams, so the parameter is ignored and the teacher lands on the full queue rather than the item the control named. Fixed 2026-09-18: the row action now carries the pair it names and the reviews page reads it. `components/teacher-dashboard.tsx` links to `/teacher/reviews?assessmentId=<id>&studentId=<id>`, the page parses those searchParams, and `listReviewQueueForTeacher` gained a `studentId` filter, so the queue opens narrowed to the named student/assessment with a \"Clear filter\" link. Verified on the running app as demo.teacher: GET /teacher rendered three distinct `/teacher/reviews?assessmentId=...&studentId=...` hrefs (one per review row), and GET /teacher/reviews?studentId=demo-student-2 returned only that pair; before the fix the page rendered only the bare `/teacher/reviews` href and the queue ignored the parameter entirely. Test: tests/rubric-grading-pipeline.test.ts.",
           "location": "components/teacher-dashboard.tsx:267-276",
-          "status": "open"
+          "status": "fixed"
         },
         {
           "id": "TN-14",
@@ -237,9 +237,9 @@
           "severity": "minor",
           "category": "unreachable-ui",
           "title": "Activity log hard-caps at 25 rows with no pagination and the header reads as a total",
-          "evidence": "observability/page.tsx:52,108-112 caps at 25 while Section B has 55 rows, so 30 are unreachable; the header 25 entries reads as the total rather than a page. Re-verified 2026-09-17 against the re-seeded database: still reproduces.",
+          "evidence": "observability/page.tsx:52,108-112 caps at 25 while Section B has 55 rows, so 30 are unreachable; the header 25 entries reads as the total rather than a page. Re-verified 2026-09-17 against the re-seeded database: still reproduces. Fixed 2026-09-18: the reader now accepts `offset` and returns `total`, and the page pages the log 25 rows at a time with Previous/Next links instead of truncating silently. Verified on the running app as dsa.teacher on the 55-row offering: GET /teacher/observability rendered \"page 1 of 3 · 55 activity entries in this offering\" and \"25 entries shown\" with both links present, and ?page=2 rendered \"page 2 of 3\"; before the fix the page rendered only \"Showing the most recent 25 activity entries.\" with no paging, so 30 rows were unreachable. Test: tests/observability-audit-view.test.ts.",
           "location": "app/(dashboard)/teacher/observability/page.tsx:52",
-          "status": "open"
+          "status": "fixed"
         },
         {
           "id": "TN-18",
@@ -551,9 +551,9 @@
           "severity": "major",
           "category": "broken-flow",
           "title": "One unpublished draft silently makes an entire quiz invisible",
-          "evidence": "With 3 published and 2 draft questions, GET /api/student/assessments reports quizQuestionCount:0 and starting the quiz returns 409 \"unpublished draft questions\", while GET /api/student/quiz-attempts reports questionCount:5, and no teacher UI exposes deliverability. Caveat (re-verification 2026-09-17): the re-seeded database has no draft questions (all 4 seeded questions are published, 0 drafts), so the mixed published/draft state could not be reproduced without generating questions, which requires a provider call outside this re-verification's scope. The mechanism is unchanged: quizDeliveryStatus still marks a quiz undeliverable when any question is a draft (lib/quiz-attempts/metadata.ts:52-56).",
-          "location": "lib/quiz-attempts/metadata.ts:52-56",
-          "status": "open"
+          "evidence": "With 3 published and 2 draft questions, GET /api/student/assessments reports quizQuestionCount:0 and starting the quiz returns 409 \"unpublished draft questions\", while GET /api/student/quiz-attempts reports questionCount:5, and no teacher UI exposes deliverability. Caveat (re-verification 2026-09-17): the re-seeded database has no draft questions (all 4 seeded questions are published, 0 drafts), so the mixed published/draft state could not be reproduced without generating questions, which requires a provider call outside this re-verification's scope. The mechanism is unchanged: quizDeliveryStatus still marks a quiz undeliverable when any question is a draft (lib/quiz-attempts/metadata.ts:52-56). Fixed 2026-09-18, per the owner's decision to deliver the published subset: `publishedQuizQuestions` is now the single draft/published predicate and `quizDeliveryStatus` returns the published subset, so the count a student sees and the questions they are served cannot come from two different sets. Restored a 3-published/2-draft state on demo-assessment-quiz: GET /api/student/assessments reported `quizQuestionCount: 3` (was 0), GET /api/student/quiz-attempts reported `questionCount: 3` with `canStart: true`, and starting the quiz returned 200 with exactly the 3 published questions (orders 0,1,2; the 2 drafts were absent). A quiz with zero published questions is treated as a different case from one with no questions — it stays undeliverable with its own reason, `This quiz has no published questions yet.`, because there is no content to serve. The teacher surface already shows the split: /teacher/quiz-generation renders `Drafts (N) · Published (M)` from GET /api/teacher/quiz-generation (`draftCount`/`publishedCount`), verified under the mixed state as 3 published / 1 draft, so no new page was needed. Tests: tests/quiz-published-subset.test.ts.",
+          "location": "lib/quiz-attempts/metadata.ts:64-135",
+          "status": "fixed"
         },
         {
           "id": "TN-42",
@@ -837,9 +837,9 @@
           "severity": "minor",
           "category": "unreachable-ui",
           "title": "Review queue has no filter, search, history or undo",
-          "evidence": "Decided items vanish; the API supports a status query and a reopen action but neither is reachable from the UI, and an invalid status is silently ignored.",
+          "evidence": "Decided items vanish; the API supports a status query and a reopen action but neither is reachable from the UI, and an invalid status is silently ignored. Fixed 2026-09-18: the reviews page reads `?status=` and renders a status nav (Needs a decision, Pending, Needs review, Rejected, Auto-accepted, Overridden, All history), and a REJECTED row exposes a Reopen action — the state machine's only transition out of REJECTED. Verified on the running app as demo.teacher: GET /teacher/reviews?status=AUTO_ACCEPTED rendered \"Auto-accepted (1)\" and ?status=REJECTED rendered \"Rejected (0)\" with the honest \"No rows match Rejected\" empty state, while the default view still showed \"Needs review (3)\"; before the fix all three URLs rendered the same \"Needs review (3)\" list and no filter existed. The reject -> REJECTED -> reopen -> PENDING path is pinned by tests/rubric-grading-pipeline.test.ts.",
           "location": "app/api/teacher/reviews/route.ts:19-23",
-          "status": "open"
+          "status": "fixed"
         },
         {
           "id": "TN-64",
@@ -902,9 +902,9 @@
           "severity": "minor",
           "category": "dead-control",
           "title": "Publish results publishes nothing to students",
-          "evidence": "It only stamps CourseOffering.resultsPublishedAt for the retention clock; code-inferred, not run because it mutates a shared seed anchor.",
+          "evidence": "It only stamps CourseOffering.resultsPublishedAt for the retention clock; code-inferred, not run because it mutates a shared seed anchor. Fixed 2026-09-18 by renaming, not by adding a write path. The control is mislabelled: it never released marks to students, and making it bulk-publish would breach the rule that only an explicit human review decision sets `Grade.publishedAt` (lib/grading/review-service.ts). The button and badge now read \"Start retention clock\" / \"Retention clock started <date>\"; the confirmation body and the /teacher/offerings page copy state that it does **not** release marks and that marks are released from the review queue or the marks grid; the API message says the same. Verified on the running app as demo.teacher: the /teacher/offerings client chunk contains \"Start retention clock\" and the old button label is gone (the only remaining \"Publish results\" strings in the bundle are the inert mockup pages, which are out of scope); before the fix the same chunk shipped the \"Publish results\" button. Tests: tests/results-publication-view.test.ts.",
           "location": "lib/retention/results-publication.ts",
-          "status": "open"
+          "status": "fixed"
         },
         {
           "id": "TN-69",
@@ -915,9 +915,9 @@
           "severity": "minor",
           "category": "confidentiality-leak",
           "title": "POST /api/gradebook/marks checks enrollment before ownership, allowing assessment-id enumeration",
-          "evidence": "A foreign-but-real assessment id returns 400 \"Student not enrolled\" while a nonexistent one returns 404, so a teacher can enumerate other teachers' assessment ids; every other authz probe was correctly denied. Re-verified 2026-09-17 against the re-seeded database: still reproduces.",
-          "location": "lib/gradebook-db.ts:494-511",
-          "status": "open"
+          "evidence": "A foreign-but-real assessment id returns 400 \"Student not enrolled\" while a nonexistent one returns 404, so a teacher can enumerate other teachers' assessment ids; every other authz probe was correctly denied. Re-verified 2026-09-17 against the re-seeded database: still reproduces. Fixed 2026-09-18: ownership is now decided before (and merged with) existence, so a foreign-but-real assessment reports exactly what a nonexistent one does. As demo.teacher, POST /api/gradebook/marks returned `404 {\"success\":false,\"message\":\"Assessment not found\"}` for both `courses-offering-mcse501l-a-cat-quiz` (another teacher's real assessment) and a nonexistent id — identical status and body — while an owned assessment still returned 200 and wrote the mark. The same 404-for-both split was fixed on PATCH and DELETE /api/gradebook/assessments/[id] (previously 404 vs 403). POST /api/gradebook/assessments was already correct (identical 403 for a foreign and a missing offering) and release already returned an identical 404. The ownership rule is unchanged: the write is still refused, only the confirmation that the row exists is removed. Sibling probes as demo.teacher: GET /api/teacher/analytics/items, /api/teacher/quiz-attempts, /api/teacher/quiz-generation, /api/teacher/rubrics/[id], /api/teacher/code-tasks/[id] and /api/teacher/assessments/[id]/retake-requests still answer a foreign id with 403 `Forbidden` and a missing one with 404 — a separate per-pod 403 convention, reported for a follow-up decision rather than changed here. The `minor` label understated the finding: the oracle discloses other teachers' assessment ids to any authenticated teacher. Tests: tests/gradebook-marks.test.ts, tests/gradebook-marks-indistinguishable.test.ts, tests/grade-store-unification.test.ts.",
+          "location": "lib/gradebook-db.ts:493-541",
+          "status": "fixed"
         },
         {
           "id": "TN-70",
@@ -943,8 +943,8 @@
       },
       "bySeverityOpen": {
         "blocker": 0,
-        "major": 3,
-        "minor": 34
+        "major": 2,
+        "minor": 29
       },
       "byCategory": {
         "broken-flow": 17,
@@ -958,8 +958,8 @@
         "confidentiality-leak": 1
       },
       "byStatus": {
-        "open": 37,
-        "fixed": 33,
+        "open": 31,
+        "fixed": 39,
         "wontfix": 0
       },
       "byAgent": {
@@ -1366,9 +1366,9 @@
           "severity": "minor",
           "category": "dead-control",
           "title": "Permanently disabled Detailed rubric soon button on every non-quiz card",
-          "evidence": "components/student-assessments-view.tsx:518-521 renders the button disabled on every non-quiz card.",
+          "evidence": "components/student-assessments-view.tsx:518-521 renders the button disabled on every non-quiz card. Fixed 2026-09-18: the permanently disabled \"Detailed rubric soon\" placeholder is removed rather than left rendered. Verified on the running app as demo.student1: before the fix the /student/assessments client chunk contained \"Detailed rubric soon\"; after, it contains none. No unit test: the button lived inside a client-only expanded card and the repo deliberately has no jsdom/component-test stack.",
           "location": "components/student-assessments-view.tsx:518-521",
-          "status": "open"
+          "status": "fixed"
         },
         {
           "id": "SN-21",
@@ -1746,9 +1746,9 @@
           "severity": "minor",
           "category": "confidentiality-leak",
           "title": "Latent: classAveragePercentage has no minimum-cohort threshold",
-          "evidence": "In a 2-student offering a classmate's exact mark is derivable as twice the average minus one's own; the smallest seeded offering is 3, so not exploitable (lib/student-assessments.ts:164-175).",
+          "evidence": "In a 2-student offering a classmate's exact mark is derivable as twice the average minus one's own; the smallest seeded offering is 3, so not exploitable (lib/student-assessments.ts:164-175). Fixed 2026-09-18: added `MIN_COHORT_FOR_CLASS_AVERAGE = 3` in lib/student-assessments.ts and the average is withheld below it; `classAverageWithheld`, `classAverageCohortSize` and `classAverageMinimumCohort` are exposed so the card explains the withholding (\"Withheld / Shown only once at least 3 released marks exist, so a classmate's mark cannot be derived. 2 so far.\") rather than showing an em dash. The value is deliberately the same 3 as `MIN_RATERS_FOR_DISCLOSURE` for the same combinatorial reason (fewer than three contributors lets one other contributor be isolated) but is a separate constant, because the two guard different aggregates and should be free to diverge. Verified on the running app as demo.student1 on demo-assessment-quiz: with the cohort temporarily reduced to two released marks the endpoint returned `classAveragePercentage: 75`, from which a classmate's mark was derivable as `2 x 75 - 100 = 50` — exactly student-2's seeded 10/20; after the fix the same state returned `classAveragePercentage: null, classAverageWithheld: true, classAverageCohortSize: 2`. The temporary publication was reverted and the grades re-queried (student-1 published; student-2 and student-3 null). Tests: tests/student-assessment-class-average.test.ts pins withheld-below/shown-at; tests/student-assessments-published.test.ts guards published-only.",
           "location": "lib/student-assessments.ts:164-175",
-          "status": "open"
+          "status": "fixed"
         },
         {
           "id": "SN-50",
@@ -1759,7 +1759,7 @@
           "severity": "minor",
           "category": "unreachable-ui",
           "title": "/api/student/assessments/[assessmentId] does not exist",
-          "evidence": "Only the submission sub-route exists; the path returns the HTML 404 page and no client calls it, so latent.",
+          "evidence": "Only the submission sub-route exists; the path returns the HTML 404 page and no client calls it, so latent. Reviewed 2026-09-18 and deliberately left open: no code changes. Nothing calls the path — the only assessments fetch any client makes is the list route GET /api/student/assessments (components/student-assessments-view.tsx:123), and the page renders server-side from listStudentAssessments. GET /api/student/assessments/demo-assessment-quiz returns the app-shell 404 page (HTTP 404), as it did before. Building an unused detail route would create exactly the dead surface this audit exists to catch, so the finding is reported as a wontfix candidate for the owner rather than declined here.",
           "location": "app/api/student/assessments/[assessmentId]",
           "status": "open"
         }
@@ -1775,7 +1775,7 @@
       "bySeverityOpen": {
         "blocker": 0,
         "major": 4,
-        "minor": 22
+        "minor": 20
       },
       "byCategory": {
         "broken-flow": 7,
@@ -1789,8 +1789,8 @@
         "confidentiality-leak": 3
       },
       "byStatus": {
-        "open": 26,
-        "fixed": 24,
+        "open": 24,
+        "fixed": 26,
         "wontfix": 0
       },
       "byAgent": {
@@ -2071,9 +2071,9 @@
           "severity": "minor",
           "category": "dead-control",
           "title": "Review-row Review action promises a specific item but navigates to the unfiltered queue",
-          "evidence": "components/teacher-dashboard.tsx links to /teacher/reviews?student=<id>, but the reviews page reads no searchParams, so the parameter is ignored and the teacher lands on the full queue rather than the item the control named.",
+          "evidence": "components/teacher-dashboard.tsx links to /teacher/reviews?student=<id>, but the reviews page reads no searchParams, so the parameter is ignored and the teacher lands on the full queue rather than the item the control named. Fixed 2026-09-18: the row action now carries the pair it names and the reviews page reads it. `components/teacher-dashboard.tsx` links to `/teacher/reviews?assessmentId=<id>&studentId=<id>`, the page parses those searchParams, and `listReviewQueueForTeacher` gained a `studentId` filter, so the queue opens narrowed to the named student/assessment with a \"Clear filter\" link. Verified on the running app as demo.teacher: GET /teacher rendered three distinct `/teacher/reviews?assessmentId=...&studentId=...` hrefs (one per review row), and GET /teacher/reviews?studentId=demo-student-2 returned only that pair; before the fix the page rendered only the bare `/teacher/reviews` href and the queue ignored the parameter entirely. Test: tests/rubric-grading-pipeline.test.ts.",
           "location": "components/teacher-dashboard.tsx:267-276",
-          "status": "open"
+          "status": "fixed"
         },
         {
           "id": "TN-14",
@@ -2123,9 +2123,9 @@
           "severity": "minor",
           "category": "unreachable-ui",
           "title": "Activity log hard-caps at 25 rows with no pagination and the header reads as a total",
-          "evidence": "observability/page.tsx:52,108-112 caps at 25 while Section B has 55 rows, so 30 are unreachable; the header 25 entries reads as the total rather than a page. Re-verified 2026-09-17 against the re-seeded database: still reproduces.",
+          "evidence": "observability/page.tsx:52,108-112 caps at 25 while Section B has 55 rows, so 30 are unreachable; the header 25 entries reads as the total rather than a page. Re-verified 2026-09-17 against the re-seeded database: still reproduces. Fixed 2026-09-18: the reader now accepts `offset` and returns `total`, and the page pages the log 25 rows at a time with Previous/Next links instead of truncating silently. Verified on the running app as dsa.teacher on the 55-row offering: GET /teacher/observability rendered \"page 1 of 3 · 55 activity entries in this offering\" and \"25 entries shown\" with both links present, and ?page=2 rendered \"page 2 of 3\"; before the fix the page rendered only \"Showing the most recent 25 activity entries.\" with no paging, so 30 rows were unreachable. Test: tests/observability-audit-view.test.ts.",
           "location": "app/(dashboard)/teacher/observability/page.tsx:52",
-          "status": "open"
+          "status": "fixed"
         },
         {
           "id": "TN-18",
@@ -2409,9 +2409,9 @@
           "severity": "major",
           "category": "broken-flow",
           "title": "One unpublished draft silently makes an entire quiz invisible",
-          "evidence": "With 3 published and 2 draft questions, GET /api/student/assessments reports quizQuestionCount:0 and starting the quiz returns 409 \"unpublished draft questions\", while GET /api/student/quiz-attempts reports questionCount:5, and no teacher UI exposes deliverability. Caveat (re-verification 2026-09-17): the re-seeded database has no draft questions (all 4 seeded questions are published, 0 drafts), so the mixed published/draft state could not be reproduced without generating questions, which requires a provider call outside this re-verification's scope. The mechanism is unchanged: quizDeliveryStatus still marks a quiz undeliverable when any question is a draft (lib/quiz-attempts/metadata.ts:52-56).",
-          "location": "lib/quiz-attempts/metadata.ts:52-56",
-          "status": "open"
+          "evidence": "With 3 published and 2 draft questions, GET /api/student/assessments reports quizQuestionCount:0 and starting the quiz returns 409 \"unpublished draft questions\", while GET /api/student/quiz-attempts reports questionCount:5, and no teacher UI exposes deliverability. Caveat (re-verification 2026-09-17): the re-seeded database has no draft questions (all 4 seeded questions are published, 0 drafts), so the mixed published/draft state could not be reproduced without generating questions, which requires a provider call outside this re-verification's scope. The mechanism is unchanged: quizDeliveryStatus still marks a quiz undeliverable when any question is a draft (lib/quiz-attempts/metadata.ts:52-56). Fixed 2026-09-18, per the owner's decision to deliver the published subset: `publishedQuizQuestions` is now the single draft/published predicate and `quizDeliveryStatus` returns the published subset, so the count a student sees and the questions they are served cannot come from two different sets. Restored a 3-published/2-draft state on demo-assessment-quiz: GET /api/student/assessments reported `quizQuestionCount: 3` (was 0), GET /api/student/quiz-attempts reported `questionCount: 3` with `canStart: true`, and starting the quiz returned 200 with exactly the 3 published questions (orders 0,1,2; the 2 drafts were absent). A quiz with zero published questions is treated as a different case from one with no questions — it stays undeliverable with its own reason, `This quiz has no published questions yet.`, because there is no content to serve. The teacher surface already shows the split: /teacher/quiz-generation renders `Drafts (N) · Published (M)` from GET /api/teacher/quiz-generation (`draftCount`/`publishedCount`), verified under the mixed state as 3 published / 1 draft, so no new page was needed. Tests: tests/quiz-published-subset.test.ts.",
+          "location": "lib/quiz-attempts/metadata.ts:64-135",
+          "status": "fixed"
         },
         {
           "id": "TN-42",
@@ -2695,9 +2695,9 @@
           "severity": "minor",
           "category": "unreachable-ui",
           "title": "Review queue has no filter, search, history or undo",
-          "evidence": "Decided items vanish; the API supports a status query and a reopen action but neither is reachable from the UI, and an invalid status is silently ignored.",
+          "evidence": "Decided items vanish; the API supports a status query and a reopen action but neither is reachable from the UI, and an invalid status is silently ignored. Fixed 2026-09-18: the reviews page reads `?status=` and renders a status nav (Needs a decision, Pending, Needs review, Rejected, Auto-accepted, Overridden, All history), and a REJECTED row exposes a Reopen action — the state machine's only transition out of REJECTED. Verified on the running app as demo.teacher: GET /teacher/reviews?status=AUTO_ACCEPTED rendered \"Auto-accepted (1)\" and ?status=REJECTED rendered \"Rejected (0)\" with the honest \"No rows match Rejected\" empty state, while the default view still showed \"Needs review (3)\"; before the fix all three URLs rendered the same \"Needs review (3)\" list and no filter existed. The reject -> REJECTED -> reopen -> PENDING path is pinned by tests/rubric-grading-pipeline.test.ts.",
           "location": "app/api/teacher/reviews/route.ts:19-23",
-          "status": "open"
+          "status": "fixed"
         },
         {
           "id": "TN-64",
@@ -2760,9 +2760,9 @@
           "severity": "minor",
           "category": "dead-control",
           "title": "Publish results publishes nothing to students",
-          "evidence": "It only stamps CourseOffering.resultsPublishedAt for the retention clock; code-inferred, not run because it mutates a shared seed anchor.",
+          "evidence": "It only stamps CourseOffering.resultsPublishedAt for the retention clock; code-inferred, not run because it mutates a shared seed anchor. Fixed 2026-09-18 by renaming, not by adding a write path. The control is mislabelled: it never released marks to students, and making it bulk-publish would breach the rule that only an explicit human review decision sets `Grade.publishedAt` (lib/grading/review-service.ts). The button and badge now read \"Start retention clock\" / \"Retention clock started <date>\"; the confirmation body and the /teacher/offerings page copy state that it does **not** release marks and that marks are released from the review queue or the marks grid; the API message says the same. Verified on the running app as demo.teacher: the /teacher/offerings client chunk contains \"Start retention clock\" and the old button label is gone (the only remaining \"Publish results\" strings in the bundle are the inert mockup pages, which are out of scope); before the fix the same chunk shipped the \"Publish results\" button. Tests: tests/results-publication-view.test.ts.",
           "location": "lib/retention/results-publication.ts",
-          "status": "open"
+          "status": "fixed"
         },
         {
           "id": "TN-69",
@@ -2773,9 +2773,9 @@
           "severity": "minor",
           "category": "confidentiality-leak",
           "title": "POST /api/gradebook/marks checks enrollment before ownership, allowing assessment-id enumeration",
-          "evidence": "A foreign-but-real assessment id returns 400 \"Student not enrolled\" while a nonexistent one returns 404, so a teacher can enumerate other teachers' assessment ids; every other authz probe was correctly denied. Re-verified 2026-09-17 against the re-seeded database: still reproduces.",
-          "location": "lib/gradebook-db.ts:494-511",
-          "status": "open"
+          "evidence": "A foreign-but-real assessment id returns 400 \"Student not enrolled\" while a nonexistent one returns 404, so a teacher can enumerate other teachers' assessment ids; every other authz probe was correctly denied. Re-verified 2026-09-17 against the re-seeded database: still reproduces. Fixed 2026-09-18: ownership is now decided before (and merged with) existence, so a foreign-but-real assessment reports exactly what a nonexistent one does. As demo.teacher, POST /api/gradebook/marks returned `404 {\"success\":false,\"message\":\"Assessment not found\"}` for both `courses-offering-mcse501l-a-cat-quiz` (another teacher's real assessment) and a nonexistent id — identical status and body — while an owned assessment still returned 200 and wrote the mark. The same 404-for-both split was fixed on PATCH and DELETE /api/gradebook/assessments/[id] (previously 404 vs 403). POST /api/gradebook/assessments was already correct (identical 403 for a foreign and a missing offering) and release already returned an identical 404. The ownership rule is unchanged: the write is still refused, only the confirmation that the row exists is removed. Sibling probes as demo.teacher: GET /api/teacher/analytics/items, /api/teacher/quiz-attempts, /api/teacher/quiz-generation, /api/teacher/rubrics/[id], /api/teacher/code-tasks/[id] and /api/teacher/assessments/[id]/retake-requests still answer a foreign id with 403 `Forbidden` and a missing one with 404 — a separate per-pod 403 convention, reported for a follow-up decision rather than changed here. The `minor` label understated the finding: the oracle discloses other teachers' assessment ids to any authenticated teacher. Tests: tests/gradebook-marks.test.ts, tests/gradebook-marks-indistinguishable.test.ts, tests/grade-store-unification.test.ts.",
+          "location": "lib/gradebook-db.ts:493-541",
+          "status": "fixed"
         },
         {
           "id": "TN-70",
@@ -3176,9 +3176,9 @@
           "severity": "minor",
           "category": "dead-control",
           "title": "Permanently disabled Detailed rubric soon button on every non-quiz card",
-          "evidence": "components/student-assessments-view.tsx:518-521 renders the button disabled on every non-quiz card.",
+          "evidence": "components/student-assessments-view.tsx:518-521 renders the button disabled on every non-quiz card. Fixed 2026-09-18: the permanently disabled \"Detailed rubric soon\" placeholder is removed rather than left rendered. Verified on the running app as demo.student1: before the fix the /student/assessments client chunk contained \"Detailed rubric soon\"; after, it contains none. No unit test: the button lived inside a client-only expanded card and the repo deliberately has no jsdom/component-test stack.",
           "location": "components/student-assessments-view.tsx:518-521",
-          "status": "open"
+          "status": "fixed"
         },
         {
           "id": "SN-21",
@@ -3514,9 +3514,9 @@
           "severity": "minor",
           "category": "confidentiality-leak",
           "title": "Latent: classAveragePercentage has no minimum-cohort threshold",
-          "evidence": "In a 2-student offering a classmate's exact mark is derivable as twice the average minus one's own; the smallest seeded offering is 3, so not exploitable (lib/student-assessments.ts:164-175).",
+          "evidence": "In a 2-student offering a classmate's exact mark is derivable as twice the average minus one's own; the smallest seeded offering is 3, so not exploitable (lib/student-assessments.ts:164-175). Fixed 2026-09-18: added `MIN_COHORT_FOR_CLASS_AVERAGE = 3` in lib/student-assessments.ts and the average is withheld below it; `classAverageWithheld`, `classAverageCohortSize` and `classAverageMinimumCohort` are exposed so the card explains the withholding (\"Withheld / Shown only once at least 3 released marks exist, so a classmate's mark cannot be derived. 2 so far.\") rather than showing an em dash. The value is deliberately the same 3 as `MIN_RATERS_FOR_DISCLOSURE` for the same combinatorial reason (fewer than three contributors lets one other contributor be isolated) but is a separate constant, because the two guard different aggregates and should be free to diverge. Verified on the running app as demo.student1 on demo-assessment-quiz: with the cohort temporarily reduced to two released marks the endpoint returned `classAveragePercentage: 75`, from which a classmate's mark was derivable as `2 x 75 - 100 = 50` — exactly student-2's seeded 10/20; after the fix the same state returned `classAveragePercentage: null, classAverageWithheld: true, classAverageCohortSize: 2`. The temporary publication was reverted and the grades re-queried (student-1 published; student-2 and student-3 null). Tests: tests/student-assessment-class-average.test.ts pins withheld-below/shown-at; tests/student-assessments-published.test.ts guards published-only.",
           "location": "lib/student-assessments.ts:164-175",
-          "status": "open"
+          "status": "fixed"
         },
         {
           "id": "SN-50",
@@ -3527,7 +3527,7 @@
           "severity": "minor",
           "category": "unreachable-ui",
           "title": "/api/student/assessments/[assessmentId] does not exist",
-          "evidence": "Only the submission sub-route exists; the path returns the HTML 404 page and no client calls it, so latent.",
+          "evidence": "Only the submission sub-route exists; the path returns the HTML 404 page and no client calls it, so latent. Reviewed 2026-09-18 and deliberately left open: no code changes. Nothing calls the path — the only assessments fetch any client makes is the list route GET /api/student/assessments (components/student-assessments-view.tsx:123), and the page renders server-side from listStudentAssessments. GET /api/student/assessments/demo-assessment-quiz returns the app-shell 404 page (HTTP 404), as it did before. Building an unused detail route would create exactly the dead surface this audit exists to catch, so the finding is reported as a wontfix candidate for the owner rather than declined here.",
           "location": "app/api/student/assessments/[assessmentId]",
           "status": "open"
         }
@@ -3618,12 +3618,12 @@
     },
     "bySeverityOpen": {
       "blocker": 0,
-      "major": 8,
-      "minor": 61
+      "major": 7,
+      "minor": 54
     },
     "byStatus": {
-      "open": 69,
-      "fixed": 60,
+      "open": 61,
+      "fixed": 68,
       "wontfix": 0
     },
     "byCategory": {
