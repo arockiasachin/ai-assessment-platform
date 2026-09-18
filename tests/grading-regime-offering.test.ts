@@ -5,6 +5,7 @@ import { getOfferingGradingRegime } from "@/lib/analytics/grading-regime"
 import type { AuthUser } from "@/lib/session"
 
 import { disconnectTestDatabase, prisma, truncateAll } from "./helpers/db"
+import { captureRefusal, expectIndistinguishable } from "./helpers/refusal"
 import { createSpineFixture } from "./fixtures/spine"
 
 /**
@@ -173,7 +174,7 @@ describe("getOfferingGradingRegime", () => {
     expect(regime.publishedCount).toBe(12)
   })
 
-  it("refuses an offering the caller does not own", async () => {
+  it("refuses a foreign-but-real offering identically to a missing one", async () => {
     const other = await prisma.user.create({
       data: {
         email: "regime-intruder@spine.test",
@@ -182,12 +183,13 @@ describe("getOfferingGradingRegime", () => {
         staffProfile: { create: { fullName: "Ivy Intruder", empId: "EMP-R-9" } },
       },
     })
-    await expect(
-      getOfferingGradingRegime(
-        { id: other.id, email: other.email, role: "teacher" },
-        f.offering.id,
-      ),
-    ).rejects.toMatchObject({ status: 403 })
+    const intruder: AuthUser = { id: other.id, email: other.email, role: "teacher" }
+    // TN-69 alignment: a foreign-but-real offering and a nonexistent one are
+    // indistinguishable, so the refusal cannot confirm the offering id exists.
+    const foreign = await captureRefusal(getOfferingGradingRegime(intruder, f.offering.id))
+    const missing = await captureRefusal(getOfferingGradingRegime(intruder, "no-such-offering-zzz"))
+    expect(foreign).toEqual({ status: 404, message: "Course offering not found." })
+    expectIndistinguishable(foreign, missing)
   })
 
   it("reports a missing offering as 404", async () => {

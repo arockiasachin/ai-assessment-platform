@@ -112,9 +112,12 @@ export async function requestRetake(
       },
     },
   })
-  if (!assessment) throw new QuizAttemptError(404, "Assessment not found.")
-  if (assessment.offering.enrollments.length === 0) {
-    throw new QuizAttemptError(403, "You are not enrolled in this assessment offering.")
+  // Existence and enrollment answer identically (TN-69): a released-but-foreign
+  // assessment and a nonexistent one both read as "Assessment not found." The
+  // accepted trade-off is that an unenrolled student is no longer told they are
+  // unenrolled; the request is still refused.
+  if (!assessment || assessment.offering.enrollments.length === 0) {
+    throw new QuizAttemptError(404, "Assessment not found.")
   }
   if (assessment.retakePolicy !== "APPROVAL") {
     throw new QuizAttemptError(

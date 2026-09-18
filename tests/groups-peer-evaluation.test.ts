@@ -3,6 +3,7 @@ import { afterAll, beforeEach, describe, expect, it } from "vitest"
 import type { AuthUser } from "@/lib/session"
 import type { PeerEvaluationRatings } from "@/lib/groups/dimensions"
 import {
+  assertTeacherOwnsGroup,
   createGroupForTeacher,
   createMilestoneForTeacher,
   formTeamsForTeacher,
@@ -15,6 +16,7 @@ import {
 } from "@/lib/groups"
 
 import { disconnectTestDatabase, prisma, truncateAll } from "./helpers/db"
+import { captureRefusal, expectIndistinguishable } from "./helpers/refusal"
 import {
   createGroupWithMembers,
   createGroupsFixture,
@@ -296,22 +298,44 @@ describe("groups peer evaluation pipeline", () => {
     })
 
     const otherTeacher = await createOtherTeacher()
-    await expect(listGroupsForTeacher(otherTeacher, fixture.offering.id)).rejects.toMatchObject({
-      status: 403,
-    })
+    // TN-69 alignment: a foreign-but-real offering and a nonexistent one are
+    // indistinguishable, so the refusal cannot confirm the offering id exists.
+    const foreign = await captureRefusal(listGroupsForTeacher(otherTeacher, fixture.offering.id))
+    const missing = await captureRefusal(listGroupsForTeacher(otherTeacher, "no-such-offering-zzz"))
+    expect(foreign).toEqual({ status: 404, message: "Course offering not found." })
+    expectIndistinguishable(foreign, missing)
     await expect(
       getOfferingAnalysisForTeacher(otherTeacher, { offeringId: fixture.offering.id }),
-    ).rejects.toMatchObject({ status: 403 })
+    ).rejects.toMatchObject({ status: 404 })
     await expect(
       createGroupForTeacher(otherTeacher, {
         offeringId: fixture.offering.id,
         name: "Intruder",
         studentIds: [fixture.students[0].profileId],
       }),
-    ).rejects.toMatchObject({ status: 403 })
+    ).rejects.toMatchObject({ status: 404 })
 
     await expect(listGroupsForTeacher(studentSession(fixture.students[0]))).rejects.toMatchObject({
       status: 403,
     })
+  })
+
+  it("reports a foreign-but-real group identically to a missing one (TN-69)", async () => {
+    const fixture = await createGroupsFixture(prisma)
+    const group = await createGroupWithMembers(
+      prisma,
+      fixture.offering.id,
+      "Alpha",
+      fixture.students.map((student) => student.profileId),
+    )
+    const otherTeacher = await createOtherTeacher()
+    // The group-id helper is not wired to a route today (the reachable group
+    // reads fold ownership into the query and already answer 404 for both), but
+    // its refusal must follow the same rule: a foreign group and a missing one
+    // are indistinguishable. The read is still refused.
+    const foreign = await captureRefusal(assertTeacherOwnsGroup(otherTeacher, group.id))
+    const missing = await captureRefusal(assertTeacherOwnsGroup(otherTeacher, "no-such-group-zzz"))
+    expect(foreign).toEqual({ status: 404, message: "Group not found." })
+    expectIndistinguishable(foreign, missing)
   })
 })

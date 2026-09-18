@@ -47,6 +47,20 @@ export type OwnedOffering = {
 
 /** Load offering metadata without an ownership check (callers must authorize). */
 export async function loadOfferingMeta(offeringId: string): Promise<OwnedOffering> {
+  const offering = await findOfferingMeta(offeringId)
+  if (!offering) throw new LmsExportError(404, "Course offering not found.")
+  return offering
+}
+
+/**
+ * The existence-only read, returning `null` instead of throwing.
+ *
+ * Kept private so the two callers can layer their own refusal on one read: the
+ * teacher path folds existence and ownership into a single 404 (TN-69), and the
+ * student path checks enrollment first. Public `loadOfferingMeta` keeps its
+ * original 404 contract for the student path.
+ */
+async function findOfferingMeta(offeringId: string): Promise<OwnedOffering | null> {
   const offering = await prisma.courseOffering.findUnique({
     where: { id: offeringId },
     select: {
@@ -61,7 +75,7 @@ export async function loadOfferingMeta(offeringId: string): Promise<OwnedOfferin
       classRoom: { select: { name: true, section: true } },
     },
   })
-  if (!offering) throw new LmsExportError(404, "Course offering not found.")
+  if (!offering) return null
   return {
     id: offering.id,
     courseId: offering.courseId,
@@ -82,8 +96,14 @@ export async function loadOwnedOffering(
   offeringId: string,
 ): Promise<OwnedOffering> {
   const staffId = await resolveTeacherStaffId(user)
-  const offering = await loadOfferingMeta(offeringId)
-  if (offering.teacherId !== staffId) throw new LmsExportError(403, "Forbidden")
+  const offering = await findOfferingMeta(offeringId)
+  // Existence and ownership answer identically (TN-69): a foreign-but-real
+  // offering must not be distinguishable from a nonexistent one, or a teacher
+  // could enumerate other teachers' offering ids. The read is still refused;
+  // only the confirmation that the row exists is removed.
+  if (!offering || offering.teacherId !== staffId) {
+    throw new LmsExportError(404, "Course offering not found.")
+  }
   return offering
 }
 

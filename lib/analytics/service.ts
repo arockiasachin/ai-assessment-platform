@@ -594,9 +594,12 @@ export async function getAdaptiveRetakeForStudent(
     },
   })
 
-  if (!assessment) throw new AnalyticsError(404, "Assessment not found.")
-  if (assessment.offering.enrollments.length === 0) {
-    throw new AnalyticsError(403, "You are not enrolled in this course offering.")
+  // Existence and enrollment answer identically (TN-69): a released-but-foreign
+  // assessment and a nonexistent one both read as "Assessment not found." The
+  // accepted trade-off is that an unenrolled student is no longer told they are
+  // unenrolled; the read is still refused.
+  if (!assessment || assessment.offering.enrollments.length === 0) {
+    throw new AnalyticsError(404, "Assessment not found.")
   }
 
   const latest = assessment.quizAttempts.at(-1)

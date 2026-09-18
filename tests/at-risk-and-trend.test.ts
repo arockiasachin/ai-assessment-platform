@@ -5,6 +5,7 @@ import { getCohortTrendForTeacher } from "@/lib/analytics/trend"
 import type { AuthUser } from "@/lib/session"
 
 import { disconnectTestDatabase, prisma, truncateAll } from "./helpers/db"
+import { captureRefusal, expectIndistinguishable } from "./helpers/refusal"
 import { createSpineFixture } from "./fixtures/spine"
 
 /**
@@ -116,13 +117,33 @@ describe("getAtRiskRosterForTeacher", () => {
     expect(roster.boundary).toBe(50)
   })
 
-  it("refuses an offering the caller does not own", async () => {
+  it("refuses a caller with no teacher profile (403) and a foreign offering identically to a missing one", async () => {
+    // A caller with no StaffProfile is refused with a 403 — that describes the
+    // caller, not the offering, so it is preserved (TN-69 does not fold it).
     await expect(
       getAtRiskRosterForTeacher(
         { id: "nobody", email: "n@test.local", role: "teacher" },
         f.offering.id,
       ),
     ).rejects.toMatchObject({ status: 403 })
+
+    // TN-69 alignment: a foreign-but-real offering and a nonexistent one are
+    // indistinguishable, so the refusal cannot confirm the offering id exists.
+    const other = await prisma.user.create({
+      data: {
+        email: "at-risk-other@spine.test",
+        passwordHash: "test-only-not-a-real-hash",
+        role: "TEACHER",
+        staffProfile: { create: { fullName: "Other Teacher", empId: "EMP-AR-1" } },
+      },
+    })
+    const otherTeacher: AuthUser = { id: other.id, email: other.email, role: "teacher" }
+    const foreign = await captureRefusal(getAtRiskRosterForTeacher(otherTeacher, f.offering.id))
+    const missing = await captureRefusal(
+      getAtRiskRosterForTeacher(otherTeacher, "no-such-offering-zzz"),
+    )
+    expect(foreign).toEqual({ status: 404, message: "Course offering not found." })
+    expectIndistinguishable(foreign, missing)
   })
 })
 
@@ -163,13 +184,32 @@ describe("getCohortTrendForTeacher", () => {
     })
   })
 
-  it("refuses an offering the caller does not own", async () => {
+  it("refuses a caller with no teacher profile (403) and a foreign offering identically to a missing one", async () => {
+    // A caller with no StaffProfile is a caller-state 403, preserved as-is.
     await expect(
       getCohortTrendForTeacher(
         { id: "nobody", email: "n@test.local", role: "teacher" },
         f.offering.id,
       ),
     ).rejects.toMatchObject({ status: 403 })
+
+    // TN-69 alignment: a foreign-but-real offering and a nonexistent one are
+    // indistinguishable.
+    const other = await prisma.user.create({
+      data: {
+        email: "trend-other@spine.test",
+        passwordHash: "test-only-not-a-real-hash",
+        role: "TEACHER",
+        staffProfile: { create: { fullName: "Other Trend Teacher", empId: "EMP-TR-1" } },
+      },
+    })
+    const otherTeacher: AuthUser = { id: other.id, email: other.email, role: "teacher" }
+    const foreign = await captureRefusal(getCohortTrendForTeacher(otherTeacher, f.offering.id))
+    const missing = await captureRefusal(
+      getCohortTrendForTeacher(otherTeacher, "no-such-offering-zzz"),
+    )
+    expect(foreign).toEqual({ status: 404, message: "Course offering not found." })
+    expectIndistinguishable(foreign, missing)
   })
 })
 

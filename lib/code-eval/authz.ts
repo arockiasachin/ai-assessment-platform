@@ -126,7 +126,9 @@ export type EnrolledCodeTask = {
 
 /**
  * Load a CODE assessment the student is actively enrolled in, together with its
- * code task, or throw 403/404. Enrollment is verified here, not in the client.
+ * code task, or throw 404. Enrollment is verified here, not in the client, and a
+ * not-enrolled or foreign assessment is refused identically to a nonexistent one
+ * (TN-69), so a student cannot confirm an assessment id exists.
  */
 export async function loadEnrolledCodeTask(
   user: AuthUser,
@@ -157,9 +159,12 @@ export async function loadEnrolledCodeTask(
       codeTask: true,
     },
   })
-  if (!assessment) throw new CodeEvalError(404, "Assessment not found.")
-  if (assessment.offering.enrollments.length === 0) {
-    throw new CodeEvalError(403, "You are not enrolled in this assessment offering.")
+  // Existence and enrollment answer identically (TN-69): a released-but-foreign
+  // assessment and a nonexistent one both read as "Assessment not found." The
+  // accepted trade-off is that an unenrolled student is no longer told they are
+  // unenrolled; the task is still not disclosed.
+  if (!assessment || assessment.offering.enrollments.length === 0) {
+    throw new CodeEvalError(404, "Assessment not found.")
   }
   if (assessment.type !== "CODE") {
     throw new CodeEvalError(409, "This assessment is not a code assessment.")

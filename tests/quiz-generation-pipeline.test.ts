@@ -310,11 +310,17 @@ describe("quiz generation pipeline", () => {
         { provider },
       ),
     ).rejects.toMatchObject({ status: 404 })
-    // The single-question reader takes a question id, not an assessment id, so
-    // its own 404-vs-403 split is outside this alignment's scope.
-    await expect(getGeneratedQuestionForTeacher(otherTeacher, questionId)).rejects.toMatchObject({
-      status: 403,
-    })
+    // The single-question reader takes a question id, so its refusal names the
+    // question: a foreign-but-real question and a nonexistent one are now
+    // indistinguishable too (TN-69 alignment for question ids).
+    const foreignQuestion = await captureRefusal(
+      getGeneratedQuestionForTeacher(otherTeacher, questionId),
+    )
+    const missingQuestion = await captureRefusal(
+      getGeneratedQuestionForTeacher(otherTeacher, "no-such-question-zzz"),
+    )
+    expect(foreignQuestion).toEqual({ status: 404, message: "Question not found." })
+    expectIndistinguishable(foreignQuestion, missingQuestion)
     await expect(
       publishGeneratedQuestionsForTeacher(otherTeacher, {
         assessmentId: fixture.assessment.id,

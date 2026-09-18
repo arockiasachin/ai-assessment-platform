@@ -100,9 +100,12 @@ async function loadGeneratedQuestion(user: AuthUser, questionId: string) {
       },
     },
   })
-  if (!question) throw new QuizGenerationError(404, "Question not found.")
-  if (!teacherOwnsAssessment(question.assessment, staffId)) {
-    throw new QuizGenerationError(403, "Forbidden")
+  // Existence and ownership answer identically (TN-69): a foreign-but-real
+  // question must not be distinguishable from a nonexistent one, or a teacher
+  // could enumerate another teacher's question ids. The read/write is still
+  // refused; only the confirmation that the row exists is removed.
+  if (!question || !teacherOwnsAssessment(question.assessment, staffId)) {
+    throw new QuizGenerationError(404, "Question not found.")
   }
   if (!isGeneratedQuestion(question)) {
     throw new QuizGenerationError(404, "Question not found.")

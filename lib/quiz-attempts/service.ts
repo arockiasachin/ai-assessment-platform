@@ -34,7 +34,12 @@ import {
 import { resolveTextSimilarityThreshold } from "@/lib/quiz-scoring-text"
 import type { AuthUser } from "@/lib/session"
 
-import { loadOwnedAssessment, resolveStudentProfileId } from "./authz"
+import {
+  loadOwnedAssessment,
+  resolveStudentProfileId,
+  resolveTeacherStaffId,
+  teacherOwnsAssessment,
+} from "./authz"
 import { evaluateFatGateForStudent } from "@/lib/grading/offering-config-service"
 
 import { assertAnswerShapes } from "./answers"
@@ -593,8 +598,15 @@ export async function listStudentAttempts(
   assessmentId: string,
 ): Promise<QuizAttemptSummary[]> {
   const studentId = await resolveStudentProfileId(user)
-  const assessment = await prisma.assessment.findUnique({
-    where: { id: assessmentId },
+  // Release and enrollment are folded into the lookup (SN-5, TN-69): an
+  // unreleased or foreign assessment answers exactly as a nonexistent one (404)
+  // instead of 200 with an empty history, which would confirm the id exists.
+  const assessment = await prisma.assessment.findFirst({
+    where: {
+      id: assessmentId,
+      ...releasedAssessmentWhere(),
+      offering: { enrollments: { some: { studentId, status: "active" } } },
+    },
     select: { id: true, title: true, dueDate: true },
   })
   if (!assessment) throw new QuizAttemptError(404, "Assessment not found.")
@@ -656,9 +668,13 @@ export async function listStudentAttempts(
       },
     },
   })
-  if (!assessment) throw new QuizAttemptError(404, "Assessment not found.")
-  if (assessment.offering.enrollments.length === 0) {
-    throw new QuizAttemptError(403, "You are not enrolled in this assessment offering.")
+  // Existence and enrollment answer identically (TN-69): a released-but-foreign
+  // assessment and a nonexistent one both read as "Assessment not found." An
+  // unenrolled student can no longer be told they are unenrolled — the accepted
+  // trade-off — and the confirmation that the id exists is removed. The read is
+  // still refused.
+  if (!assessment || assessment.offering.enrollments.length === 0) {
+    throw new QuizAttemptError(404, "Assessment not found.")
   }
 
   // The retake's *source* must be a graded sitting. A practice sitting that reached
@@ -721,12 +737,16 @@ export async function startQuizAttempt(user: AuthUser, input: unknown): Promise<
       },
     },
   })
-  if (!assessment) throw new QuizAttemptError(404, "Assessment not found.")
+  // Existence and enrollment answer identically (TN-69). The check is folded
+  // before the kind check so an unenrolled student cannot learn whether the id
+  // is a quiz or even that it exists; the accepted trade-off is that an
+  // unenrolled student is no longer told "you are not enrolled". The write is
+  // still refused.
+  if (!assessment || assessment.offering.enrollments.length === 0) {
+    throw new QuizAttemptError(404, "Assessment not found.")
+  }
   if (assessment.type !== "QUIZ") {
     throw new QuizAttemptError(409, "This assessment is not a quiz.")
-  }
-  if (assessment.offering.enrollments.length === 0) {
-    throw new QuizAttemptError(403, "You are not enrolled in this assessment offering.")
   }
   assertDeliverable(assessment.questions)
 
@@ -1147,6 +1167,7 @@ export async function getTeacherAttempt(
   user: AuthUser,
   attemptId: string,
 ): Promise<TeacherQuizAttemptDetail> {
+  const staffId = await resolveTeacherStaffId(user)
   const attempt = await prisma.quizAttempt.findUnique({
     where: { id: attemptId },
     select: {
@@ -1160,10 +1181,29 @@ export async function getTeacherAttempt(
       startedAt: true,
       submittedAt: true,
       student: { select: { fullName: true, registerNumber: true } },
+      assessment: {
+        select: {
+          id: true,
+          title: true,
+          dueDate: true,
+          createdById: true,
+          offering: { select: { teacherId: true } },
+        },
+      },
     },
   })
-  if (!attempt) throw new QuizAttemptError(404, "Quiz attempt not found.")
-  const owned = await loadOwnedAssessment(user, attempt.assessmentId)
+  // Existence and ownership answer identically, and both read as the *attempt*
+  // not being found (TN-69). The caller supplied an attempt id, so that is the
+  // resource they asked about: naming the parent assessment would leak that the
+  // assessment exists, exactly as a 403 for a foreign attempt would.
+  if (!attempt || !teacherOwnsAssessment(attempt.assessment, staffId)) {
+    throw new QuizAttemptError(404, "Quiz attempt not found.")
+  }
+  const owned = {
+    id: attempt.assessment.id,
+    title: attempt.assessment.title,
+    dueDate: attempt.assessment.dueDate,
+  }
 
   const [questions, responses, review, grade] = await Promise.all([
     prisma.question.findMany({
@@ -1276,12 +1316,14 @@ export async function startPracticeAttempt(
       },
     },
   })
-  if (!assessment) throw new QuizAttemptError(404, "Assessment not found.")
+  // Existence and enrollment answer identically (TN-69); see `startQuizAttempt`.
+  // Practising a hidden or foreign quiz returns the questions, so the distinction
+  // between "not yours" and "does not exist" must not be observable.
+  if (!assessment || assessment.offering.enrollments.length === 0) {
+    throw new QuizAttemptError(404, "Assessment not found.")
+  }
   if (assessment.type !== "QUIZ") {
     throw new QuizAttemptError(409, "Only quizzes can be practised.")
-  }
-  if (assessment.offering.enrollments.length === 0) {
-    throw new QuizAttemptError(403, "You are not enrolled in this assessment offering.")
   }
   assertDeliverable(assessment.questions)
 

@@ -80,8 +80,9 @@ function entityLabel(entityType: string): string {
  * keeps a teacher from seeing another teacher's pipeline: ownership of the offering
  * is verified first, and the id allow-list is built exclusively from that offering.
  *
- * @throws {ObservabilityError} 403 when the caller does not own the offering,
- *   404 when it does not exist.
+ * @throws {ObservabilityError} 404 when the offering does not exist or is not
+ *   owned by the caller, identically — a foreign-but-real offering must not be
+ *   distinguishable from a nonexistent one (TN-69).
  */
 export async function resolveOwnedOffering(
   userId: string,
@@ -97,8 +98,12 @@ export async function resolveOwnedOffering(
     where: { id: offeringId },
     select: { id: true, teacherId: true },
   })
-  if (!offering) throw new ObservabilityError(404, "Offering not found.")
-  if (offering.teacherId !== staff.id) throw new ObservabilityError(403, "Forbidden")
+  // Existence and ownership answer identically (TN-69): a foreign-but-real
+  // offering must not be distinguishable from a nonexistent one. The read is
+  // still refused; only the confirmation that the row exists is removed.
+  if (!offering || offering.teacherId !== staff.id) {
+    throw new ObservabilityError(404, "Offering not found.")
+  }
 
   const assessments = await prisma.assessment.findMany({
     where: { offeringId: offering.id },

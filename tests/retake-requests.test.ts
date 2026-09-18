@@ -89,7 +89,7 @@ describe("requestRetake", () => {
     expect(await prisma.retakeRequest.count({ where: { assessmentId: f.assessment.id } })).toBe(1)
   })
 
-  it("refuses an assessment the student is not enrolled in", async () => {
+  it("reports a foreign assessment identically to a missing one for an unenrolled student", async () => {
     const other = await prisma.user.create({
       data: {
         email: "retake-outsider@spine.test",
@@ -98,9 +98,14 @@ describe("requestRetake", () => {
         studentProfile: { create: { fullName: "Out Sider", registerNumber: "REG-RT-9" } },
       },
     })
-    await expect(
-      requestRetake({ id: other.id, email: other.email, role: "student" }, f.assessment.id),
-    ).rejects.toMatchObject({ status: 403 })
+    const outsider = { id: other.id, email: other.email, role: "student" as const }
+    // TN-69 alignment: existence and enrollment answer identically, so an
+    // unenrolled student cannot confirm that the assessment id exists. The
+    // accepted trade-off is that they are no longer told they are unenrolled.
+    const foreign = await captureRefusal(requestRetake(outsider, f.assessment.id))
+    const missing = await captureRefusal(requestRetake(outsider, "no-such-assessment-zzz"))
+    expect(foreign).toEqual({ status: 404, message: "Assessment not found." })
+    expectIndistinguishable(foreign, missing)
   })
 })
 

@@ -13,6 +13,7 @@ import {
 import type { AuthUser } from "@/lib/session"
 
 import { disconnectTestDatabase, prisma, truncateAll } from "./helpers/db"
+import { captureRefusal, expectIndistinguishable } from "./helpers/refusal"
 import {
   createDraftModernGrade,
   createLmsExportFixture,
@@ -245,21 +246,29 @@ describe("LMS export scoping", () => {
     const fixture = await createLmsExportFixture(prisma, { studentCount: 1 })
     const otherTeacher = await createOtherTeacher()
 
-    await expect(
+    // TN-69 alignment: a foreign-but-real offering and a nonexistent one are
+    // indistinguishable on every teacher export surface, so the refusal cannot
+    // confirm the offering id exists.
+    const foreign = await captureRefusal(
       getTeacherGradeExport(otherTeacher, { offeringId: fixture.offering.id }),
-    ).rejects.toMatchObject({ status: 403 })
+    )
+    const missing = await captureRefusal(
+      getTeacherGradeExport(otherTeacher, { offeringId: "no-such-offering-zzz" }),
+    )
+    expect(foreign).toEqual({ status: 404, message: "Course offering not found." })
+    expectIndistinguishable(foreign, missing)
     await expect(
       getTeacherOneRosterCsv(otherTeacher, {
         offeringId: fixture.offering.id,
         file: "lineItems",
       }),
-    ).rejects.toMatchObject({ status: 403 })
+    ).rejects.toMatchObject({ status: 404 })
     await expect(
       dryRunAgsPublishForTeacher(otherTeacher, {
         offeringId: fixture.offering.id,
         env: VALID_LTI_ENV,
       }),
-    ).rejects.toMatchObject({ status: 403 })
+    ).rejects.toMatchObject({ status: 404 })
     expect(await listTeacherExportOfferings(otherTeacher)).toEqual([])
 
     await expect(
@@ -311,12 +320,22 @@ describe("LMS export scoping", () => {
         studentProfile: { create: { fullName: "Outsider", registerNumber: "REG-LMS-OUT" } },
       },
     })
-    await expect(
-      getStudentGradeExport(
-        { id: outsider.id, email: outsider.email, role: "student" },
-        { offeringId: fixture.offering.id },
-      ),
-    ).rejects.toMatchObject({ status: 403 })
+    const outsiderSession = { id: outsider.id, email: outsider.email, role: "student" as const }
+    // The student-side offering refusal is already indistinguishable: a
+    // nonexistent offering and a real one the student is not enrolled in both
+    // answer 403 with the same message, so there is no 404 to split against.
+    // Asserted here so the property is recorded rather than assumed.
+    const foreignOffering = await captureRefusal(
+      getStudentGradeExport(outsiderSession, { offeringId: fixture.offering.id }),
+    )
+    const missingOffering = await captureRefusal(
+      getStudentGradeExport(outsiderSession, { offeringId: "no-such-offering-zzz" }),
+    )
+    expect(foreignOffering).toEqual({
+      status: 403,
+      message: "You are not enrolled in this course offering.",
+    })
+    expectIndistinguishable(foreignOffering, missingOffering)
 
     await expect(
       getStudentGradeExport(teacher, { offeringId: fixture.offering.id }),

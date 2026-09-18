@@ -47,8 +47,13 @@ export async function loadOwnedOffering(
       classRoom: { select: { name: true, section: true } },
     },
   })
-  if (!offering) throw new GroupError(404, "Course offering not found.")
-  if (offering.teacherId !== staffId) throw new GroupError(403, "Forbidden")
+  // Existence and ownership answer identically (TN-69): a foreign-but-real
+  // offering must not be distinguishable from a nonexistent one, or a teacher
+  // could enumerate other teachers' offering ids. The read is still refused;
+  // only the confirmation that the row exists is removed.
+  if (!offering || offering.teacherId !== staffId) {
+    throw new GroupError(404, "Course offering not found.")
+  }
   return {
     id: offering.id,
     teacherId: offering.teacherId,
@@ -74,8 +79,12 @@ export async function assertTeacherOwnsGroup(user: AuthUser, groupId: string): P
     where: { id: groupId },
     select: { id: true, offering: { select: { teacherId: true } } },
   })
-  if (!group) throw new GroupError(404, "Group not found.")
-  if (group.offering.teacherId !== staffId) throw new GroupError(403, "Forbidden")
+  // Existence and ownership answer identically (TN-69): a foreign-but-real group
+  // must not be distinguishable from a nonexistent one. The read is still
+  // refused; only the confirmation that the row exists is removed.
+  if (!group || group.offering.teacherId !== staffId) {
+    throw new GroupError(404, "Group not found.")
+  }
 }
 
 export type StudentIdentity = {

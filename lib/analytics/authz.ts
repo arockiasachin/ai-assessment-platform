@@ -52,8 +52,13 @@ export async function loadOwnedOffering(
       classRoom: { select: { name: true, section: true } },
     },
   })
-  if (!offering) throw new AnalyticsError(404, "Course offering not found.")
-  if (offering.teacherId !== staffId) throw new AnalyticsError(403, "Forbidden")
+  // Existence and ownership answer identically (TN-69): a foreign-but-real
+  // offering must not be distinguishable from a nonexistent one, or a teacher
+  // could enumerate other teachers' offering ids. The read is still refused;
+  // only the confirmation that the row exists is removed.
+  if (!offering || offering.teacherId !== staffId) {
+    throw new AnalyticsError(404, "Course offering not found.")
+  }
   return {
     id: offering.id,
     courseCode: offering.course.code,

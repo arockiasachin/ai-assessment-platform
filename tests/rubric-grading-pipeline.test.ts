@@ -392,11 +392,20 @@ describe("rubric grading pipeline", () => {
     })
 
     const otherTeacher = await createOtherTeacher()
-    await expect(
+    // TN-69 alignment: a foreign-but-real submission and a nonexistent one are
+    // indistinguishable, so the refusal cannot confirm the submission id exists.
+    const foreignSubmission = await captureRefusal(
       evaluateSubmissionForTeacher(otherTeacher, submission.id, {
         provider: fakeProvider([argumentEval()]),
       }),
-    ).rejects.toMatchObject({ status: 403 })
+    )
+    const missingSubmission = await captureRefusal(
+      evaluateSubmissionForTeacher(otherTeacher, "no-such-submission-zzz", {
+        provider: fakeProvider([argumentEval()]),
+      }),
+    )
+    expect(foreignSubmission).toEqual({ status: 404, message: "Submission not found." })
+    expectIndistinguishable(foreignSubmission, missingSubmission)
 
     await expect(
       getReviewDetailForTeacher(otherTeacher, assessment.id, studentId),
@@ -413,6 +422,33 @@ describe("rubric grading pipeline", () => {
         provider: fakeProvider([argumentEval()]),
       }),
     ).rejects.toMatchObject({ status: 403 })
+  })
+
+  it("reports a foreign assessment identically to a missing one for a review decision (TN-69)", async () => {
+    const { assessment, studentId } = await seedAssessment()
+    const otherTeacher = await createOtherTeacher()
+
+    // Existence and ownership answer identically on the decision path: the write
+    // is still refused, and only the confirmation that another teacher's
+    // assessment exists is removed.
+    const foreign = await captureRefusal(
+      submitReviewDecision({
+        assessmentId: assessment.id,
+        studentId,
+        reviewer: { id: otherTeacher.id, role: "teacher" },
+        decision: { action: "flag" },
+      }),
+    )
+    const missing = await captureRefusal(
+      submitReviewDecision({
+        assessmentId: "no-such-assessment-zzz",
+        studentId,
+        reviewer: { id: otherTeacher.id, role: "teacher" },
+        decision: { action: "flag" },
+      }),
+    )
+    expect(foreign).toEqual({ status: 404, message: "Assessment not found." })
+    expectIndistinguishable(foreign, missing)
   })
 
   it("keeps rubric authoring teacher-owned and freezes it once a grade is published", async () => {

@@ -15,6 +15,7 @@ import {
   listStudentQuizzes,
   listTeacherAttempts,
   saveQuizAttemptDraft,
+  startPracticeAttempt,
   startQuizAttempt,
   submitQuizAttempt,
 } from "@/lib/quiz-attempts"
@@ -484,7 +485,7 @@ describe("quiz attempts", () => {
     ).rejects.toMatchObject({ status: 409 })
   })
 
-  it("denies a student who is not actively enrolled", async () => {
+  it("reports a foreign assessment identically to a missing one for an unenrolled student", async () => {
     const fixture = await createSpineFixture(prisma)
     await prisma.question.create({
       data: {
@@ -500,9 +501,43 @@ describe("quiz attempts", () => {
       },
     })
     const unenrolled = studentSession(fixture.student)
-    await expect(
+    // TN-69 alignment: existence and enrollment answer identically, so an
+    // unenrolled student cannot confirm that the assessment id exists. The
+    // accepted trade-off is that they are no longer told they are unenrolled.
+    const foreign = await captureRefusal(
       startQuizAttempt(unenrolled, { assessmentId: fixture.assessment.id }),
-    ).rejects.toMatchObject({ status: 403 })
+    )
+    const missing = await captureRefusal(
+      startQuizAttempt(unenrolled, { assessmentId: "no-such-assessment-zzz" }),
+    )
+    expect(foreign).toEqual({ status: 404, message: "Assessment not found." })
+    expectIndistinguishable(foreign, missing)
+  })
+
+  it("reports a foreign assessment identically to a missing one for an unenrolled practice start", async () => {
+    const fixture = await createSpineFixture(prisma)
+    const unenrolled = studentSession(fixture.student)
+    // Practice returns the questions, so the same fold applies: an unenrolled
+    // student cannot use it to confirm the assessment id exists.
+    const foreign = await captureRefusal(
+      startPracticeAttempt(unenrolled, { assessmentId: fixture.assessment.id }),
+    )
+    const missing = await captureRefusal(
+      startPracticeAttempt(unenrolled, { assessmentId: "no-such-assessment-zzz" }),
+    )
+    expect(foreign).toEqual({ status: 404, message: "Assessment not found." })
+    expectIndistinguishable(foreign, missing)
+  })
+
+  it("hides a foreign assessment's attempt history behind the same 404 as a missing one", async () => {
+    const fixture = await createSpineFixture(prisma)
+    const unenrolled = studentSession(fixture.student)
+    // Existence is not disclosed through a 200-with-empty-history: the read now
+    // folds release and enrollment into the lookup, so both answer 404.
+    const foreign = await captureRefusal(listStudentAttempts(unenrolled, fixture.assessment.id))
+    const missing = await captureRefusal(listStudentAttempts(unenrolled, "no-such-assessment-zzz"))
+    expect(foreign).toEqual({ status: 404, message: "Assessment not found." })
+    expectIndistinguishable(foreign, missing)
   })
 
   it("denies cross-student reads and cross-teacher reads", async () => {
@@ -535,9 +570,15 @@ describe("quiz attempts", () => {
     )
     expect(foreign).toEqual({ status: 404, message: "Assessment not found." })
     expectIndistinguishable(foreign, missing)
-    // Sibling read on a foreign attempt resolves to the same ownership refusal
-    // (now a 404); the attempt is still not disclosed.
-    await expect(getTeacherAttempt(otherTeacher, view.id)).rejects.toMatchObject({ status: 404 })
+    // A foreign attempt now reads as the *attempt* not found, byte-for-byte the
+    // same as a nonexistent attempt id: the caller supplied an attempt id, so
+    // naming the parent assessment would leak that it exists.
+    const foreignAttempt = await captureRefusal(getTeacherAttempt(otherTeacher, view.id))
+    const missingAttempt = await captureRefusal(
+      getTeacherAttempt(otherTeacher, "no-such-attempt-zzz"),
+    )
+    expect(foreignAttempt).toEqual({ status: 404, message: "Quiz attempt not found." })
+    expectIndistinguishable(foreignAttempt, missingAttempt)
   })
 
   it("feeds the existing adaptive-retake selector from persisted responses", async () => {

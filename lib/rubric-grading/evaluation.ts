@@ -155,9 +155,12 @@ export async function evaluateSubmissionForTeacher(
       assessment: { select: assessmentSelect },
     },
   })
-  if (!submission) throw new RubricGradingError(404, "Submission not found.")
-  if (!teacherOwnsAssessment(submission.assessment, staffId)) {
-    throw new RubricGradingError(403, "Forbidden")
+  // Existence and ownership answer identically (TN-69): a foreign-but-real
+  // submission must not be distinguishable from a nonexistent one, or a teacher
+  // could enumerate another teacher's submission ids. The evaluation is still
+  // refused; only the confirmation that the row exists is removed.
+  if (!submission || !teacherOwnsAssessment(submission.assessment, staffId)) {
+    throw new RubricGradingError(404, "Submission not found.")
   }
   // TN-35: the candidate reader hides a draft, but a caller with the submission
   // id could still ask the evaluator to score it. The same rule is enforced on

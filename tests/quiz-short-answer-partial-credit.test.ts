@@ -23,6 +23,7 @@ import type { AuthUser } from "@/lib/session"
 import { textSimilarity } from "@/lib/text-similarity"
 
 import { disconnectTestDatabase, prisma, truncateAll } from "./helpers/db"
+import { captureRefusal, expectIndistinguishable } from "./helpers/refusal"
 import { createSpineFixture } from "./fixtures/spine"
 
 /**
@@ -629,10 +630,16 @@ describe("short-answer submissions end to end", () => {
         staffProfile: { create: { fullName: "Other Teacher", empId: "EMP-OTHER-SA" } },
       },
     })
-    // The attempt-id sibling now resolves ownership through the same merged
-    // existence/ownership check (TN-69), so a foreign attempt is a 404 too.
-    await expect(getTeacherAttempt(teacherSession(otherTeacher), view.id)).rejects.toMatchObject({
-      status: 404,
-    })
+    // A foreign attempt now reads as the *attempt* not found, byte-for-byte the
+    // same as a nonexistent attempt id: the caller supplied an attempt id, so
+    // naming the parent assessment would leak that it exists.
+    const foreignAttempt = await captureRefusal(
+      getTeacherAttempt(teacherSession(otherTeacher), view.id),
+    )
+    const missingAttempt = await captureRefusal(
+      getTeacherAttempt(teacherSession(otherTeacher), "no-such-attempt-zzz"),
+    )
+    expect(foreignAttempt).toEqual({ status: 404, message: "Quiz attempt not found." })
+    expectIndistinguishable(foreignAttempt, missingAttempt)
   })
 })

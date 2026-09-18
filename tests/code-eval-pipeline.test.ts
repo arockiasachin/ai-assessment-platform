@@ -287,7 +287,7 @@ describe("code evaluation pipeline", () => {
     expect(calls).toBe(0)
   })
 
-  it("denies a non-enrolled student and a teacher on the student service", async () => {
+  it("refuses an unenrolled student identically to a missing assessment, and a teacher on the student service", async () => {
     const { fixture, assessment } = await createCodeFixture()
 
     const outsider = await prisma.user.create({
@@ -299,14 +299,28 @@ describe("code evaluation pipeline", () => {
       },
     })
 
-    await expect(
+    // TN-69 alignment: a released-but-foreign assessment and a nonexistent one
+    // are indistinguishable, so an unenrolled student cannot confirm the id
+    // exists. The accepted trade-off is that they are no longer told they are
+    // unenrolled; the submission is still refused.
+    const foreign = await captureRefusal(
       submitCodeForStudent(
         studentSession(outsider),
         { assessmentId: assessment.id, sourceCode: PASSING_SOURCE },
         { executor: passingExecutor() },
       ),
-    ).rejects.toMatchObject({ status: 403 })
+    )
+    const missing = await captureRefusal(
+      submitCodeForStudent(
+        studentSession(outsider),
+        { assessmentId: "no-such-assessment-zzz", sourceCode: PASSING_SOURCE },
+        { executor: passingExecutor() },
+      ),
+    )
+    expect(foreign).toEqual({ status: 404, message: "Assessment not found." })
+    expectIndistinguishable(foreign, missing)
 
+    // A teacher on the student service is a caller-role refusal: 403, preserved.
     await expect(
       submitCodeForStudent(
         teacherSession(fixture.teacher),

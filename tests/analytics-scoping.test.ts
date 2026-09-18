@@ -236,16 +236,24 @@ describe("analytics service — adaptive retake scoping", () => {
     expect(retakable[0].unansweredCount).toBe(2)
   })
 
-  it("denies a student who is not enrolled in the offering", async () => {
+  it("reports a foreign assessment identically to a missing one for an unenrolled student (TN-69)", async () => {
     const fixture = await createAnalyticsFixture(prisma, { studentCount: 1 })
     const outsider: AuthUser = {
       id: fixture.student.id,
       email: fixture.student.email,
       role: "student",
     }
-    await expect(
+    // Existence and enrollment answer identically: an unenrolled student cannot
+    // confirm that the assessment id exists. The accepted trade-off is that they
+    // are no longer told "you are not enrolled in this course offering".
+    const foreign = await captureRefusal(
       getAdaptiveRetakeForStudent(outsider, { assessmentId: fixture.assessment.id }),
-    ).rejects.toMatchObject({ status: 403 })
+    )
+    const missing = await captureRefusal(
+      getAdaptiveRetakeForStudent(outsider, { assessmentId: "no-such-assessment-zzz" }),
+    )
+    expect(foreign).toEqual({ status: 404, message: "Assessment not found." })
+    expectIndistinguishable(foreign, missing)
   })
 })
 
@@ -262,9 +270,16 @@ describe("analytics service — teacher scoping", () => {
     const fixture = await createAnalyticsFixture(prisma, { studentCount: 1 })
     const otherTeacher = await createOtherTeacher()
 
-    await expect(
+    // TN-69 alignment: a foreign-but-real offering and a nonexistent one are
+    // indistinguishable, so the refusal cannot confirm the offering id exists.
+    const foreignOffering = await captureRefusal(
       getTeacherAnalyticsOverview(otherTeacher, { offeringId: fixture.offering.id }),
-    ).rejects.toMatchObject({ status: 403 })
+    )
+    const missingOffering = await captureRefusal(
+      getTeacherAnalyticsOverview(otherTeacher, { offeringId: "no-such-offering-zzz" }),
+    )
+    expect(foreignOffering).toEqual({ status: 404, message: "Course offering not found." })
+    expectIndistinguishable(foreignOffering, missingOffering)
 
     // TN-69 alignment: a foreign-but-real assessment and a nonexistent one are
     // indistinguishable, so the refusal cannot confirm the id exists.

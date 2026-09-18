@@ -217,6 +217,12 @@ async function latestSuggestionTotals(
  * Object-level authorization: a teacher may only manage reviews for assessments
  * they created or offer. Admins may manage any. Returns the reviewer's staff id
  * (null when an admin has no staff profile), for `Grade.approvedById`.
+ *
+ * A non-owner is refused with the same 404 "Assessment not found." the loader
+ * throws for an absent id (TN-69). The caller has already loaded the assessment,
+ * so folding ownership into existence removes the confirmation that another
+ * teacher's assessment exists without weakening the refusal. Role and profile
+ * refusals stay 403 — they describe the caller, not the object.
  */
 async function assertCanManageAssessment(
   tx: Prisma.TransactionClient,
@@ -237,7 +243,7 @@ async function assertCanManageAssessment(
   if (!staff) throw new GradePipelineError(403, "Forbidden")
   const ownsAssessment =
     assessment.createdById === staff.id || assessment.offering?.teacherId === staff.id
-  if (!ownsAssessment) throw new GradePipelineError(403, "Forbidden")
+  if (!ownsAssessment) throw new GradePipelineError(404, "Assessment not found.")
 
   return staff.id
 }

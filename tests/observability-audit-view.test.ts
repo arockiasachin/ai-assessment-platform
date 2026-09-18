@@ -5,6 +5,7 @@ import { recordAiSuggestion, submitReviewDecision } from "@/lib/grading"
 import { getRecentGradeActivityForTeacher } from "@/lib/observability/audit-view"
 
 import { disconnectTestDatabase, prisma, truncateAll } from "./helpers/db"
+import { captureRefusal, expectIndistinguishable } from "./helpers/refusal"
 import { createSpineFixture } from "./fixtures/spine"
 
 function suggestion(
@@ -62,7 +63,7 @@ describe("teacher grade-activity view", () => {
     )
   })
 
-  it("denies a teacher who does not own the offering", async () => {
+  it("reports a foreign offering identically to a missing one", async () => {
     const f = await createSpineFixture(prisma)
     const other = await prisma.user.create({
       data: {
@@ -72,10 +73,21 @@ describe("teacher grade-activity view", () => {
         staffProfile: { create: { fullName: "Other Teacher", empId: "EMP-OBS-OTHER" } },
       },
     })
+    const otherTeacher = { id: other.id, email: other.email, role: "teacher" as const }
 
-    await expect(
-      getRecentGradeActivityForTeacher({ id: other.id }, { offeringId: f.offering.id, limit: 25 }),
-    ).rejects.toMatchObject({ status: 403 })
+    // TN-69 alignment: a foreign-but-real offering and a nonexistent one are
+    // indistinguishable, so the refusal cannot confirm the offering id exists.
+    const foreign = await captureRefusal(
+      getRecentGradeActivityForTeacher(otherTeacher, { offeringId: f.offering.id, limit: 25 }),
+    )
+    const missing = await captureRefusal(
+      getRecentGradeActivityForTeacher(otherTeacher, {
+        offeringId: "no-such-offering-zzz",
+        limit: 25,
+      }),
+    )
+    expect(foreign).toEqual({ status: 404, message: "Offering not found." })
+    expectIndistinguishable(foreign, missing)
   })
 
   it("404s an offering that does not exist", async () => {
