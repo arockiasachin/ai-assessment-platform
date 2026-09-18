@@ -1,6 +1,23 @@
 "use client"
 
-import { Bar, BarChart, CartesianGrid, Cell, Line, LineChart, XAxis, YAxis } from "recharts"
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Cell,
+  Line,
+  LineChart,
+  PolarAngleAxis,
+  PolarGrid,
+  PolarRadiusAxis,
+  Radar,
+  RadarChart,
+  RadialBar,
+  RadialBarChart,
+  ReferenceLine,
+  XAxis,
+  YAxis,
+} from "recharts"
 import {
   ChartContainer,
   ChartTooltip,
@@ -204,6 +221,250 @@ export function TrendChart({
           connectNulls
         />
       </LineChart>
+    </ChartContainer>
+  )
+}
+
+const youVsClassConfig = {
+  you: { label: "You", color: "var(--chart-1)" },
+  average: { label: "Class average", color: "var(--chart-3)" },
+} satisfies ChartConfig
+
+/**
+ * Two lines by assessment: the student's released mark and the disclosed class average.
+ *
+ * The personal line is **not** `connectNulls`: where the student has no released mark the
+ * line breaks, because interpolating across it would draw a mark that does not exist. The
+ * average line has no gaps — the caller only passes assessments whose average is disclosed.
+ */
+export function YouVsClassChart({
+  data,
+}: {
+  data: { label: string; you: number | null; average: number }[]
+}) {
+  return (
+    <ChartContainer config={youVsClassConfig} className="h-[260px] w-full">
+      <LineChart
+        data={data}
+        title="Your marks against the class average"
+        desc={describeData(
+          data,
+          (entry) =>
+            `${entry.label}: you ${entry.you === null ? "no released mark" : `${entry.you}%`}, class average ${entry.average}%`,
+          "No assessment has a disclosed class average yet.",
+        )}
+        margin={{ top: 8, right: 12, left: 0, bottom: 0 }}
+      >
+        <CartesianGrid vertical={false} strokeDasharray="3 3" />
+        <XAxis
+          dataKey="label"
+          tickLine={false}
+          axisLine={false}
+          tickMargin={8}
+          fontSize={11}
+          interval={0}
+        />
+        <YAxis
+          domain={[0, 100]}
+          ticks={[0, 25, 50, 75, 100]}
+          tickLine={false}
+          axisLine={false}
+          tickMargin={8}
+          fontSize={11}
+          width={40}
+        />
+        <ChartTooltip content={<ChartTooltipContent />} />
+        <Line
+          dataKey="average"
+          type="monotone"
+          stroke="var(--color-average)"
+          strokeWidth={2}
+          strokeDasharray="4 4"
+          dot={false}
+        />
+        <Line
+          dataKey="you"
+          type="monotone"
+          stroke="var(--color-you)"
+          strokeWidth={2.5}
+          dot={{ r: 3, fill: "var(--color-you)" }}
+          activeDot={{ r: 5 }}
+          connectNulls={false}
+        />
+      </LineChart>
+    </ChartContainer>
+  )
+}
+
+const radarConfig = {
+  mastery: { label: "Mastery %", color: "var(--chart-1)" },
+} satisfies ChartConfig
+
+/**
+ * Topic mastery on a radar — one axis per topic, weakest-first as the caller ordered them.
+ *
+ * The caller gates this on **three** topics: a radar with one or two axes is a shape that
+ * does not mean anything. The axis label is bounded by the caller for legibility, while the
+ * accessible description carries the full tag.
+ */
+export function TopicMasteryRadar({
+  data,
+}: {
+  data: { label: string; topic: string; mastery: number }[]
+}) {
+  return (
+    <ChartContainer config={radarConfig} className="mx-auto h-[320px] w-full">
+      <RadarChart
+        data={data}
+        title="Topic mastery"
+        desc={describeData(
+          data,
+          (entry) => `${entry.topic}: ${entry.mastery}%`,
+          "No tagged questions to show.",
+        )}
+        margin={{ top: 16, right: 32, bottom: 16, left: 32 }}
+      >
+        <PolarGrid />
+        <PolarAngleAxis
+          dataKey="label"
+          tickLine={false}
+          tick={{ fontSize: 11, fill: "var(--muted-foreground)" }}
+        />
+        <PolarRadiusAxis domain={[0, 100]} tick={false} axisLine={false} />
+        <ChartTooltip content={<ChartTooltipContent />} />
+        <Radar
+          dataKey="mastery"
+          stroke="var(--color-mastery)"
+          fill="var(--color-mastery)"
+          fillOpacity={0.35}
+          isAnimationActive={false}
+        />
+      </RadarChart>
+    </ChartContainer>
+  )
+}
+
+const GAUGE_FILL = {
+  primary: "var(--chart-1)",
+  success: "var(--success)",
+  warning: "var(--warning)",
+  destructive: "var(--chart-4)",
+} as const
+
+/**
+ * A single-value radial gauge: one arc of `value` out of `max`, with a centre figure.
+ *
+ * The arc is `aria-hidden` and the visible caption carries the number, so the figure is
+ * available as text rather than only as an arc. `value` is clamped into `[0, max]` so a
+ * total that overshoots the domain cannot draw outside its ring.
+ */
+export function RadialGauge({
+  value,
+  max = 100,
+  centerValue,
+  centerLabel,
+  label,
+  caption,
+  tone = "primary",
+}: {
+  value: number
+  max?: number
+  /** Headline figure in the middle, e.g. "62.5%". */
+  centerValue: string
+  /** Small caption under the headline, e.g. "passed". */
+  centerLabel?: string
+  /** Accessible name for the arc. */
+  label: string
+  /** Visible sentence describing the number; must include it, since the arc is hidden. */
+  caption: string
+  tone?: keyof typeof GAUGE_FILL
+}) {
+  const clamped = Math.max(0, Math.min(value, max))
+  return (
+    <figure className="flex flex-wrap items-center gap-5">
+      <div className="relative size-32 shrink-0" aria-hidden="true">
+        <ChartContainer
+          config={{ value: { label } }}
+          className="aspect-auto size-32"
+          aria-hidden="true"
+        >
+          <RadialBarChart
+            data={[{ id: "value", value: clamped }]}
+            innerRadius={44}
+            outerRadius={62}
+            startAngle={90}
+            endAngle={-270}
+          >
+            <PolarAngleAxis type="number" domain={[0, max]} tick={false} axisLine={false} />
+            <RadialBar
+              dataKey="value"
+              background
+              cornerRadius={6}
+              fill={GAUGE_FILL[tone]}
+              isAnimationActive={false}
+            />
+          </RadialBarChart>
+        </ChartContainer>
+        <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
+          <span className="font-mono text-lg font-semibold tabular-nums">{centerValue}</span>
+          {centerLabel && (
+            <span className="text-[0.65rem] tracking-wider text-muted-foreground uppercase">
+              {centerLabel}
+            </span>
+          )}
+        </div>
+      </div>
+      <figcaption className="min-w-40 flex-1 text-sm text-muted-foreground">{caption}</figcaption>
+    </figure>
+  )
+}
+
+const differenceConfig = {
+  difference: { label: "Difference", color: "var(--chart-1)" },
+} satisfies ChartConfig
+
+/**
+ * A diverging bar: one row per assessment, extending right above the class average and
+ * left below it, with the zero line drawn so the sign is visually unambiguous.
+ *
+ * The colour is chosen per bar from the sign, not from the array index.
+ */
+export function DivergingBarChart({ data }: { data: { label: string; difference: number }[] }) {
+  return (
+    <ChartContainer config={differenceConfig} className="h-[260px] w-full">
+      <BarChart
+        data={data}
+        layout="vertical"
+        title="Above or below the class average"
+        desc={describeData(
+          data,
+          (entry) => `${entry.label}: ${entry.difference > 0 ? "+" : ""}${entry.difference} points`,
+          "No assessment has both a released mark and a disclosed class average.",
+        )}
+        margin={{ top: 8, right: 12, left: 0, bottom: 0 }}
+      >
+        <CartesianGrid horizontal={false} strokeDasharray="3 3" />
+        <XAxis type="number" tickLine={false} axisLine={false} tickMargin={8} fontSize={11} />
+        <YAxis
+          type="category"
+          dataKey="label"
+          tickLine={false}
+          axisLine={false}
+          tickMargin={8}
+          fontSize={11}
+          width={96}
+        />
+        <ChartTooltip cursor={false} content={<ChartTooltipContent />} />
+        <ReferenceLine x={0} stroke="var(--border)" />
+        <Bar dataKey="difference" radius={4} maxBarSize={24}>
+          {data.map((entry, index) => (
+            <Cell
+              key={`${entry.label}-${index}`}
+              fill={entry.difference >= 0 ? "var(--chart-2)" : "var(--chart-4)"}
+            />
+          ))}
+        </Bar>
+      </BarChart>
     </ChartContainer>
   )
 }

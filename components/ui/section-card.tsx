@@ -1,9 +1,19 @@
+import type { ElementType } from "react"
+
 import { Card, CardAction, CardContent, CardDescription, CardFooter } from "@/components/ui/card"
 import { cn } from "@/lib/utils"
 
 export type SectionCardProps = {
-  /** Rendered as an `<h2>` so the section is announced as a heading. */
+  /** Rendered as a heading so the section is announced as one. Defaults to `<h2>`. */
   title?: string
+  /**
+   * Heading level used for `title`. Defaults to `<h2>`.
+   *
+   * Pass `"h3"` when the card sits inside a section that already supplies an `h2`
+   * — a per-course card under a course heading — so the outline nests instead of
+   * reading as a flat list of `h2`s. Mirrors `Callout`'s `titleAs`.
+   */
+  titleAs?: "h2" | "h3" | "h4"
   description?: string
   /** Right-aligned header control (a button, a link, a filter). */
   action?: React.ReactNode
@@ -22,6 +32,7 @@ export type SectionCardProps = {
  */
 export function SectionCard({
   title,
+  titleAs = "h2",
   description,
   action,
   children,
@@ -30,6 +41,7 @@ export function SectionCard({
   contentClassName,
 }: SectionCardProps) {
   const hasHeader = Boolean(title || description || action)
+  const Title: ElementType = titleAs
 
   return (
     <Card className={cn("gap-4", className)}>
@@ -43,9 +55,9 @@ export function SectionCard({
           )}
         >
           {title && (
-            <h2 data-slot="card-title" className="text-base leading-snug font-medium">
+            <Title data-slot="card-title" className="text-base leading-snug font-medium">
               {title}
-            </h2>
+            </Title>
           )}
           {description && <CardDescription>{description}</CardDescription>}
           {action && <CardAction>{action}</CardAction>}

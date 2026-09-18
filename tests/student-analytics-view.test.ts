@@ -1,14 +1,26 @@
 import { describe, expect, it } from "vitest"
 
 import {
+  ALL_COURSES_VALUE,
+  MIN_TREND_POINTS,
   buildAssessmentComparisons,
   buildTopicMastery,
+  catGateGauge,
   chartLabel,
   classAverageChartData,
+  completedCourseTotal,
+  comparisonLineChartData,
+  courseFilterOptions,
+  coursesForFilter,
+  differenceChartData,
   distributionChartData,
   focusDistribution,
+  hasEnoughTrendPoints,
+  positionDonutSlices,
   positionLetter,
   publishedScoresByAssessment,
+  topicRadarData,
+  trendPointCount,
   visibleComparisons,
   type ComparisonAssessmentInput,
 } from "@/lib/student-analytics-view"
@@ -363,5 +375,160 @@ describe("distributionChartData", () => {
     expect(data.map((entry) => entry.grade)).toEqual(["S", "A", "B", "C", "D", "E", "F"])
     expect(data.find((entry) => entry.grade === "A")?.count).toBe(1)
     expect(data.find((entry) => entry.grade === "F")?.count).toBe(1)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Phase 3: course selection and the chart inputs
+// ---------------------------------------------------------------------------
+
+/** Three released marks: enough for the disclosure floor, average 80. */
+const DISCLOSED: { studentId: string; percentage: number }[] = [
+  { studentId: "s1", percentage: 70 },
+  { studentId: "s2", percentage: 80 },
+  { studentId: "s3", percentage: 90 },
+]
+
+describe("courseFilterOptions / coursesForFilter", () => {
+  const courses = [
+    { offeringId: "o1", courseCode: "MAT101", courseName: "Maths" },
+    { offeringId: "o2", courseCode: "PHY101", courseName: "Physics" },
+  ]
+
+  it("puts All first and labels each course with its code and name", () => {
+    expect(courseFilterOptions(courses)).toEqual([
+      { value: ALL_COURSES_VALUE, label: "All courses" },
+      { value: "o1", label: "MAT101 · Maths" },
+      { value: "o2", label: "PHY101 · Physics" },
+    ])
+  })
+
+  it("returns every course for All and exactly the chosen one otherwise", () => {
+    expect(coursesForFilter(courses, ALL_COURSES_VALUE).map((course) => course.offeringId)).toEqual(
+      ["o1", "o2"],
+    )
+    expect(coursesForFilter(courses, "o2").map((course) => course.offeringId)).toEqual(["o2"])
+    expect(coursesForFilter(courses, "missing")).toEqual([])
+  })
+})
+
+describe("comparisonLineChartData", () => {
+  it("plots released personal marks against disclosed averages only", () => {
+    const rows = buildAssessmentComparisons(
+      [
+        comparison({
+          id: "a",
+          title: "Quiz 1",
+          scores: DISCLOSED,
+          yourPercentage: 70,
+          yourMarkState: "released",
+        }),
+        comparison({ id: "b", title: "Quiz 2", scores: DISCLOSED, yourMarkState: "withheld" }),
+        // Below the disclosure floor: no average, so not a point on either line.
+        comparison({ id: "c", title: "Quiz 3", scores: [{ studentId: "s1", percentage: 95 }] }),
+      ],
+      MIN_COHORT,
+    )
+
+    expect(comparisonLineChartData(rows)).toEqual([
+      { label: "Quiz 1", you: 70, average: 80 },
+      { label: "Quiz 2", you: null, average: 80 },
+    ])
+  })
+})
+
+describe("differenceChartData", () => {
+  it("keeps the sign and drops a row with no disclosed average", () => {
+    const rows = buildAssessmentComparisons(
+      [
+        comparison({
+          id: "a",
+          title: "Quiz 1",
+          scores: DISCLOSED,
+          yourPercentage: 70,
+          yourMarkState: "released",
+        }),
+        comparison({ id: "b", title: "Quiz 2", scores: DISCLOSED, yourMarkState: "none" }),
+      ],
+      MIN_COHORT,
+    )
+
+    expect(differenceChartData(rows)).toEqual([{ label: "Quiz 1", difference: -10 }])
+  })
+})
+
+describe("topicRadarData", () => {
+  it("bounds the axis label but keeps the full tag", () => {
+    const data = topicRadarData([
+      { topic: "a very long topic tag", totalQuestions: 3, notMasteredCount: 1, mastery: 66.7 },
+    ])
+    expect(data).toEqual([
+      { label: "a very long topi…", topic: "a very long topic tag", mastery: 66.7 },
+    ])
+  })
+})
+
+describe("trend floor", () => {
+  const series = (averages: (number | null)[]) => ({
+    points: averages.map((average, index) => ({
+      week: index + 1,
+      average,
+      count: average === null ? 0 : 1,
+    })),
+  })
+
+  it("counts released weeks only and needs two for a line", () => {
+    expect(MIN_TREND_POINTS).toBe(2)
+    expect(trendPointCount(null)).toBe(0)
+    expect(trendPointCount(series([null, null]))).toBe(0)
+    expect(trendPointCount(series([null, 72]))).toBe(1)
+    expect(hasEnoughTrendPoints(series([null, 72]))).toBe(false)
+    expect(hasEnoughTrendPoints(series([72, 80]))).toBe(true)
+  })
+})
+
+describe("completedCourseTotal", () => {
+  it("states a total only for a completed course that has one", () => {
+    expect(completedCourseTotal({ grandTotal: 62.5 }, true)).toBe(62.5)
+    expect(completedCourseTotal({ grandTotal: 62.5 }, false)).toBeNull()
+    expect(completedCourseTotal({ grandTotal: null }, true)).toBeNull()
+    expect(completedCourseTotal(null, true)).toBeNull()
+  })
+})
+
+describe("catGateGauge", () => {
+  const cat = { markedCount: 4, totalCount: 6, completionRatio: 4 / 6, status: "eligible" }
+
+  it("omits the gauge when there is no CAT/FAT split or nothing in the pool", () => {
+    expect(catGateGauge(null)).toBeNull()
+    expect(catGateGauge({ finalAssessment: null, cat })).toBeNull()
+    expect(
+      catGateGauge({
+        finalAssessment: { published: false },
+        cat: { markedCount: 0, totalCount: 0, completionRatio: 0, status: "no-cat-gate" },
+      }),
+    ).toBeNull()
+  })
+
+  it("carries the marking progress and the gate verdict", () => {
+    expect(catGateGauge({ finalAssessment: { published: false }, cat })).toEqual({
+      markedCount: 4,
+      totalCount: 6,
+      ratio: 4 / 6,
+      status: "eligible",
+    })
+  })
+})
+
+describe("positionDonutSlices", () => {
+  it("maps every band, including empty ones, so the legend is the whole scale", () => {
+    const [row] = buildAssessmentComparisons(
+      [comparison({ scores: DISCLOSED, yourPercentage: 82, yourMarkState: "released" })],
+      MIN_COHORT,
+    )
+    const slices = positionDonutSlices(row)
+    expect(slices.map((slice) => slice.id)).toEqual(["S", "A", "B", "C", "D", "E", "F"])
+    expect(slices.find((slice) => slice.id === "A")?.value).toBe(1)
+    expect(slices.every((slice) => slice.label.length > 0)).toBe(true)
   })
 })

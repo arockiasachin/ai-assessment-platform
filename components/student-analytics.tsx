@@ -1,11 +1,31 @@
+"use client"
+
+import { useState } from "react"
 import { AlertTriangle, BarChart3, Info } from "lucide-react"
 
-import { ClassAverageChart, GradeDistributionChart, TrendChart } from "@/components/charts"
+import {
+  ClassAverageChart,
+  DivergingBarChart,
+  GradeDistributionChart,
+  RadialGauge,
+  TopicMasteryRadar,
+  TrendChart,
+  YouVsClassChart,
+} from "@/components/charts"
 import { Badge } from "@/components/ui/badge"
 import { Callout } from "@/components/ui/callout"
 import { EmptyState } from "@/components/ui/empty-state"
+import { GradeDonut } from "@/components/ui/grade-donut"
+import { Label } from "@/components/ui/label"
 import { ProgressBar } from "@/components/ui/progress-bar"
 import { SectionCard } from "@/components/ui/section-card"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import {
   Table,
   TableBody,
@@ -14,24 +34,43 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { formatPercent } from "@/lib/format"
+import { formatDateTime, formatPercent } from "@/lib/format"
+import { PASS_MARK } from "@/lib/grading/policy"
 import { catStatusLabel } from "@/lib/grading/policy-view"
 import type { StudentAnalytics, StudentAnalyticsCourse } from "@/lib/student-analytics"
 import {
+  ALL_COURSES_VALUE,
+  MIN_COMPARISON_POINTS,
+  MIN_RADAR_TOPICS,
+  catGateGauge,
   classAverageChartData,
+  completedCourseTotal,
+  comparisonLineChartData,
+  courseFilterOptions,
+  coursesForFilter,
+  differenceChartData,
   distributionChartData,
+  hasEnoughTrendPoints,
+  positionDonutSlices,
+  topicRadarData,
   type AssessmentComparison,
 } from "@/lib/student-analytics-view"
 import type { StudentCourseOutcome } from "@/lib/student-course-outcome"
 import { ARREAR_REASON_LABEL, OUTCOME_LABEL } from "@/lib/student-outcome-view"
-import { cohortTrendPoints, hasTrendData } from "@/lib/teacher-dashboard-view"
+import { cohortTrendPoints } from "@/lib/teacher-dashboard-view"
 
 /**
  * The student analytics page body.
  *
- * Server Component: the reader has already run, and every child that needs
- * interactivity (`ProgressBar`, the three Recharts charts) is its own client island.
- * Nothing here fetches, so the first paint is populated.
+ * Client island: the route is the Server Component and has already run the reader, so this
+ * receives a plain payload and fetches nothing. It is a client component only because of the
+ * course selection, which owns one piece of state; every number it renders is still decided
+ * by `lib/student-analytics.ts` and `lib/student-analytics-view.ts`.
+ *
+ * ## The course selection
+ *
+ * One select, `All` first and the default. It narrows which course sections render and nothing
+ * else — the payload is the same either way, so switching costs no request.
  *
  * ## Only a section with data renders
  *
@@ -49,6 +88,9 @@ import { cohortTrendPoints, hasTrendData } from "@/lib/teacher-dashboard-view"
  */
 
 export function StudentAnalyticsView({ analytics }: { analytics: StudentAnalytics }) {
+  // State is declared before the empty branch so the hook order is unconditional.
+  const [selectedCourse, setSelectedCourse] = useState<string>(ALL_COURSES_VALUE)
+
   if (analytics.courses.length === 0) {
     return (
       <EmptyState
@@ -59,15 +101,56 @@ export function StudentAnalyticsView({ analytics }: { analytics: StudentAnalytic
     )
   }
 
+  const options = courseFilterOptions(analytics.courses)
+  const courses = coursesForFilter(analytics.courses, selectedCourse)
+
   return (
-    <div className="space-y-8">
-      {analytics.courses.map((course) => (
-        <CourseAnalytics
-          key={course.offeringId}
-          course={course}
-          minimumCohort={analytics.minimumCohort}
-        />
-      ))}
+    <div className="space-y-6">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div className="space-y-1">
+          <Label htmlFor="analytics-course" className="text-xs text-muted-foreground">
+            Course
+          </Label>
+          {/*
+           * `items` is not optional in spirit: Base UI renders the raw value in the trigger
+           * unless the root knows the value→label map, which is how a select ends up showing
+           * an offering id instead of a course name.
+           */}
+          <Select
+            value={selectedCourse}
+            onValueChange={(next) =>
+              setSelectedCourse(next === null ? ALL_COURSES_VALUE : String(next))
+            }
+            items={options}
+          >
+            <SelectTrigger id="analytics-course" size="sm" className="w-full sm:w-80">
+              <SelectValue placeholder="All courses" />
+            </SelectTrigger>
+            <SelectContent>
+              {options.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        {/* The page is a snapshot, so when it was taken is information, not decoration. */}
+        <p className="text-xs text-muted-foreground">
+          Snapshot generated {formatDateTime(analytics.generatedAt)} UTC.
+        </p>
+      </div>
+
+      <div className="space-y-8">
+        {courses.map((course) => (
+          <CourseAnalytics
+            key={course.offeringId}
+            course={course}
+            minimumCohort={analytics.minimumCohort}
+          />
+        ))}
+      </div>
     </div>
   )
 }
@@ -86,8 +169,14 @@ function CourseAnalytics({
   minimumCohort: number
 }) {
   const chartData = classAverageChartData(course.comparisons)
-  const trendHasData = hasTrendData(course.trend.series)
+  const comparisonLines = comparisonLineChartData(course.comparisons)
+  const differences = differenceChartData(course.comparisons)
+  // A single released week draws a one-point "trend"; two is the floor for a line.
+  const trendHasData = hasEnoughTrendPoints(course.trend.series)
   const topics = course.topics?.topics ?? []
+  const radarTopics = topicRadarData(topics)
+  const courseTotal = completedCourseTotal(course.outcome, course.ended)
+  const catGate = catGateGauge(course.outcome)
 
   return (
     <section className="space-y-4" aria-labelledby={`course-${course.offeringId}`}>
@@ -117,6 +206,7 @@ function CourseAnalytics({
           <SectionCard
             title="Your marks against the class"
             description="Every average here counts released marks only. A mark that has not been released is never counted, and never counted as zero."
+            titleAs="h3"
           >
             {chartData.length > 0 ? (
               <>
@@ -135,17 +225,109 @@ function CourseAnalytics({
           </SectionCard>
         )}
 
+        {/* A line needs two disclosed averages; one is a dot, not a comparison. */}
+        {comparisonLines.length >= MIN_COMPARISON_POINTS && (
+          <SectionCard
+            title="You against the class average"
+            description="Your released mark and the class's disclosed average, assessment by assessment. Your line breaks where you have no released mark — nothing is interpolated across a gap."
+            titleAs="h3"
+          >
+            <YouVsClassChart data={comparisonLines} />
+          </SectionCard>
+        )}
+
+        {/* "Any comparison" is the gate: a gap of one assessment is still a real gap. */}
+        {differences.length > 0 && (
+          <SectionCard
+            title="Above or below the class"
+            description="The signed gap between your released mark and the disclosed class average, in percentage points. An assessment with no disclosed average has no gap and is not drawn."
+            titleAs="h3"
+          >
+            <DivergingBarChart data={differences} />
+          </SectionCard>
+        )}
+
+        {courseTotal !== null && (
+          <SectionCard
+            title="Course total against the pass mark"
+            description={`Your weighted grand total for this completed course, against the ${PASS_MARK}% pass mark.`}
+            titleAs="h3"
+          >
+            <RadialGauge
+              value={courseTotal}
+              max={100}
+              centerValue={formatPercent(courseTotal, 1)}
+              centerLabel={courseTotal >= PASS_MARK ? "Passed" : "Below pass"}
+              label="Weighted grand total"
+              tone={courseTotal >= PASS_MARK ? "success" : "destructive"}
+              caption={`Weighted grand total ${formatPercent(courseTotal, 1)} against the ${PASS_MARK}% pass mark.`}
+            />
+          </SectionCard>
+        )}
+
+        {/*
+         * The pool's marking progress, not the gate's verdict: a full ring means every CAT
+         * assessment has a released mark, which can still sit below the CAT minimum. The
+         * verdict itself is the text line below the ring.
+         */}
+        {catGate !== null && (
+          <SectionCard
+            title="CAT gate progress"
+            description="The share of the continuous-assessment pool that has a released mark, with the gate verdict from the same reader the Grades page uses."
+            titleAs="h3"
+          >
+            <RadialGauge
+              value={catGate.markedCount}
+              max={catGate.totalCount}
+              centerValue={`${catGate.markedCount}/${catGate.totalCount}`}
+              centerLabel="CAT marked"
+              label="Continuous assessment marked"
+              tone={
+                catGate.status === "eligible"
+                  ? "success"
+                  : catGate.status === "no-cat-gate"
+                    ? "primary"
+                    : "warning"
+              }
+              caption={`${catGate.markedCount} of ${catGate.totalCount} continuous assessments have a released mark. Gate: ${catStatusLabel(catGate.status)}.`}
+            />
+          </SectionCard>
+        )}
+
         {course.distribution !== null && (
           <SectionCard
-            title="Score distribution and your position"
+            title="Score distribution"
             description={`Released marks for ${course.distribution.title}, binned on VIT's absolute Table-6 scale. A VIT letter is awarded for a course grand total, not for one assessment.`}
+            titleAs="h3"
           >
             <GradeDistributionChart data={distributionChartData(course.distribution.cohort)} />
             <p className="mt-2 text-xs text-muted-foreground">
               {course.distribution.cohort.count} released mark
               {course.distribution.cohort.count === 1 ? "" : "s"} · class average{" "}
-              {formatPercent(course.distribution.classAverage, 1)} · your mark{" "}
-              {formatPercent(course.distribution.yourPercentage, 1)}
+              {formatPercent(course.distribution.classAverage, 1)}.
+            </p>
+          </SectionCard>
+        )}
+
+        {/* GradeDonut is purpose-built for a band split with a centre figure — no new chart. */}
+        {course.distribution !== null && (
+          <SectionCard
+            title="Your position"
+            description={`Your released mark in ${course.distribution.title}, against the cohort's band split. The bands are this assessment's absolute Table-6 scale — a VIT letter is awarded for a course grand total, not for one assessment.`}
+            titleAs="h3"
+          >
+            <GradeDonut
+              slices={positionDonutSlices(course.distribution)}
+              centerValue={formatPercent(course.distribution.yourPercentage, 1)}
+              centerLabel={
+                course.distributionLetter !== null
+                  ? `Band ${course.distributionLetter}`
+                  : "Your mark"
+              }
+              label={`Your mark in ${course.distribution.title} against the cohort's band split`}
+            />
+            <p className="mt-3 text-xs text-muted-foreground">
+              Your mark {formatPercent(course.distribution.yourPercentage, 1)}
               {course.distributionLetter !== null
                 ? ` — band ${course.distributionLetter} on this scale`
                 : ""}
@@ -158,6 +340,7 @@ function CourseAnalytics({
           <SectionCard
             title="Cohort trend across the term"
             description="The class's mean score by teaching week. This is the cohort's line, not a history of your own scores — the platform stores no record of your own score over time."
+            titleAs="h3"
           >
             <TrendChart data={cohortTrendPoints(course.trend.series)} />
             <p className="mt-2 text-xs text-muted-foreground">
@@ -171,6 +354,7 @@ function CourseAnalytics({
           <SectionCard
             title="Topic mastery"
             description="Your own answers on each topic across your graded quiz sittings in this course, weakest first. A topic with one question is one question of evidence."
+            titleAs="h3"
           >
             <ul className="space-y-4">
               {topics.map((topic) => (
@@ -199,6 +383,17 @@ function CourseAnalytics({
             )}
           </SectionCard>
         )}
+
+        {/* A radar on one or two axes is meaningless, so three topics is the floor. */}
+        {radarTopics.length >= MIN_RADAR_TOPICS && (
+          <SectionCard
+            title="Topic mastery at a glance"
+            description="The same per-topic values as the bars above, on one shape. The axis label is shortened for legibility; the full tag is in the list."
+            titleAs="h3"
+          >
+            <TopicMasteryRadar data={radarTopics} />
+          </SectionCard>
+        )}
       </div>
     </section>
   )
@@ -212,6 +407,7 @@ function OutcomeCard({ course }: { course: StudentAnalyticsCourse }) {
     <SectionCard
       title="Course outcome"
       description="The course verdict, the weighted total and the final assessment, from the same reader the Grades page will use."
+      titleAs="h3"
     >
       {outcome === null ? (
         <p className="text-sm text-muted-foreground">

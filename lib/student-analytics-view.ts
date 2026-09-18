@@ -324,3 +324,210 @@ export function buildTopicMastery(input: {
 
   return { topics, untaggedQuestionCount, totalQuestions }
 }
+
+// ---------------------------------------------------------------------------
+// Course selection
+// ---------------------------------------------------------------------------
+
+/**
+ * The "no course in particular" value.
+ *
+ * Deliberately self-contained rather than shared with the assessments hub: the two
+ * page selections are independent and will be reconciled only if that proves worth
+ * doing, so neither should import the other's contract.
+ */
+export const ALL_COURSES_VALUE = "all"
+
+export type CourseFilterOption = { value: string; label: string }
+
+/**
+ * One option per enrolled course, with `All` first.
+ *
+ * The label carries both the code and the name, because two offerings of the same
+ * course in different terms read identically by code alone.
+ */
+export function courseFilterOptions(
+  courses: readonly { offeringId: string; courseCode: string; courseName: string }[],
+): CourseFilterOption[] {
+  return [
+    { value: ALL_COURSES_VALUE, label: "All courses" },
+    ...courses.map((course) => ({
+      value: course.offeringId,
+      label: `${course.courseCode} · ${course.courseName}`,
+    })),
+  ]
+}
+
+/** The courses to render for a selection: every course, or exactly the chosen offering. */
+export function coursesForFilter<T extends { offeringId: string }>(
+  courses: readonly T[],
+  selectedOfferingId: string,
+): T[] {
+  if (selectedOfferingId === ALL_COURSES_VALUE) return [...courses]
+  return courses.filter((course) => course.offeringId === selectedOfferingId)
+}
+
+// ---------------------------------------------------------------------------
+// Chart inputs
+//
+// Each builder returns exactly the points the chart draws and the caller gates the
+// section on the count. The floors are named constants so the gate and its
+// explanation cannot drift apart.
+// ---------------------------------------------------------------------------
+
+/** Two points make a line; one assessment is a dot, not a comparison. */
+export const MIN_COMPARISON_POINTS = 2
+/** A radar on one or two axes is meaningless, so three topics is the floor. */
+export const MIN_RADAR_TOPICS = 3
+/** A trend needs two released weeks; one released week is a dot, not a trend. */
+export const MIN_TREND_POINTS = 2
+
+export type ComparisonLinePoint = {
+  label: string
+  /** The student's released mark, or `null` where there is none to plot. */
+  you: number | null
+  average: number
+}
+
+/**
+ * `YouVsClassChart` input: one point per assessment with a **disclosed** average.
+ *
+ * The stock series is the disclosed class average, so an assessment whose cohort is
+ * below the disclosure floor is not plotted at all. The personal series is the
+ * released mark only — a withheld mark is a gap in the line, never a zero.
+ */
+export function comparisonLineChartData(
+  rows: readonly AssessmentComparison[],
+): ComparisonLinePoint[] {
+  return rows
+    .filter(
+      (row): row is AssessmentComparison & { classAverage: number } => row.classAverage !== null,
+    )
+    .map((row) => ({
+      label: chartLabel(row.title, 14),
+      you:
+        row.yourMarkState === "released" && row.yourPercentage !== null
+          ? roundTo(row.yourPercentage)
+          : null,
+      average: roundTo(row.classAverage),
+    }))
+}
+
+export type DifferenceBarPoint = { label: string; difference: number }
+
+/**
+ * `DivergingBarChart` input: the signed gap per assessment.
+ *
+ * Only rows where both sides exist have a `difference`, so the ones without an average
+ * are dropped rather than plotted at zero — a bar at zero would claim the student is
+ * exactly at the class average when the truth is that there is no average to compare to.
+ */
+export function differenceChartData(rows: readonly AssessmentComparison[]): DifferenceBarPoint[] {
+  return rows
+    .filter((row): row is AssessmentComparison & { difference: number } => row.difference !== null)
+    .map((row) => ({ label: chartLabel(row.title, 16), difference: row.difference }))
+}
+
+export type TopicRadarPoint = { label: string; topic: string; mastery: number }
+
+/**
+ * `TopicMasteryRadar` input.
+ *
+ * The axis label is bounded for legibility; the full tag travels alongside it so the
+ * chart's accessible description can name the topic the axis had to shorten.
+ */
+export function topicRadarData(topics: readonly TopicMastery[]): TopicRadarPoint[] {
+  return topics.map((topic) => ({
+    label: chartLabel(topic.topic, 16),
+    topic: topic.topic,
+    mastery: topic.mastery,
+  }))
+}
+
+/** How many weeks in a series actually carry a released mark. */
+export function trendPointCount(
+  series: { points: readonly { average: number | null }[] } | null,
+): number {
+  if (series === null) return 0
+  return series.points.reduce((count, point) => (point.average === null ? count : count + 1), 0)
+}
+
+/**
+ * Whether a series can honestly be drawn as a *trend*.
+ *
+ * `hasTrendData` only asks whether any week has a mark. The chart needs two: a single
+ * released week draws a one-point line that reads as a slope, which is not a trend.
+ */
+export function hasEnoughTrendPoints(
+  series: { points: readonly { average: number | null }[] } | null,
+  minimum = MIN_TREND_POINTS,
+): boolean {
+  return trendPointCount(series) >= minimum
+}
+
+/**
+ * The completed-course gauge's value: the weighted grand total, or `null`.
+ *
+ * Gated on the course having **ended** and the total being statable. A current-term
+ * course, or a completed one whose final assessment was never published, has no total
+ * to put on the gauge — and `null` is not `0`.
+ */
+export function completedCourseTotal(
+  outcome: { grandTotal: number | null } | null,
+  ended: boolean,
+): number | null {
+  if (!ended) return null
+  if (outcome === null || outcome.grandTotal === null) return null
+  return outcome.grandTotal
+}
+
+export type CatGateGauge = {
+  markedCount: number
+  totalCount: number
+  /** `markedCount / totalCount`, `0`–`1`. */
+  ratio: number
+  /** The reader's gate verdict: `eligible`, `below-cat-minimum`, `insufficient-cat-work`, … */
+  status: string
+}
+
+/**
+ * The CAT-gate gauge's value, or `null` when there is no CAT/FAT split to report.
+ *
+ * "A CAT/FAT split exists" is `finalAssessment !== null`: the policy resolved a final
+ * assessment, which needs at least two assessments. With no split the gate does not
+ * exist, so the section is omitted rather than drawn as a full ring. The number the
+ * gauge shows is the pool's marking **progress** — a course with the gate below its
+ * minimum is a different fact, carried by `status` and rendered as text.
+ */
+export function catGateGauge(
+  outcome: {
+    finalAssessment: { published: boolean } | null
+    cat: {
+      markedCount: number
+      totalCount: number
+      completionRatio: number
+      status: string
+    }
+  } | null,
+): CatGateGauge | null {
+  if (outcome === null) return null
+  if (outcome.finalAssessment === null) return null
+  if (outcome.cat.totalCount === 0) return null
+  return {
+    markedCount: outcome.cat.markedCount,
+    totalCount: outcome.cat.totalCount,
+    ratio: outcome.cat.completionRatio,
+    status: outcome.cat.status,
+  }
+}
+
+export type PositionSlice = { id: string; label: string; value: number }
+
+/** `GradeDonut` input: the focus distribution's band split, labelled from its buckets. */
+export function positionDonutSlices(distribution: AssessmentComparison): PositionSlice[] {
+  return distribution.cohort.buckets.map((bucket) => ({
+    id: bucket.grade,
+    label: bucket.label,
+    value: bucket.count,
+  }))
+}
