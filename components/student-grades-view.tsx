@@ -5,6 +5,15 @@ import { StatusPill, type StatusKey } from "@/components/ui/status-pill"
 import { EmptyState } from "@/components/ui/empty-state"
 import { InfoHint } from "@/components/ui/info-hint"
 import { SectionCard } from "@/components/ui/section-card"
+import {
+  Table,
+  TableBody,
+  TableCaption,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table"
 import { formatPercent } from "@/lib/format"
 import type { StudentCourseOutcome } from "@/lib/student-course-outcome"
 import {
@@ -86,92 +95,65 @@ export function StudentGradesView({ completed }: StudentGradesViewProps) {
           </InfoHint>
         }
       >
-        <div className="relative w-full overflow-x-auto">
-          <table className="w-full caption-bottom text-sm">
-            <caption className="sr-only">
-              Completed courses with their outcome verdict, weighted grand total and term
-            </caption>
-            <thead>
-              <tr className="border-b">
-                <th
-                  scope="col"
-                  className="h-10 px-2 text-left align-middle font-medium whitespace-nowrap"
-                >
-                  Course
-                </th>
-                <th
-                  scope="col"
-                  className="h-10 px-2 text-left align-middle font-medium whitespace-nowrap"
-                >
-                  Term
-                </th>
-                <th
-                  scope="col"
-                  className="h-10 px-2 text-left align-middle font-medium whitespace-nowrap"
-                >
-                  Result
-                </th>
-                <th
-                  scope="col"
-                  className="h-10 px-2 text-left align-middle font-medium whitespace-nowrap"
-                >
-                  Grand total
-                </th>
-                <th
-                  scope="col"
-                  className="h-10 px-2 text-left align-middle font-medium whitespace-nowrap"
-                >
-                  Evidence
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {completed.map((course) => (
-                <tr key={course.offeringId} className="border-b align-top last:border-b-0">
-                  <th scope="row" className="max-w-56 p-2 text-left align-top font-normal">
-                    <p className="font-medium">{course.courseName}</p>
-                    <p className="font-mono text-xs text-muted-foreground">{course.courseCode}</p>
-                    <Link
-                      href={{
-                        pathname: "/student/course",
-                        query: { courseCode: course.courseCode },
-                      }}
-                      className={`mt-1 inline-block ${LINK_CLASS}`}
-                    >
-                      View course
-                    </Link>
-                  </th>
-                  <td className="p-2 align-top whitespace-nowrap">
-                    {course.term} {course.academicYear}
-                  </td>
-                  <td className="p-2 align-top">
-                    <StatusPill
-                      status={OUTCOME_STATUS_KEY[course.outcome.status]}
-                      label={OUTCOME_LABEL[course.outcome.status]}
-                      dot
-                    />
-                  </td>
-                  <td className="p-2 align-top font-mono tabular-nums">
-                    {formatPercent(course.grandTotal, 1)}
-                  </td>
-                  <td className="p-2 align-top text-muted-foreground">
-                    <p>{outcomeExplanation(course.outcome)}</p>
-                    {course.arrear !== null && (
-                      <p className="mt-1">
-                        <span className="font-medium text-foreground">
-                          {ARREAR_REASON_LABEL[course.arrear]}.
-                        </span>{" "}
-                        <Link href="/student/arrears" className={LINK_CLASS}>
-                          See arrears
-                        </Link>
-                      </p>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <Table>
+          <TableCaption className="sr-only">
+            Completed courses with their outcome verdict, weighted grand total and term
+          </TableCaption>
+          <TableHeader>
+            <TableRow>
+              <TableHead scope="col">Course</TableHead>
+              <TableHead scope="col">Term</TableHead>
+              <TableHead scope="col">Result</TableHead>
+              <TableHead scope="col">Grand total</TableHead>
+              <TableHead scope="col">Evidence</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {completed.map((course) => (
+              <TableRow key={course.offeringId} className="align-top">
+                <TableHead scope="row" className="max-w-56 align-top font-normal">
+                  <p className="font-medium">{course.courseName}</p>
+                  <p className="font-mono text-xs text-muted-foreground">{course.courseCode}</p>
+                  <Link
+                    href={{
+                      pathname: "/student/course",
+                      query: { courseCode: course.courseCode },
+                    }}
+                    className={`mt-1 inline-block ${LINK_CLASS}`}
+                  >
+                    View course
+                  </Link>
+                </TableHead>
+                <TableCell className="align-top">
+                  {course.term} {course.academicYear}
+                </TableCell>
+                <TableCell className="align-top">
+                  <StatusPill
+                    status={OUTCOME_STATUS_KEY[course.outcome.status]}
+                    label={OUTCOME_LABEL[course.outcome.status]}
+                    dot
+                  />
+                </TableCell>
+                <TableCell className="align-top font-mono tabular-nums">
+                  {formatPercent(course.grandTotal, 1)}
+                </TableCell>
+                <TableCell className="align-top whitespace-normal text-muted-foreground">
+                  <p>{outcomeExplanation(course.outcome)}</p>
+                  {course.arrear !== null && (
+                    <p className="mt-1">
+                      <span className="font-medium text-foreground">
+                        {ARREAR_REASON_LABEL[course.arrear]}.
+                      </span>{" "}
+                      <Link href="/student/arrears" className={LINK_CLASS}>
+                        See arrears
+                      </Link>
+                    </p>
+                  )}
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
       </SectionCard>
     </div>
   )

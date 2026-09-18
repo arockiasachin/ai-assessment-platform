@@ -6,6 +6,15 @@ import { Badge } from "@/components/ui/badge"
 import { EmptyState } from "@/components/ui/empty-state"
 import { InfoHint } from "@/components/ui/info-hint"
 import { SectionCard } from "@/components/ui/section-card"
+import {
+  Table,
+  TableBody,
+  TableCaption,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table"
 import { formatPercent, formatPoints, formatShortDate } from "@/lib/format"
 import { ASSESSMENT_KIND_LABEL } from "@/lib/labels"
 import {
@@ -118,77 +127,55 @@ export function StudentMarksView({ marks, arrears }: StudentMarksViewProps) {
             }
           />
         ) : (
-          <div className="relative w-full overflow-x-auto">
-            <table className="w-full caption-bottom text-sm">
-              <caption className="sr-only">
-                Released marks for the current term, grouped by subject
-              </caption>
-              <thead>
-                <tr className="border-b">
-                  <th
-                    scope="col"
-                    className="h-10 px-2 text-left align-middle font-medium whitespace-nowrap"
-                  >
-                    Subject
-                  </th>
-                  <th
-                    scope="col"
-                    className="h-10 px-2 text-left align-middle font-medium whitespace-nowrap"
-                  >
-                    Released marks
-                  </th>
-                  <th
-                    scope="col"
-                    className="h-10 px-2 text-left align-middle font-medium whitespace-nowrap"
-                  >
-                    Average
-                  </th>
-                  <th
-                    scope="col"
-                    className="h-10 px-2 text-left align-middle font-medium whitespace-nowrap"
-                  >
-                    Not released
-                  </th>
-                </tr>
-              </thead>
-              {marks.subjects.map((subject) => (
-                <tbody key={subject.courseId} className="border-b last:border-b-0">
-                  <tr className="align-top">
-                    <th scope="row" className="max-w-56 p-2 text-left align-top font-normal">
-                      <p className="font-medium">{subject.courseName}</p>
-                      <p className="font-mono text-xs text-muted-foreground">
-                        {subject.courseCode}
-                      </p>
-                      <Link
-                        href={{
-                          pathname: "/student/course",
-                          query: { courseCode: subject.courseCode },
-                        }}
-                        className={`mt-1 inline-block ${LINK_CLASS}`}
-                      >
-                        View course
-                      </Link>
-                    </th>
-                    <td className="p-2 align-top">
-                      {subject.group.marks.length === 0 ? (
-                        <UnreleasedNote group={subject.group} />
-                      ) : (
-                        <MarkList marks={subject.group.marks} />
-                      )}
-                    </td>
-                    <td className="p-2 align-top">
-                      <Badge variant="outline" className="font-mono tabular-nums">
-                        {formatPercent(subject.group.average, 1)}
-                      </Badge>
-                    </td>
-                    <td className="p-2 align-top text-muted-foreground">
-                      {subject.group.unreleasedCount}
-                    </td>
-                  </tr>
-                </tbody>
-              ))}
-            </table>
-          </div>
+          <Table>
+            <TableCaption className="sr-only">
+              Released marks for the current term, grouped by subject
+            </TableCaption>
+            <TableHeader>
+              <TableRow>
+                <TableHead scope="col">Subject</TableHead>
+                <TableHead scope="col">Released marks</TableHead>
+                <TableHead scope="col">Average</TableHead>
+                <TableHead scope="col">Not released</TableHead>
+              </TableRow>
+            </TableHeader>
+            {marks.subjects.map((subject) => (
+              // One `<tbody>` per subject: the table is grouped, which `DataTable`'s
+              // flat row model cannot express, so the element primitives are used.
+              <TableBody key={subject.courseId}>
+                <TableRow className="align-top">
+                  <TableHead scope="row" className="max-w-56 align-top font-normal">
+                    <p className="font-medium">{subject.courseName}</p>
+                    <p className="font-mono text-xs text-muted-foreground">{subject.courseCode}</p>
+                    <Link
+                      href={{
+                        pathname: "/student/course",
+                        query: { courseCode: subject.courseCode },
+                      }}
+                      className={`mt-1 inline-block ${LINK_CLASS}`}
+                    >
+                      View course
+                    </Link>
+                  </TableHead>
+                  <TableCell className="align-top whitespace-normal">
+                    {subject.group.marks.length === 0 ? (
+                      <UnreleasedNote group={subject.group} />
+                    ) : (
+                      <MarkList marks={subject.group.marks} />
+                    )}
+                  </TableCell>
+                  <TableCell className="align-top">
+                    <Badge variant="outline" className="font-mono tabular-nums">
+                      {formatPercent(subject.group.average, 1)}
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="align-top text-muted-foreground">
+                    {subject.group.unreleasedCount}
+                  </TableCell>
+                </TableRow>
+              </TableBody>
+            ))}
+          </Table>
         )}
       </SectionCard>
     </div>
