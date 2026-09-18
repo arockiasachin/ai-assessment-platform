@@ -7,7 +7,9 @@ import StarterKit from "@tiptap/starter-kit"
 import { TableKit } from "@tiptap/extension-table"
 import {
   Bold,
+  CircleCheck,
   Code,
+  FileText,
   Heading1,
   Heading2,
   Italic,
@@ -26,8 +28,15 @@ import {
   Upload,
 } from "lucide-react"
 
+import { AssessmentPicker, type AssessmentPickerOption } from "@/components/assessment-picker"
+import { CollapsibleSection } from "@/components/collapsible-section"
+import { EditorWorkspace } from "@/components/editor-workspace"
 import { Button } from "@/components/ui/button"
+import { KeyValueList } from "@/components/ui/metric-row"
+import { Separator } from "@/components/ui/separator"
+import { StatusPill, type StatusKey } from "@/components/ui/status-pill"
 import { saveDraftAllowed, submissionSubmitAction } from "@/lib/assessment-submission-rules"
+import { formatDateTime } from "@/lib/format"
 import type { SubmissionState } from "@/lib/student-assessments"
 
 /**
@@ -66,6 +75,25 @@ export type WriteAssessment = {
  * definition of the rule.
  */
 const TEXT_LIMIT = 4000
+
+/** Student-facing label and tone for each submission state. */
+const SUBMISSION_STATE_TO_STATUS: Record<SubmissionState, StatusKey> = {
+  not_submitted: "pending",
+  draft: "draft",
+  submitted: "submitted",
+  resubmitted: "resubmitted",
+  graded: "graded",
+  late: "late",
+}
+
+const SUBMISSION_STATE_LABEL: Record<SubmissionState, string> = {
+  not_submitted: "Not submitted",
+  draft: "Draft",
+  submitted: "Submitted",
+  resubmitted: "Resubmitted",
+  graded: "Graded",
+  late: "Late",
+}
 
 type EditorStats = {
   bold: boolean
@@ -139,7 +167,14 @@ function ToolbarButton({
   )
 }
 
-export function StudentWriteEditor({ assessment }: { assessment: WriteAssessment }) {
+export function StudentWriteEditor({
+  assessment,
+  options,
+}: {
+  assessment: WriteAssessment
+  /** The student's other written assessments, for the compact header picker. */
+  options: AssessmentPickerOption[]
+}) {
   const router = useRouter()
   const readOnly = assessment.submissionState === "graded"
 
@@ -168,10 +203,10 @@ export function StudentWriteEditor({ assessment }: { assessment: WriteAssessment
       editorProps: {
         attributes: {
           class:
-            "rich-editor min-h-64 w-full rounded-md border border-border bg-background px-3 py-2 text-sm focus:outline-none " +
-            "[&_p]:my-1 [&_ul]:my-1 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:my-1 [&_ol]:list-decimal [&_ol]:pl-5 " +
-            "[&_h1]:mt-3 [&_h1]:text-lg [&_h1]:font-semibold [&_h2]:mt-3 [&_h2]:text-base [&_h2]:font-semibold " +
-            "[&_h3]:mt-2 [&_h3]:font-semibold [&_blockquote]:border-l-2 [&_blockquote]:border-primary/40 [&_blockquote]:pl-3 " +
+            "rich-editor min-h-full w-full px-4 py-3 text-base leading-7 focus:outline-none " +
+            "[&_p]:my-2 [&_ul]:my-2 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:my-2 [&_ol]:list-decimal [&_ol]:pl-5 " +
+            "[&_h1]:mt-4 [&_h1]:text-xl [&_h1]:font-semibold [&_h2]:mt-3 [&_h2]:text-lg [&_h2]:font-semibold " +
+            "[&_h3]:mt-3 [&_h3]:text-base [&_h3]:font-semibold [&_blockquote]:border-l-2 [&_blockquote]:border-primary/40 [&_blockquote]:pl-3 " +
             "[&_pre]:rounded [&_pre]:bg-muted [&_pre]:p-2 [&_pre]:font-mono [&_pre]:text-xs " +
             "[&_table]:my-2 [&_table]:w-full [&_table]:border-collapse [&_th]:border [&_th]:border-border [&_th]:px-2 " +
             "[&_td]:border [&_td]:border-border [&_td]:px-2 [&_td]:py-1",
@@ -281,8 +316,135 @@ export function StudentWriteEditor({ assessment }: { assessment: WriteAssessment
     editor.chain().focus().extendMarkRange("link").setLink({ href: url.trim() }).run()
   }
 
+  const toolbar = !readOnly ? (
+    <div className="flex flex-wrap items-center gap-1.5" role="toolbar" aria-label="Formatting">
+      <ToolbarButton
+        label="Bold"
+        active={stats.bold}
+        onClick={() => editor?.chain().focus().toggleBold().run()}
+      >
+        <Bold className="size-4" />
+      </ToolbarButton>
+      <ToolbarButton
+        label="Italic"
+        active={stats.italic}
+        onClick={() => editor?.chain().focus().toggleItalic().run()}
+      >
+        <Italic className="size-4" />
+      </ToolbarButton>
+      <ToolbarButton
+        label="Underline"
+        active={stats.underline}
+        onClick={() => editor?.chain().focus().toggleUnderline().run()}
+      >
+        <Underline className="size-4" />
+      </ToolbarButton>
+      <ToolbarButton
+        label="Strikethrough"
+        active={stats.strike}
+        onClick={() => editor?.chain().focus().toggleStrike().run()}
+      >
+        <Strikethrough className="size-4" />
+      </ToolbarButton>
+      <span className="mx-1 h-5 w-px bg-border" aria-hidden />
+      <ToolbarButton
+        label="Heading 1"
+        active={stats.heading1}
+        onClick={() => editor?.chain().focus().toggleHeading({ level: 1 }).run()}
+      >
+        <Heading1 className="size-4" />
+      </ToolbarButton>
+      <ToolbarButton
+        label="Heading 2"
+        active={stats.heading2}
+        onClick={() => editor?.chain().focus().toggleHeading({ level: 2 }).run()}
+      >
+        <Heading2 className="size-4" />
+      </ToolbarButton>
+      <span className="mx-1 h-5 w-px bg-border" aria-hidden />
+      <ToolbarButton
+        label="Bullet list"
+        active={stats.bulletList}
+        onClick={() => editor?.chain().focus().toggleBulletList().run()}
+      >
+        <List className="size-4" />
+      </ToolbarButton>
+      <ToolbarButton
+        label="Numbered list"
+        active={stats.orderedList}
+        onClick={() => editor?.chain().focus().toggleOrderedList().run()}
+      >
+        <ListOrdered className="size-4" />
+      </ToolbarButton>
+      <ToolbarButton
+        label="Quote"
+        active={stats.blockquote}
+        onClick={() => editor?.chain().focus().toggleBlockquote().run()}
+      >
+        <Quote className="size-4" />
+      </ToolbarButton>
+      <ToolbarButton
+        label="Code block"
+        active={stats.codeBlock}
+        onClick={() => editor?.chain().focus().toggleCodeBlock().run()}
+      >
+        <Code className="size-4" />
+      </ToolbarButton>
+      <ToolbarButton label="Insert link" onClick={setLink}>
+        <Link2 className="size-4" />
+      </ToolbarButton>
+      <ToolbarButton
+        label="Insert table"
+        onClick={() =>
+          editor?.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()
+        }
+      >
+        <Table className="size-4" />
+      </ToolbarButton>
+      <span className="mx-1 h-5 w-px bg-border" aria-hidden />
+      <ToolbarButton
+        label="Undo"
+        disabled={!stats.canUndo}
+        onClick={() => editor?.chain().focus().undo().run()}
+      >
+        <Undo2 className="size-4" />
+      </ToolbarButton>
+      <ToolbarButton
+        label="Redo"
+        disabled={!stats.canRedo}
+        onClick={() => editor?.chain().focus().redo().run()}
+      >
+        <Redo2 className="size-4" />
+      </ToolbarButton>
+    </div>
+  ) : null
+
   return (
-    <div className="space-y-3">
+    <div className="flex min-h-0 flex-1 flex-col gap-3">
+      {/* Compact header: title, picker, submission state. The old "Select an
+          assessment" card and the long page description are gone. */}
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+        <div className="min-w-0">
+          <p className="text-xs font-semibold tracking-wider text-muted-foreground uppercase">
+            Write
+          </p>
+          <h1 className="truncate text-lg font-semibold tracking-tight">{assessment.title}</h1>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <AssessmentPicker
+            value={assessment.id}
+            options={options}
+            basePath="/student/write"
+            label="Select an assessment"
+          />
+          <StatusPill
+            status={SUBMISSION_STATE_TO_STATUS[assessment.submissionState]}
+            label={SUBMISSION_STATE_LABEL[assessment.submissionState]}
+            dot
+          />
+        </div>
+      </div>
+
       {message && (
         <div
           role="status"
@@ -300,180 +462,142 @@ export function StudentWriteEditor({ assessment }: { assessment: WriteAssessment
         </div>
       )}
 
-      {assessment.submissionBlockedReason && (
-        <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-          {assessment.submissionBlockedReason}
-        </div>
-      )}
+      <EditorWorkspace
+        leftLabel="Assessment brief"
+        left={
+          <div className="space-y-5">
+            <CollapsibleSection title="Details" icon={FileText}>
+              <KeyValueList
+                className="text-base [&_dd]:text-base [&_dt]:text-base"
+                items={[
+                  {
+                    id: "course",
+                    label: "Course",
+                    value: `${assessment.courseCode} · ${assessment.courseName}`,
+                  },
+                  { id: "class", label: "Class", value: assessment.className },
+                  {
+                    id: "due",
+                    label: "Due",
+                    value: (
+                      <span className="font-mono tabular-nums">
+                        {formatDateTime(assessment.dueDate)}
+                      </span>
+                    ),
+                  },
+                  {
+                    id: "marks",
+                    label: "Marks",
+                    value: (
+                      <span className="font-mono tabular-nums">{assessment.maxMarks} marks</span>
+                    ),
+                  },
+                ]}
+              />
+            </CollapsibleSection>
 
-      {!readOnly && (
-        <div className="flex flex-wrap items-center gap-1.5" role="toolbar" aria-label="Formatting">
-          <ToolbarButton
-            label="Bold"
-            active={stats.bold}
-            onClick={() => editor?.chain().focus().toggleBold().run()}
-          >
-            <Bold className="size-4" />
-          </ToolbarButton>
-          <ToolbarButton
-            label="Italic"
-            active={stats.italic}
-            onClick={() => editor?.chain().focus().toggleItalic().run()}
-          >
-            <Italic className="size-4" />
-          </ToolbarButton>
-          <ToolbarButton
-            label="Underline"
-            active={stats.underline}
-            onClick={() => editor?.chain().focus().toggleUnderline().run()}
-          >
-            <Underline className="size-4" />
-          </ToolbarButton>
-          <ToolbarButton
-            label="Strikethrough"
-            active={stats.strike}
-            onClick={() => editor?.chain().focus().toggleStrike().run()}
-          >
-            <Strikethrough className="size-4" />
-          </ToolbarButton>
-          <span className="mx-1 h-5 w-px bg-border" aria-hidden />
-          <ToolbarButton
-            label="Heading 1"
-            active={stats.heading1}
-            onClick={() => editor?.chain().focus().toggleHeading({ level: 1 }).run()}
-          >
-            <Heading1 className="size-4" />
-          </ToolbarButton>
-          <ToolbarButton
-            label="Heading 2"
-            active={stats.heading2}
-            onClick={() => editor?.chain().focus().toggleHeading({ level: 2 }).run()}
-          >
-            <Heading2 className="size-4" />
-          </ToolbarButton>
-          <span className="mx-1 h-5 w-px bg-border" aria-hidden />
-          <ToolbarButton
-            label="Bullet list"
-            active={stats.bulletList}
-            onClick={() => editor?.chain().focus().toggleBulletList().run()}
-          >
-            <List className="size-4" />
-          </ToolbarButton>
-          <ToolbarButton
-            label="Numbered list"
-            active={stats.orderedList}
-            onClick={() => editor?.chain().focus().toggleOrderedList().run()}
-          >
-            <ListOrdered className="size-4" />
-          </ToolbarButton>
-          <ToolbarButton
-            label="Quote"
-            active={stats.blockquote}
-            onClick={() => editor?.chain().focus().toggleBlockquote().run()}
-          >
-            <Quote className="size-4" />
-          </ToolbarButton>
-          <ToolbarButton
-            label="Code block"
-            active={stats.codeBlock}
-            onClick={() => editor?.chain().focus().toggleCodeBlock().run()}
-          >
-            <Code className="size-4" />
-          </ToolbarButton>
-          <ToolbarButton label="Insert link" onClick={setLink}>
-            <Link2 className="size-4" />
-          </ToolbarButton>
-          <ToolbarButton
-            label="Insert table"
-            onClick={() =>
-              editor?.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()
-            }
-          >
-            <Table className="size-4" />
-          </ToolbarButton>
-          <span className="mx-1 h-5 w-px bg-border" aria-hidden />
-          <ToolbarButton
-            label="Undo"
-            disabled={!stats.canUndo}
-            onClick={() => editor?.chain().focus().undo().run()}
-          >
-            <Undo2 className="size-4" />
-          </ToolbarButton>
-          <ToolbarButton
-            label="Redo"
-            disabled={!stats.canRedo}
-            onClick={() => editor?.chain().focus().redo().run()}
-          >
-            <Redo2 className="size-4" />
-          </ToolbarButton>
-        </div>
-      )}
+            <Separator />
 
-      <EditorContent editor={editor} />
+            <CollapsibleSection title="Submission" icon={CircleCheck}>
+              <div className="max-w-[65ch] space-y-3">
+                <StatusPill
+                  status={SUBMISSION_STATE_TO_STATUS[assessment.submissionState]}
+                  label={SUBMISSION_STATE_LABEL[assessment.submissionState]}
+                  dot
+                />
+                {readOnly ? (
+                  <p className="text-base leading-7 text-muted-foreground">
+                    This submission has been graded and can no longer be changed.
+                  </p>
+                ) : (
+                  <p className="text-base leading-7 text-muted-foreground">
+                    Save a draft as you work. Uploading a PDF, DOCX, TXT, or MD file extracts its
+                    text into the editor at your cursor — review it before saving.
+                  </p>
+                )}
+                {assessment.submissionBlockedReason && (
+                  <p role="alert" className="text-base leading-7 text-destructive">
+                    {assessment.submissionBlockedReason}
+                  </p>
+                )}
+              </div>
+            </CollapsibleSection>
+          </div>
+        }
+        right={
+          <div className="flex min-h-0 flex-1 flex-col gap-3">
+            {toolbar}
 
-      <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
-        <span>
-          {stats.words} word{stats.words === 1 ? "" : "s"}
-        </span>
-        <span className={overLimit ? "font-medium text-destructive" : undefined}>
-          {stats.characters}/{TEXT_LIMIT} characters
-        </span>
-      </div>
+            <div className="flex h-[60vh] min-h-0 flex-col overflow-hidden rounded-lg border border-border bg-card md:h-auto md:flex-1">
+              <EditorContent editor={editor} className="min-h-0 flex-1 overflow-y-auto" />
+            </div>
 
-      {readOnly ? (
-        <p className="rounded-md border border-border/70 bg-muted/20 px-3 py-2 text-sm text-muted-foreground">
-          This submission has been graded and can no longer be changed.
-        </p>
-      ) : (
-        <div className="flex flex-wrap items-center gap-2">
-          <input
-            ref={fileInput}
-            type="file"
-            accept=".pdf,.docx,.txt,.md"
-            className="hidden"
-            onChange={(event) => {
-              const file = event.target.files?.[0]
-              if (file) void upload(file)
-            }}
-          />
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            disabled={uploading || busy}
-            onClick={() => fileInput.current?.click()}
-          >
-            {uploading ? (
-              <Loader2 className="size-4 animate-spin" />
+            <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-muted-foreground">
+              <span>
+                {stats.words} word{stats.words === 1 ? "" : "s"}
+              </span>
+              <span className={overLimit ? "font-medium text-destructive" : undefined}>
+                {stats.characters}/{TEXT_LIMIT} characters
+              </span>
+            </div>
+
+            {readOnly ? (
+              <p className="rounded-md border border-border/70 bg-muted/20 px-3 py-2 text-sm text-muted-foreground">
+                This submission has been graded and can no longer be changed.
+              </p>
             ) : (
-              <Upload className="size-4" />
+              <div className="flex flex-wrap items-center gap-2">
+                <input
+                  ref={fileInput}
+                  type="file"
+                  accept=".pdf,.docx,.txt,.md"
+                  className="hidden"
+                  onChange={(event) => {
+                    const file = event.target.files?.[0]
+                    if (file) void upload(file)
+                  }}
+                />
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  disabled={uploading || busy}
+                  onClick={() => fileInput.current?.click()}
+                >
+                  {uploading ? (
+                    <Loader2 className="size-4 animate-spin" />
+                  ) : (
+                    <Upload className="size-4" />
+                  )}
+                  {uploading ? "Extracting…" : "Upload PDF, DOCX, TXT, or MD"}
+                </Button>
+
+                <span className="mx-1 h-5 w-px bg-border" aria-hidden />
+
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  disabled={busy || !draftAllowed || blocked}
+                  onClick={() => void save("saveDraft")}
+                >
+                  <Save className="size-4" />
+                  Save draft
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  disabled={busy || submitAction === null || blocked || overLimit}
+                  onClick={() => void save(submitAction === "resubmit" ? "resubmit" : "submit")}
+                >
+                  <Send className="size-4" />
+                  {submitAction === "resubmit" ? "Resubmit" : "Submit"}
+                </Button>
+              </div>
             )}
-            {uploading ? "Extracting…" : "Upload PDF, DOCX, TXT, or MD"}
-          </Button>
-
-          <span className="mx-1 h-5 w-px bg-border" aria-hidden />
-
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            disabled={busy || !draftAllowed || blocked}
-            onClick={() => void save("saveDraft")}
-          >
-            <Save className="size-4" />
-            Save draft
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            disabled={busy || submitAction === null || blocked || overLimit}
-            onClick={() => void save(submitAction === "resubmit" ? "resubmit" : "submit")}
-          >
-            <Send className="size-4" />
-            {submitAction === "resubmit" ? "Resubmit" : "Submit"}
-          </Button>
-        </div>
-      )}
+          </div>
+        }
+      />
     </div>
   )
 }

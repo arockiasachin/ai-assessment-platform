@@ -52,6 +52,19 @@ type AppShellProps = {
   mockUsers?: Partial<Record<MockupRole, TopBarUser & { roleTone: StatusKey }>>
   /** Mockup-only notifications, supplied by the mockup layout. Empty in app scope. */
   notifications?: TopBarNotification[]
+  /**
+   * Content width.
+   *
+   * `"default"` (the default) keeps the historical `mx-auto max-w-7xl` cap, so
+   * every existing page is byte-identical. `"full"` drops the cap for
+   * full-width workspaces (the code and writing editors) and additionally turns
+   * the main region into a height-capable flex column: on desktop the shell is
+   * pinned to the viewport and `main` scrolls, so an editor page can occupy the
+   * remaining height without hard-coding the top bar's 3.5rem. Below `md` the
+   * height containment does not apply and the page scrolls normally, which is
+   * what lets the editor panes stack.
+   */
+  width?: "default" | "full"
 }
 
 /**
@@ -72,6 +85,7 @@ export function AppShell({
   user,
   mockUsers,
   notifications,
+  width = "default",
 }: AppShellProps) {
   const pathname = usePathname()
   const role = roleProp ?? roleFromPathname(pathname, scope) ?? defaultRole
@@ -80,6 +94,7 @@ export function AppShell({
   // page must keep them), so the prefix follows the scope.
   const mainId = scope === "mockup" ? "mockup-main" : "app-main"
   const sidebarId = scope === "mockup" ? "mockup-sidebar" : "app-sidebar"
+  const isFullWidth = width === "full"
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -90,7 +105,7 @@ export function AppShell({
         Skip to main content
       </a>
 
-      <div className="md:flex">
+      <div className={cn("md:flex", isFullWidth && "md:h-screen md:min-h-0")}>
         <aside
           id={sidebarId}
           aria-label="Workspace navigation"
@@ -146,7 +161,7 @@ export function AppShell({
           </div>
         </aside>
 
-        <div className="flex min-w-0 flex-1 flex-col">
+        <div className={cn("flex min-w-0 flex-1 flex-col", isFullWidth && "min-h-0")}>
           <TopBar
             role={role}
             scope={scope}
@@ -154,8 +169,21 @@ export function AppShell({
             mockUsers={mockUsers}
             notifications={notifications}
           />
-          <main id={mainId} className="flex-1 px-4 py-6 sm:px-6 lg:px-8">
-            <div className="mx-auto w-full max-w-7xl">{children}</div>
+          <main
+            id={mainId}
+            className={cn(
+              "flex-1 px-4 py-6 sm:px-6 lg:px-8",
+              isFullWidth && "flex min-h-0 flex-col overflow-y-auto",
+            )}
+          >
+            <div
+              className={cn(
+                "w-full",
+                isFullWidth ? "flex min-h-0 flex-1 flex-col" : "mx-auto max-w-7xl",
+              )}
+            >
+              {children}
+            </div>
           </main>
         </div>
       </div>

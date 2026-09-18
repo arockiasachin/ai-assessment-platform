@@ -3,27 +3,44 @@
 import { useState } from "react"
 import { useRouter } from "next/navigation"
 import dynamic from "next/dynamic"
-import { Code2, Loader2, Play, Send } from "lucide-react"
+import {
+  BookOpenText,
+  CircleCheck,
+  Code2,
+  History,
+  Info,
+  Loader2,
+  Play,
+  PlayCircle,
+  Send,
+} from "lucide-react"
 
+import { AssessmentPicker, type AssessmentPickerOption } from "@/components/assessment-picker"
+import { CollapsibleSection } from "@/components/collapsible-section"
+import { EditorWorkspace } from "@/components/editor-workspace"
+import { TaskBrief } from "@/components/task-brief"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { CodeBlock } from "@/components/ui/code-block"
-import { MetricRow } from "@/components/ui/metric-row"
+import { EmptyState } from "@/components/ui/empty-state"
+import { KeyValueList, MetricRow } from "@/components/ui/metric-row"
+import { Separator } from "@/components/ui/separator"
 import { StatusPill } from "@/components/ui/status-pill"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import type {
   CodeRunResult,
   StudentCodeTask,
   TestResult,
   TestRunResponse,
 } from "@/lib/contracts/code-eval"
-import { formatDuration, trimNumber } from "@/lib/format"
+import { formatDate, formatDateTime, formatDuration, trimNumber } from "@/lib/format"
 import { TEST_RUN_STATE_TO_STATUS } from "@/lib/labels"
 import { cn } from "@/lib/utils"
 
 /**
- * The code editor island — the only client component on the page.
+ * The code workspace island — the only client component on the page.
  *
- * It owns three things the Server Component cannot:
+ * It owns what the Server Component cannot:
  *
  *  - the **Monaco editor**, lazily imported with `next/dynamic`/`ssr: false` so
  *    the (large) editor never enters the route's initial bundle and is never
@@ -34,8 +51,13 @@ import { cn } from "@/lib/utils"
  *    `/api/student/code-submissions`, which runs every active case and consumes
  *    a graded attempt. Keeping them distinct in the UI is what makes "free" and
  *    "counted" legible;
- *  - the **output panel** (Console / Test cases / Summary), rendered from either
- *    result without pretending a free run is evidence.
+ *  - the **workspace layout** — the draggable split and the docked output panel.
+ *
+ * The per-test results table and the run-history table are **rendered on the
+ * server** and passed in as `ReactNode` props; the island only chooses which
+ * panel is visible. That keeps the heavy tables and their column definitions
+ * out of the client bundle while still letting the student read them beside
+ * their code.
  *
  * The starter code is Monaco's `defaultValue`, not React state: the student must
  * type over it for `source` to become non-empty, so unchanged starter code can
@@ -45,13 +67,27 @@ import { cn } from "@/lib/utils"
 const MonacoEditor = dynamic(() => import("@monaco-editor/react").then((mod) => mod.default), {
   ssr: false,
   loading: () => (
-    <div className="flex h-64 items-center justify-center rounded-md border border-input bg-muted/40 text-sm text-muted-foreground">
+    <div className="flex h-full min-h-64 items-center justify-center text-sm text-muted-foreground">
       <Loader2 className="mr-2 size-4 animate-spin" /> Loading editor…
     </div>
   ),
 })
 
-type Props = { task: StudentCodeTask }
+type Props = {
+  task: StudentCodeTask
+  /** How many runs the student has recorded for this task. */
+  runsCount: number
+  /** The student's most recent run's state and time, or `null` if none. */
+  latestRun: { status: TestRunResponse["status"]; at: string } | null
+  /** The student's other code tasks, for the compact header picker. */
+  taskOptions: AssessmentPickerOption[]
+  /** Server-rendered per-test results for the evidence run. */
+  testResultPanel: React.ReactNode
+  /** Server-rendered run history table. */
+  submissionsPanel: React.ReactNode
+  /** Count shown on the "Test Result" tab. */
+  testResultCount: number
+}
 
 type Busy = "run" | "submit" | null
 
@@ -77,13 +113,17 @@ type PanelData = {
   memoryExceeded: boolean
 }
 
-const TABS = ["console", "cases", "summary"] as const
-type Tab = (typeof TABS)[number]
+const OUTPUT_TABS = ["testcase", "test-result", "submissions"] as const
+type OutputTab = (typeof OUTPUT_TABS)[number]
 
-const TAB_LABELS: Record<Tab, string> = {
-  console: "Console",
-  cases: "Test cases",
-  summary: "Summary",
+const OUTPUT_TAB_LABELS: Record<OutputTab, string> = {
+  testcase: "Testcase",
+  "test-result": "Test Result",
+  submissions: "Submissions",
+}
+
+function languageLabel(language: "python" | "javascript"): string {
+  return language === "javascript" ? "Node.js 22" : "Python 3.12"
 }
 
 /**
@@ -94,7 +134,7 @@ const TAB_LABELS: Record<Tab, string> = {
  */
 function CaseDetail({ result }: { result: TestResult }) {
   return (
-    <li className="rounded-md border border-border/70 bg-muted/20 p-2.5">
+    <li className="rounded-md border border-border/70 bg-muted/20 p-3">
       <div className="flex flex-wrap items-center gap-2">
         <StatusPill status={result.passed ? "passed" : "failed"} dot />
         <span className="text-sm font-medium">{result.name}</span>
@@ -155,7 +195,12 @@ function CaseDetail({ result }: { result: TestResult }) {
   )
 }
 
-function RunPanel({
+/**
+ * The free-run / submit output. All of its content is one scrollable column:
+ * the bottom panel's tabs are the only tab row, so this cannot nest a second
+ * one and hide output behind two clicks.
+ */
+function RunOutput({
   data,
   kind,
   hiddenNotRun,
@@ -165,217 +210,248 @@ function RunPanel({
   /** Free-run only: hidden cases exist but were not executed by this path. */
   hiddenNotRun: number
 }) {
-  const [tab, setTab] = useState<Tab>("cases")
-
   const visible = data.results.filter((result) => result.isHidden !== true)
   const hidden = data.results.filter((result) => result.isHidden === true)
   const hiddenPassed = hidden.filter((result) => result.passed).length
   const casesWithOutput = visible.filter((result) => result.stdout || result.stderr)
 
   return (
-    <div className="rounded-lg border border-border">
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-3 py-2">
-        <div className="flex flex-wrap items-center gap-2">
-          <StatusPill status={TEST_RUN_STATE_TO_STATUS[data.status]} dot />
-          <span className="text-sm">
-            <span className="font-mono tabular-nums">{data.passedCount}</span> /{" "}
-            <span className="font-mono tabular-nums">{data.totalCount}</span> cases passed
-          </span>
-          <Badge variant="secondary">
-            {kind === "run" ? "Sample run · not counted" : "Submission · counted"}
-          </Badge>
-        </div>
-        <span className="font-mono text-xs text-muted-foreground">
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center gap-2">
+        <StatusPill status={TEST_RUN_STATE_TO_STATUS[data.status]} dot />
+        <span className="text-sm">
+          <span className="font-mono tabular-nums">{data.passedCount}</span> /{" "}
+          <span className="font-mono tabular-nums">{data.totalCount}</span> cases passed
+        </span>
+        <Badge variant="secondary">
+          {kind === "run" ? "Sample run · not counted" : "Submission · counted"}
+        </Badge>
+        <span className="ml-auto font-mono text-xs text-muted-foreground">
           {formatDuration(data.runtimeMs)}
         </span>
       </div>
 
-      <div
-        role="tablist"
-        aria-label="Run output"
-        className="flex gap-1 border-b border-border px-2"
-      >
-        {TABS.map((value) => (
-          <button
-            key={value}
-            type="button"
-            role="tab"
-            aria-selected={tab === value}
-            onClick={() => setTab(value)}
-            className={cn(
-              "border-b-2 px-2.5 py-2 text-sm transition-colors",
-              tab === value
-                ? "border-primary font-medium text-foreground"
-                : "border-transparent text-muted-foreground hover:text-foreground",
-            )}
-          >
-            {TAB_LABELS[value]}
-            {value === "cases" && data.results.length > 0 && (
-              <span className="ml-1.5 font-mono text-xs text-muted-foreground">
-                {visible.length}
-              </span>
-            )}
-            {value === "summary" && hidden.length + hiddenNotRun > 0 && (
-              <span className="ml-1.5 font-mono text-xs text-muted-foreground">
-                {hidden.length + hiddenNotRun} hidden
-              </span>
-            )}
-          </button>
-        ))}
-      </div>
+      <dl className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+        <MetricRow
+          label="Points"
+          value={
+            <span className="font-mono tabular-nums">
+              {trimNumber(data.earnedPoints)} / {trimNumber(data.maxPoints)}
+            </span>
+          }
+        />
+        <MetricRow
+          label="Runtime"
+          value={<span className="font-mono">{formatDuration(data.runtimeMs)}</span>}
+        />
+        <MetricRow
+          label="Coverage"
+          value={
+            <span className="font-mono tabular-nums">
+              {data.coverage === null ? "—" : `${Math.round(data.coverage * 100)}%`}
+            </span>
+          }
+        />
+        <MetricRow
+          label="Hidden cases"
+          value={
+            <span className="font-mono tabular-nums">
+              {hidden.length + hiddenNotRun}
+              {hidden.length > 0 ? ` (${hiddenPassed} passed)` : ""}
+            </span>
+          }
+        />
+      </dl>
 
-      <div role="tabpanel" className="p-3">
-        {tab === "console" && (
-          <div className="space-y-3">
-            <MetricRow
-              label="Runtime"
-              value={<span className="font-mono">{formatDuration(data.runtimeMs)}</span>}
-            />
-            {data.timedOut && (
-              <p className="text-sm text-destructive">
-                The run exceeded its wall-clock limit and was killed.
-              </p>
-            )}
-            {data.memoryExceeded && (
-              <p className="text-sm text-destructive">
-                The run exceeded its memory limit and was killed.
-              </p>
-            )}
-            {data.stdout && (
-              <div>
-                <p className="mb-1 text-xs font-medium text-muted-foreground">stdout</p>
-                <CodeBlock maxHeight="md" wrap>
-                  {data.stdout}
-                </CodeBlock>
-              </div>
-            )}
-            {data.stderr && (
-              <div>
-                <p className="mb-1 text-xs font-medium text-muted-foreground">stderr</p>
-                <CodeBlock maxHeight="md" wrap>
-                  {data.stderr}
-                </CodeBlock>
-              </div>
-            )}
-            {casesWithOutput.map((result) => (
-              <div key={result.testCaseId}>
-                <p className="mb-1 text-xs font-medium text-muted-foreground">{result.name}</p>
-                {result.stdout && (
-                  <CodeBlock dense maxHeight="sm" wrap className="mb-1">
-                    {result.stdout}
-                  </CodeBlock>
-                )}
-                {result.stderr && (
-                  <CodeBlock dense maxHeight="sm" wrap>
-                    {result.stderr}
-                  </CodeBlock>
-                )}
-              </div>
+      {(data.timedOut || data.memoryExceeded) && (
+        <p className="text-sm text-destructive">
+          {data.timedOut
+            ? "The run exceeded its wall-clock limit and was killed."
+            : "The run exceeded its memory limit and was killed."}
+        </p>
+      )}
+
+      {(data.stdout || data.stderr) && (
+        <div className="space-y-2">
+          <h3 className="text-sm font-semibold">Console output</h3>
+          {data.stdout && (
+            <div>
+              <p className="mb-1 text-xs font-medium text-muted-foreground">stdout</p>
+              <CodeBlock maxHeight="md" wrap>
+                {data.stdout}
+              </CodeBlock>
+            </div>
+          )}
+          {data.stderr && (
+            <div>
+              <p className="mb-1 text-xs font-medium text-muted-foreground">stderr</p>
+              <CodeBlock maxHeight="md" wrap>
+                {data.stderr}
+              </CodeBlock>
+            </div>
+          )}
+        </div>
+      )}
+
+      <div className="space-y-2">
+        <h3 className="text-sm font-semibold">
+          {visible.length === 1 ? "Sample case" : "Sample cases"}
+        </h3>
+        {visible.length === 0 ? (
+          <p className="text-sm text-muted-foreground">No visible sample cases ran.</p>
+        ) : (
+          <ul className="grid gap-2">
+            {visible.map((result) => (
+              <CaseDetail key={result.testCaseId} result={result} />
             ))}
-            {!data.stdout && !data.stderr && casesWithOutput.length === 0 && (
-              <p className="text-sm text-muted-foreground">No console output was captured.</p>
-            )}
-          </div>
+          </ul>
         )}
 
-        {tab === "cases" && (
-          <div className="space-y-3">
-            {visible.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No visible sample cases ran.</p>
-            ) : (
-              <ul className="grid gap-2">
-                {visible.map((result) => (
-                  <CaseDetail key={result.testCaseId} result={result} />
-                ))}
-              </ul>
-            )}
-
-            {hidden.length > 0 && (
-              <p className="rounded-md border border-dashed border-border p-2.5 text-sm text-muted-foreground">
-                <span className="font-mono tabular-nums">{hiddenPassed}</span> of{" "}
-                <span className="font-mono tabular-nums">{hidden.length}</span> hidden cases passed.
-                Hidden cases show only pass/fail — their input and expected output are not returned
-                to students.
-              </p>
-            )}
-            {hiddenNotRun > 0 && (
-              <p className="rounded-md border border-dashed border-border p-2.5 text-sm text-muted-foreground">
-                <span className="font-mono tabular-nums">{hiddenNotRun}</span> hidden{" "}
-                {hiddenNotRun === 1 ? "case is" : "cases are"} graded only on Submit and never run
-                by a sample run.
-              </p>
-            )}
-          </div>
+        {hidden.length > 0 && (
+          <p className="rounded-md border border-dashed border-border p-2.5 text-sm text-muted-foreground">
+            <span className="font-mono tabular-nums">{hiddenPassed}</span> of{" "}
+            <span className="font-mono tabular-nums">{hidden.length}</span> hidden cases passed.
+            Hidden cases show only pass/fail — their input and expected output are not returned to
+            students.
+          </p>
         )}
-
-        {tab === "summary" && (
-          <dl className="grid gap-2 sm:grid-cols-2">
-            <MetricRow
-              label="Cases passed"
-              value={
-                <span className="font-mono tabular-nums">
-                  {data.passedCount} / {data.totalCount}
-                </span>
-              }
-            />
-            <MetricRow
-              label="Points"
-              value={
-                <span className="font-mono tabular-nums">
-                  {trimNumber(data.earnedPoints)} / {trimNumber(data.maxPoints)}
-                </span>
-              }
-            />
-            <MetricRow
-              label="Runtime"
-              value={<span className="font-mono">{formatDuration(data.runtimeMs)}</span>}
-            />
-            <MetricRow
-              label="Coverage"
-              value={
-                <span className="font-mono tabular-nums">
-                  {data.coverage === null ? "—" : `${Math.round(data.coverage * 100)}%`}
-                </span>
-              }
-              hint="Cases the sandbox reported a result for"
-            />
-            <MetricRow
-              label="Visible sample cases"
-              value={<span className="font-mono tabular-nums">{visible.length}</span>}
-            />
-            <MetricRow
-              label="Hidden cases"
-              value={
-                <span className="font-mono tabular-nums">
-                  {hidden.length + hiddenNotRun}
-                  {hidden.length > 0 ? ` (${hiddenPassed} passed)` : ""}
-                </span>
-              }
-              hint={
-                hidden.length > 0
-                  ? "Pass/fail only; detail is never sent to students"
-                  : "Never run by a sample run; graded on Submit"
-              }
-            />
-          </dl>
+        {hiddenNotRun > 0 && (
+          <p className="rounded-md border border-dashed border-border p-2.5 text-sm text-muted-foreground">
+            <span className="font-mono tabular-nums">{hiddenNotRun}</span> hidden{" "}
+            {hiddenNotRun === 1 ? "case is" : "cases are"} graded only on Submit and never run by a
+            sample run.
+          </p>
         )}
       </div>
+
+      {casesWithOutput.length > 0 && (
+        <div className="space-y-2">
+          <h3 className="text-sm font-semibold">Captured case output</h3>
+          {casesWithOutput.map((result) => (
+            <div key={result.testCaseId}>
+              <p className="mb-1 text-xs font-medium text-muted-foreground">{result.name}</p>
+              {result.stdout && (
+                <CodeBlock dense maxHeight="sm" wrap className="mb-1">
+                  {result.stdout}
+                </CodeBlock>
+              )}
+              {result.stderr && (
+                <CodeBlock dense maxHeight="sm" wrap>
+                  {result.stderr}
+                </CodeBlock>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {!data.stdout && !data.stderr && casesWithOutput.length === 0 && visible.length > 0 && (
+        <p className="text-sm text-muted-foreground">No console output was captured.</p>
+      )}
     </div>
   )
 }
 
-export function StudentCodeSubmissionEditor({ task }: Props) {
+/**
+ * The docked output panel: the run result the student just produced, plus the
+ * server-rendered per-test results and run history.
+ */
+function CodeOutputPanel({
+  tab,
+  onTabChange,
+  runOutput,
+  testResultPanel,
+  submissionsPanel,
+  testResultCount,
+  submissionsCount,
+  className,
+}: {
+  tab: OutputTab
+  onTabChange: (tab: OutputTab) => void
+  runOutput: React.ReactNode
+  testResultPanel: React.ReactNode
+  submissionsPanel: React.ReactNode
+  testResultCount: number
+  submissionsCount: number
+  className?: string
+}) {
+  const counts: Partial<Record<OutputTab, number>> = {
+    "test-result": testResultCount,
+    submissions: submissionsCount,
+  }
+
+  return (
+    <Tabs
+      value={tab}
+      onValueChange={(value) => onTabChange(value as OutputTab)}
+      className={cn(
+        "min-h-0 flex-col gap-0 overflow-hidden rounded-lg border border-border bg-card",
+        className,
+      )}
+    >
+      <div className="shrink-0 border-b border-border px-2">
+        <TabsList
+          variant="line"
+          aria-label="Run output and history"
+          className="w-full justify-start"
+        >
+          {OUTPUT_TABS.map((value) => {
+            const count = counts[value]
+            return (
+              <TabsTrigger key={value} value={value} className="flex-none px-3">
+                {OUTPUT_TAB_LABELS[value]}
+                {typeof count === "number" && count > 0 && (
+                  <span className="ml-1.5 rounded-full bg-muted px-1.5 py-0.5 font-mono text-[0.65rem] tabular-nums text-muted-foreground">
+                    {count}
+                  </span>
+                )}
+              </TabsTrigger>
+            )
+          })}
+        </TabsList>
+      </div>
+
+      <TabsContent value="testcase" className="min-h-0 flex-1 overflow-y-auto p-3">
+        {runOutput ?? (
+          <EmptyState
+            icon={PlayCircle}
+            title="No run output yet"
+            description="Run the visible sample cases to see their input, expected output and your result here — or submit for a full run."
+          />
+        )}
+      </TabsContent>
+      <TabsContent value="test-result" className="min-h-0 flex-1 overflow-y-auto p-3">
+        {testResultPanel}
+      </TabsContent>
+      <TabsContent value="submissions" className="min-h-0 flex-1 overflow-y-auto p-3">
+        {submissionsPanel}
+      </TabsContent>
+    </Tabs>
+  )
+}
+
+export function StudentCodeSubmissionEditor({
+  task,
+  runsCount,
+  latestRun,
+  taskOptions,
+  testResultPanel,
+  submissionsPanel,
+  testResultCount,
+}: Props) {
   const router = useRouter()
   const [source, setSource] = useState("")
   const [busy, setBusy] = useState<Busy>(null)
   const [message, setMessage] = useState<string | null>(null)
   const [view, setView] = useState<RunView | null>(null)
+  const [outputTab, setOutputTab] = useState<OutputTab>("testcase")
 
   const hasSource = source.trim().length > 0
 
   async function runSamples() {
     setBusy("run")
     setMessage(null)
+    setOutputTab("testcase")
     try {
       const response = await fetch("/api/student/code-submissions/run", {
         method: "POST",
@@ -407,6 +483,7 @@ export function StudentCodeSubmissionEditor({ task }: Props) {
   async function submit() {
     setBusy("submit")
     setMessage(null)
+    setOutputTab("testcase")
     try {
       const response = await fetch("/api/student/code-submissions", {
         method: "POST",
@@ -424,7 +501,8 @@ export function StudentCodeSubmissionEditor({ task }: Props) {
         `Run complete: ${body.run.passedCount}/${body.run.totalCount} tests passed. ` +
           "Results are evidence for your teacher, not a published grade.",
       )
-      // The server owns the Runs/Results tabs, so re-render it to include this run.
+      // The server owns the Test Result / Submissions panels, so re-render it to
+      // include this run.
       router.refresh()
     } catch (caught) {
       setView({
@@ -437,23 +515,58 @@ export function StudentCodeSubmissionEditor({ task }: Props) {
     }
   }
 
+  const runOutput =
+    view?.kind === "run" ? (
+      <RunOutput data={view.result} kind="run" hiddenNotRun={view.result.hiddenCount} />
+    ) : view?.kind === "submit" ? (
+      <RunOutput data={view.run} kind="submit" hiddenNotRun={0} />
+    ) : null
+
   return (
-    <div className="grid gap-4">
-      <div className="space-y-0.5">
-        <MetricRow
-          label="Test cases in this task"
-          value={<span className="font-mono tabular-nums">{task.testCaseCount}</span>}
-          hint="Active cases only; drafts and hidden-case detail are never shown."
-        />
-        <MetricRow
-          label="Runs used"
-          value={
-            <span className="font-mono tabular-nums">
-              {task.submissionsUsed} / {task.maxSubmissions}
-            </span>
-          }
-          hint="Sample runs are free; only submissions count against the cap."
-        />
+    <div className="flex min-h-0 flex-1 flex-col gap-3">
+      {/* Compact header: title, picker, actions. The page-level description and
+          KPI tiles that used to sit here are gone; the metadata now lives as
+          labelled rows in the brief pane. */}
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+        <div className="min-w-0">
+          <p className="text-xs font-semibold tracking-wider text-muted-foreground uppercase">
+            Code submissions
+          </p>
+          <h1 className="truncate text-lg font-semibold tracking-tight">{task.assessmentTitle}</h1>
+        </div>
+        <div className="flex flex-wrap items-center gap-2 lg:justify-end">
+          <AssessmentPicker
+            value={task.assessmentId}
+            options={taskOptions}
+            basePath="/student/code-submissions"
+            label="Select a code task"
+          />
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={busy !== null || !hasSource}
+            onClick={() => void runSamples()}
+          >
+            {busy === "run" ? (
+              <Loader2 className="size-4 animate-spin" />
+            ) : (
+              <Play className="size-4" />
+            )}
+            <span className="ml-1">Run samples</span>
+          </Button>
+          <Button
+            size="sm"
+            disabled={busy !== null || !task.canSubmit || !hasSource}
+            onClick={() => void submit()}
+          >
+            {busy === "submit" ? (
+              <Loader2 className="size-4 animate-spin" />
+            ) : (
+              <Send className="size-4" />
+            )}
+            <span className="ml-1">Submit for evaluation</span>
+          </Button>
+        </div>
       </div>
 
       {!task.canSubmit && task.blockedReason && (
@@ -461,71 +574,6 @@ export function StudentCodeSubmissionEditor({ task }: Props) {
           {task.blockedReason}
         </p>
       )}
-
-      <div className="grid gap-1.5">
-        <div className="flex items-center gap-2">
-          <Code2 className="size-4 text-muted-foreground" aria-hidden />
-          <label htmlFor="student-code-source" className="text-sm font-medium">
-            Your solution
-          </label>
-        </div>
-        <p className="text-sm text-muted-foreground">
-          The starter code is shown until you type over it. <strong>Run samples</strong> executes
-          the visible sample cases only and costs nothing; <strong>Submit</strong> runs every active
-          case and uses one of your {task.maxSubmissions} submissions.
-        </p>
-        <div
-          id="student-code-source"
-          className="overflow-hidden rounded-md border border-input bg-background"
-        >
-          <MonacoEditor
-            height="16rem"
-            language={task.language}
-            defaultValue={task.starterCode ?? ""}
-            onChange={(value) => setSource(value ?? "")}
-            options={{
-              minimap: { enabled: false },
-              fontSize: 14,
-              tabSize: 4,
-              scrollBeyondLastLine: false,
-              automaticLayout: true,
-              wordWrap: "on",
-              readOnly: busy !== null,
-              ariaLabel: `Code submission for ${task.assessmentTitle}`,
-            }}
-          />
-        </div>
-      </div>
-
-      <div className="flex flex-wrap items-center gap-2">
-        <Button
-          variant="outline"
-          disabled={busy !== null || !hasSource}
-          onClick={() => void runSamples()}
-        >
-          {busy === "run" ? (
-            <Loader2 className="size-4 animate-spin" />
-          ) : (
-            <Play className="size-4" />
-          )}
-          <span className="ml-1">Run samples</span>
-        </Button>
-        <Button
-          disabled={busy !== null || !task.canSubmit || !hasSource}
-          onClick={() => void submit()}
-        >
-          {busy === "submit" ? (
-            <Loader2 className="size-4 animate-spin" />
-          ) : (
-            <Send className="size-4" />
-          )}
-          <span className="ml-1">Submit for evaluation</span>
-        </Button>
-        <Badge variant="secondary">
-          {task.submissionsUsed} / {task.maxSubmissions} submissions used
-        </Badge>
-      </div>
-
       {message && (
         <p role="status" className="text-sm text-emerald-700 dark:text-emerald-400">
           {message}
@@ -537,10 +585,150 @@ export function StudentCodeSubmissionEditor({ task }: Props) {
         </p>
       )}
 
-      {view?.kind === "run" && (
-        <RunPanel data={view.result} kind="run" hiddenNotRun={view.result.hiddenCount} />
-      )}
-      {view?.kind === "submit" && <RunPanel data={view.run} kind="submit" hiddenNotRun={0} />}
+      <EditorWorkspace
+        leftLabel="Task brief"
+        left={
+          <div className="space-y-5">
+            <CollapsibleSection title="Problem" icon={BookOpenText}>
+              <TaskBrief text={task.instructions} />
+            </CollapsibleSection>
+
+            <Separator />
+
+            <CollapsibleSection title="Details" icon={Info}>
+              <KeyValueList
+                className="text-base [&_dd]:text-base [&_dt]:text-base"
+                items={[
+                  {
+                    id: "language",
+                    label: "Language",
+                    value: <span className="font-mono">{languageLabel(task.language)}</span>,
+                  },
+                  {
+                    id: "due",
+                    label: "Due",
+                    value: (
+                      <span className="font-mono tabular-nums">{formatDate(task.dueDate)}</span>
+                    ),
+                  },
+                  {
+                    id: "marks",
+                    label: "Marks",
+                    value: <span className="font-mono tabular-nums">{task.maxMarks} points</span>,
+                    hint: "The sandbox reports evidence; the mark is published by your teacher.",
+                  },
+                  {
+                    id: "limits",
+                    label: "Limits",
+                    value: (
+                      <span className="font-mono tabular-nums">
+                        {formatDuration(task.timeLimitMs)} · {task.memoryLimitMb} MB
+                      </span>
+                    ),
+                  },
+                  {
+                    id: "cases",
+                    label: "Test cases",
+                    value: <span className="font-mono tabular-nums">{task.testCaseCount}</span>,
+                    hint: "Active cases only. Sample runs execute the visible cases.",
+                  },
+                  {
+                    id: "budget",
+                    label: "Submission budget",
+                    value: (
+                      <span className="font-mono tabular-nums">
+                        {task.submissionsUsed} / {task.maxSubmissions} runs used
+                      </span>
+                    ),
+                    hint: task.canSubmit
+                      ? "Sample runs are free; only submissions count against the cap."
+                      : (task.blockedReason ?? undefined),
+                  },
+                ]}
+              />
+            </CollapsibleSection>
+
+            <Separator />
+
+            <CollapsibleSection title="Submission history" icon={History}>
+              <dl className="space-y-0.5">
+                <MetricRow
+                  label="Latest run"
+                  value={
+                    latestRun === null ? (
+                      "—"
+                    ) : (
+                      <StatusPill status={TEST_RUN_STATE_TO_STATUS[latestRun.status]} dot />
+                    )
+                  }
+                  hint={latestRun === null ? "No run recorded yet" : formatDateTime(latestRun.at)}
+                />
+                <MetricRow
+                  label="Runs recorded"
+                  value={
+                    <span className="font-mono tabular-nums">
+                      {runsCount} / {task.maxSubmissions}
+                    </span>
+                  }
+                  hint="Sample runs are not recorded; submissions are."
+                />
+              </dl>
+            </CollapsibleSection>
+          </div>
+        }
+        right={
+          <div className="flex min-h-0 flex-1 flex-col gap-3">
+            <div className="flex h-[60vh] min-h-0 flex-col overflow-hidden rounded-lg border border-border bg-card md:h-auto md:flex-[3]">
+              <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border px-3 py-2">
+                <div className="flex items-center gap-2">
+                  <Code2 className="size-4 text-muted-foreground" aria-hidden="true" />
+                  <span className="text-sm font-medium">Your solution</span>
+                </div>
+                <span className="font-mono text-xs text-muted-foreground">
+                  {languageLabel(task.language)}
+                </span>
+              </div>
+              <div id="student-code-source" className="min-h-0 flex-1">
+                <MonacoEditor
+                  height="100%"
+                  language={task.language}
+                  defaultValue={task.starterCode ?? ""}
+                  onChange={(value) => setSource(value ?? "")}
+                  options={{
+                    minimap: { enabled: false },
+                    fontSize: 14,
+                    tabSize: 4,
+                    scrollBeyondLastLine: false,
+                    automaticLayout: true,
+                    wordWrap: "on",
+                    readOnly: busy !== null,
+                    ariaLabel: `Code submission for ${task.assessmentTitle}`,
+                  }}
+                />
+              </div>
+            </div>
+
+            <CodeOutputPanel
+              tab={outputTab}
+              onTabChange={setOutputTab}
+              runOutput={runOutput}
+              testResultPanel={testResultPanel}
+              submissionsPanel={submissionsPanel}
+              testResultCount={testResultCount}
+              submissionsCount={runsCount}
+              className="flex h-80 md:h-auto md:flex-[2]"
+            />
+          </div>
+        }
+      />
+
+      <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+        <CircleCheck className="size-4" aria-hidden="true" />
+        <span>
+          The starter code is shown until you type over it. Sample runs are free; each submit uses
+          one of your {task.maxSubmissions} submissions.
+        </span>
+      </div>
     </div>
   )
 }

@@ -1,20 +1,17 @@
 import type { Metadata } from "next"
-import Link from "next/link"
 import { redirect } from "next/navigation"
-import { CircleCheck, Gauge, PlayCircle, Terminal, Timer } from "lucide-react"
+import { PlayCircle, Terminal } from "lucide-react"
 
+import { type AssessmentPickerOption } from "@/components/assessment-picker"
 import { RoleGuard } from "@/components/role-guard"
 import { AppShell, PageHeader } from "@/components/shell"
 import { StudentCodeSubmissionEditor } from "@/components/student-code-submissions"
-import { buttonVariants } from "@/components/ui/button"
 import { CodeBlock } from "@/components/ui/code-block"
 import { DataTable, type Column } from "@/components/ui/data-table"
 import { EmptyState } from "@/components/ui/empty-state"
-import { KeyValueList, MetricRow } from "@/components/ui/metric-row"
-import { PageTabPanel, PageTabs } from "@/components/ui/page-tabs"
+import { MetricRow } from "@/components/ui/metric-row"
 import { ProgressBar } from "@/components/ui/progress-bar"
 import { SectionCard } from "@/components/ui/section-card"
-import { StatCard } from "@/components/ui/stat-card"
 import { StatusPill } from "@/components/ui/status-pill"
 import { getSessionUser } from "@/lib/auth"
 import {
@@ -25,16 +22,12 @@ import {
 } from "@/lib/code-eval"
 import type { TestResult, TestRunResponse } from "@/lib/contracts/code-eval"
 import { TEST_RUN_STATE_TO_STATUS } from "@/lib/labels"
-import { formatDate, formatDateTime, formatDuration, formatPercent, trimNumber } from "@/lib/format"
+import { formatDateTime, formatDuration, formatPercent, trimNumber } from "@/lib/format"
 import { initialsFromEmail, roleLabelFromRole } from "@/lib/user-identity"
 
 export const dynamic = "force-dynamic"
 
 export const metadata: Metadata = { title: "Code submissions" }
-
-function languageLabel(language: "python" | "javascript"): string {
-  return language === "javascript" ? "Node.js 22" : "Python 3.12"
-}
 
 /**
  * Per-test rows come from one of the student's **own** runs, never from a shared
@@ -218,34 +211,132 @@ const runColumns: Column<TestRunResponse>[] = [
 ]
 
 /**
+ * Per-test outcomes from the student's own latest run that recorded evidence.
+ * Rendered on the server and handed to the editor's bottom panel as a ReactNode,
+ * so the table and its columns never enter the client bundle.
+ */
+function TestResultPanel({ run }: { run: TestRunResponse | null }) {
+  if (run === null || run.results.length === 0) {
+    return (
+      <EmptyState
+        icon={Terminal}
+        title="No per-test evidence yet"
+        description={
+          run === null
+            ? "Submit your solution to start a sandboxed run; per-test outcomes appear here."
+            : `Run ${run.id} recorded no readable per-test results, so there is nothing to break down.`
+        }
+      />
+    )
+  }
+
+  return (
+    <div className="space-y-4">
+      {run.totalCount > 0 && (
+        <ProgressBar
+          value={run.passedCount}
+          max={run.totalCount}
+          label="Cases passing in this run"
+          valueText={`${run.passedCount} / ${run.totalCount}`}
+          tone={run.failedCount === 0 ? "success" : "warning"}
+        />
+      )}
+      <DataTable
+        caption="Per-test results from your latest run"
+        columns={resultColumns}
+        rows={run.results}
+        getRowId={(result) => result.testCaseId}
+        empty={
+          <EmptyState
+            size="sm"
+            title="No per-test results"
+            description="This run recorded no readable per-test evidence."
+          />
+        }
+      />
+    </div>
+  )
+}
+
+/** Every run the student has started, newest first, plus the best-run score. */
+function SubmissionsPanel({
+  runs,
+  bestScore,
+  maxMarks,
+  scoredRunCount,
+}: {
+  runs: TestRunResponse[]
+  bestScore: number | null
+  maxMarks: number
+  scoredRunCount: number
+}) {
+  if (runs.length === 0) {
+    return (
+      <EmptyState
+        icon={PlayCircle}
+        title="You have not run your code yet"
+        description="Submit your solution to see a run here."
+      />
+    )
+  }
+
+  return (
+    <div className="space-y-4">
+      <DataTable
+        caption="Your sandboxed test runs"
+        columns={runColumns}
+        rows={runs}
+        getRowId={(run) => run.id}
+        empty={<EmptyState size="sm" title="No runs" description="Nothing has run yet." />}
+      />
+      <MetricRow
+        label="Score from your best run"
+        value={
+          <span className="font-mono tabular-nums">
+            {bestScore === null ? "—" : `${bestScore} / ${maxMarks}`}
+          </span>
+        }
+        hint={
+          scoredRunCount === 0
+            ? "No run has recorded a test count yet"
+            : `Best of ${scoredRunCount} ${
+                scoredRunCount === 1 ? "run" : "runs"
+              } · evidence only, not a published mark`
+        }
+      />
+    </div>
+  )
+}
+
+/**
  * Student code submissions.
  *
- * The real page is an **editor**, the mockup is a read-only report, so this is a
- * merge: the editor and its submit button survive as a Client Component
- * (`components/student-code-submissions.tsx`), and the mockup's shell, KPI row and
- * Task / Results / Runs tabs are adopted around them.
+ * The page is a **Server Component**: it resolves the task from an
+ * `assessmentId` search param and server-fetches the runs, then hands them to
+ * the client editor island. The island owns the workspace layout, the Monaco
+ * editor and the two run paths; the heavy per-test and run-history tables are
+ * rendered here and passed in as nodes.
  *
- * What changed from the pre-port component:
+ * What changed in the workspace rewrite:
  *
- *  - the selected task's runs are fetched **on the server** through
- *    `listStudentRuns`, driven by an `assessmentId` search param, so selecting a
- *    task no longer triggers a client fetch;
- *  - `AppShell scope="app"` replaces `RolePageShell` so the authenticated nav,
- *    identity and sign-out are the real ones.
+ *  - the KPI tiles, the long page description and the above-the-fold
+ *    `Task / Results / Runs` tabs are gone — the editor is the page;
+ *  - per-test results and the run history moved into the editor's docked bottom
+ *    panel (`Testcase` / `Test Result` / `Submissions`), so output sits beside
+ *    the code instead of on another page tab;
+ *  - language, due date, marks, limits and the submission budget are labelled
+ *    rows in the collapsible brief pane, not a run-on muted sentence.
  *
  * Deliberate omissions, so nothing on the page is invented:
  *
- *  - the mockup's **Test cases tab** is a **Results tab**. There is no
- *    student-facing `TestCase` shape (`lib/contracts/code-eval.ts` is explicit
- *    that a student never receives `expectedOutput`), so a suite listing cannot
- *    be rendered at all. Per-test outcomes are shown from the student's own
- *    latest run that recorded evidence — never from shared fixtures, and with no
- *    hidden-case column or copy.
+ *  - there is no student-facing `TestCase` shape (`lib/contracts/code-eval.ts` is
+ *    explicit that a student never receives `expectedOutput`), so there is no
+ *    suite listing; per-test outcomes come from the student's own latest run that
+ *    recorded evidence.
  *  - a run's `coverage`, `runtimeMs`, `finishedAt` and recomputed points are
  *    nullable; each renders `—` (or the run's state) rather than `0`.
  *  - "Score from your best run" is `max(round(passed / total × maxMarks))` over
- *    runs that recorded a test count. `maxMarks` is carried on the student's own
- *    task by the preceding contract commit; without a scored run it is `—`.
+ *    runs that recorded a test count. Without a scored run it is `—`.
  */
 export default async function StudentCodeSubmissionsPage({
   searchParams,
@@ -269,12 +360,11 @@ export default async function StudentCodeSubmissionsPage({
   const runs = selected ? await listStudentRuns(user, selected.assessmentId) : []
 
   // `listStudentRuns` is newest-first. A run only counts as finished when it
-  // recorded a finish time and a test count, so the tile's number and its words
+  // recorded a finish time and a test count, so the score's number and its words
   // describe the same runs.
   const scoredRuns = runs.filter((run) => run.totalCount > 0)
-  const latestFinished = scoredRuns.find((run) => run.finishedAt !== null) ?? null
-  const latestCoverage = latestFinished?.coverage ?? null
-  const latestRun = runs[0] ?? null
+  // The latest run that recorded readable per-test evidence drives the Results
+  // panel; a run with no evidence cannot break down into cases.
   const evidenceRun = runs.find((run) => run.results.length > 0) ?? runs[0] ?? null
   const bestScore =
     selected && scoredRuns.length > 0
@@ -284,12 +374,21 @@ export default async function StudentCodeSubmissionsPage({
           ),
         )
       : null
+  const taskOptions: AssessmentPickerOption[] = tasks.map((task) => ({
+    value: task.assessmentId,
+    label: task.assessmentTitle,
+  }))
+  // The latest run's own finish time, matching the Submissions table's
+  // "Finished" column. `createdAt` is the row's insert time, which for a
+  // backdated run is later than the run itself (SN-40).
+  const latestRun = runs[0] ?? null
 
   return (
     <RoleGuard role="student">
       <AppShell
         scope="app"
         role="student"
+        width="full"
         user={{
           name: user.email,
           email: user.email,
@@ -297,295 +396,39 @@ export default async function StudentCodeSubmissionsPage({
           roleLabel: roleLabelFromRole(user.role),
         }}
       >
-        <PageHeader
-          eyebrow={tasks.length === 1 && selected ? selected.assessmentTitle : undefined}
-          title="Code submissions"
-          description="Submit code for sandboxed evaluation. Each run reports your own per-test pass/fail — evidence for your teacher, never a published grade."
-        />
-
         {selected === null ? (
-          <SectionCard title="Select a task">
-            <EmptyState
-              icon={Terminal}
-              title="No code tasks assigned"
-              description="A CODE assessment appears here once you are actively enrolled in its offering. Ask your teacher if you expected one."
-            />
-          </SectionCard>
-        ) : (
-          <div className="space-y-6">
-            {tasks.length > 1 && (
-              <SectionCard
-                title="Select a task"
-                description="Your runs are per task, so switching loads that task's runs and results."
-              >
-                <ul className="flex flex-wrap gap-2">
-                  {tasks.map((option) => {
-                    const isSelected = option.assessmentId === selected.assessmentId
-                    return (
-                      <li key={option.assessmentId}>
-                        <Link
-                          href={{
-                            pathname: "/student/code-submissions",
-                            query: { assessmentId: option.assessmentId },
-                          }}
-                          aria-current={isSelected ? "true" : undefined}
-                          className={buttonVariants({
-                            variant: isSelected ? "default" : "outline",
-                            size: "sm",
-                          })}
-                        >
-                          <span className="max-w-[14rem] truncate">{option.assessmentTitle}</span>
-                          <span className="ml-1 font-mono text-xs opacity-80">
-                            {option.submissionsUsed} / {option.maxSubmissions} runs
-                          </span>
-                        </Link>
-                      </li>
-                    )
-                  })}
-                </ul>
-              </SectionCard>
-            )}
-
-            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-              <StatCard
-                label="Tests passed"
-                value={
-                  latestFinished === null
-                    ? "—"
-                    : `${latestFinished.passedCount} / ${latestFinished.totalCount}`
-                }
-                hint={
-                  latestFinished === null
-                    ? "No finished run yet"
-                    : `Latest finished run · ${latestFinished.failedCount} failing`
-                }
-                icon={CircleCheck}
+          <div className="mx-auto w-full max-w-3xl">
+            <PageHeader title="Code submissions" />
+            <SectionCard title="Select a task">
+              <EmptyState
+                icon={Terminal}
+                title="No code tasks assigned"
+                description="A CODE assessment appears here once you are actively enrolled in its offering. Ask your teacher if you expected one."
               />
-              <StatCard
-                label="Coverage"
-                value={formatPercent(latestCoverage === null ? null : latestCoverage * 100)}
-                hint="Reported by the sandbox on a finished run"
-                icon={Gauge}
-              />
-              <StatCard
-                label="Runs used"
-                value={`${selected.submissionsUsed} / ${selected.maxSubmissions}`}
-                hint="Every run counts against the cap"
-                icon={PlayCircle}
-              />
-              <StatCard
-                label="Time limit"
-                value={formatDuration(selected.timeLimitMs)}
-                hint={`${selected.memoryLimitMb} MB memory per run`}
-                icon={Timer}
-              />
-            </div>
-
-            <PageTabs
-              items={[
-                { value: "task", label: "Task" },
-                {
-                  value: "results",
-                  label: "Results",
-                  count: evidenceRun?.results.length ?? 0,
-                },
-                { value: "runs", label: "Runs", count: runs.length },
-              ]}
-              label="Code task sections"
-            >
-              <PageTabPanel value="task" className="space-y-6">
-                <SectionCard
-                  title="Task brief"
-                  description={selected.instructions ?? "No instructions recorded for this task."}
-                >
-                  <div className="space-y-4">
-                    <KeyValueList
-                      items={[
-                        {
-                          id: "assessment",
-                          label: "Assessment",
-                          value: selected.assessmentTitle,
-                        },
-                        {
-                          id: "language",
-                          label: "Language",
-                          value: (
-                            <span className="font-mono">{languageLabel(selected.language)}</span>
-                          ),
-                        },
-                        {
-                          id: "due",
-                          label: "Due",
-                          value: (
-                            <span className="font-mono tabular-nums">
-                              {formatDate(selected.dueDate)}
-                            </span>
-                          ),
-                        },
-                        {
-                          id: "marks",
-                          label: "Marks",
-                          value: (
-                            <span className="font-mono tabular-nums">
-                              {selected.maxMarks} points
-                            </span>
-                          ),
-                          hint: "The sandbox reports evidence; the mark is published by your teacher.",
-                        },
-                        {
-                          id: "limits",
-                          label: "Limits",
-                          value: (
-                            <span className="font-mono tabular-nums">
-                              {formatDuration(selected.timeLimitMs)} · {selected.memoryLimitMb} MB
-                            </span>
-                          ),
-                        },
-                        {
-                          id: "budget",
-                          label: "Submission budget",
-                          value: (
-                            <span className="font-mono tabular-nums">
-                              {selected.submissionsUsed} / {selected.maxSubmissions} runs used
-                            </span>
-                          ),
-                          hint: selected.canSubmit
-                            ? "You can still submit."
-                            : (selected.blockedReason ?? undefined),
-                        },
-                      ]}
-                    />
-
-                    <div className="space-y-0.5">
-                      <MetricRow
-                        label="Test cases in this task"
-                        value={
-                          <span className="font-mono tabular-nums">{selected.testCaseCount}</span>
-                        }
-                        hint="Active cases only. Run samples to see the visible cases' input and expected output."
-                      />
-                      <MetricRow
-                        label="Last run"
-                        value={
-                          latestRun === null ? (
-                            "—"
-                          ) : (
-                            <StatusPill status={TEST_RUN_STATE_TO_STATUS[latestRun.status]} dot />
-                          )
-                        }
-                        hint={
-                          latestRun === null
-                            ? "No run recorded yet"
-                            : // The run's own finish time, matching the Runs tab's
-                              // "Finished" column. `createdAt` is the row's insert time,
-                              // which for a backdated run is later than the run itself and
-                              // made the Task tab read as though it finished before it
-                              // was created (SN-40).
-                              formatDateTime(latestRun.finishedAt ?? latestRun.createdAt)
-                        }
-                      />
-                    </div>
-                  </div>
-                </SectionCard>
-
-                <SectionCard
-                  title="Your solution"
-                  description="Your code runs in an isolated container — no network, capped memory, and a wall-clock kill. A run is evidence for your teacher; it never publishes a grade."
-                >
-                  <StudentCodeSubmissionEditor key={selected.assessmentId} task={selected} />
-                </SectionCard>
-              </PageTabPanel>
-
-              <PageTabPanel value="results" className="space-y-6">
-                <SectionCard
-                  title="Your results"
-                  description="Per-test outcomes from your own latest run that recorded evidence. A case that has not run is not a failure. Visible cases carry their input and expected output; a hidden case shows pass/fail only."
-                >
-                  {evidenceRun === null || evidenceRun.results.length === 0 ? (
-                    <EmptyState
-                      title="No per-test evidence yet"
-                      description={
-                        evidenceRun === null
-                          ? "Submit your solution on the Task tab to start a sandboxed run."
-                          : `Run ${evidenceRun.id} recorded no readable per-test results, so there is nothing to break down.`
-                      }
-                    />
-                  ) : (
-                    <div className="space-y-4">
-                      {evidenceRun.totalCount > 0 && (
-                        <ProgressBar
-                          value={evidenceRun.passedCount}
-                          max={evidenceRun.totalCount}
-                          label="Cases passing in this run"
-                          valueText={`${evidenceRun.passedCount} / ${evidenceRun.totalCount}`}
-                          tone={evidenceRun.failedCount === 0 ? "success" : "warning"}
-                        />
-                      )}
-                      <DataTable
-                        caption="Per-test results from your latest run"
-                        columns={resultColumns}
-                        rows={evidenceRun.results}
-                        getRowId={(result) => result.testCaseId}
-                        empty={
-                          <EmptyState
-                            size="sm"
-                            title="No per-test results"
-                            description="This run recorded no readable per-test evidence."
-                          />
-                        }
-                      />
-                    </div>
-                  )}
-                </SectionCard>
-              </PageTabPanel>
-
-              <PageTabPanel value="runs" className="space-y-6">
-                <SectionCard
-                  title="Your runs"
-                  description="Every run you have started, newest first. A queued or running run has no finish time, so its state is shown instead of a blank date."
-                >
-                  {runs.length === 0 ? (
-                    <EmptyState
-                      icon={PlayCircle}
-                      title="You have not run your code yet"
-                      description="Submit your solution on the Task tab to see a run here."
-                    />
-                  ) : (
-                    <div className="space-y-4">
-                      <DataTable
-                        caption="Your sandboxed test runs"
-                        columns={runColumns}
-                        rows={runs}
-                        getRowId={(run) => run.id}
-                        empty={
-                          <EmptyState
-                            size="sm"
-                            title="No runs"
-                            description="Nothing has run yet."
-                          />
-                        }
-                      />
-                      <MetricRow
-                        label="Score from your best run"
-                        value={
-                          <span className="font-mono tabular-nums">
-                            {bestScore === null ? "—" : `${bestScore} / ${selected.maxMarks}`}
-                          </span>
-                        }
-                        hint={
-                          scoredRuns.length === 0
-                            ? "No run has recorded a test count yet"
-                            : `Best of ${scoredRuns.length} ${
-                                scoredRuns.length === 1 ? "run" : "runs"
-                              } · evidence only, not a published mark`
-                        }
-                      />
-                    </div>
-                  )}
-                </SectionCard>
-              </PageTabPanel>
-            </PageTabs>
+            </SectionCard>
           </div>
+        ) : (
+          <StudentCodeSubmissionEditor
+            key={selected.assessmentId}
+            task={selected}
+            runsCount={runs.length}
+            latestRun={
+              latestRun === null
+                ? null
+                : { status: latestRun.status, at: latestRun.finishedAt ?? latestRun.createdAt }
+            }
+            taskOptions={taskOptions}
+            testResultCount={evidenceRun?.results.length ?? 0}
+            testResultPanel={<TestResultPanel run={evidenceRun} />}
+            submissionsPanel={
+              <SubmissionsPanel
+                runs={runs}
+                bestScore={bestScore}
+                maxMarks={selected.maxMarks}
+                scoredRunCount={scoredRuns.length}
+              />
+            }
+          />
         )}
       </AppShell>
     </RoleGuard>
