@@ -8,7 +8,9 @@ import type { CreateAssessmentRequest, UpdateAssessmentRequest } from "@/lib/con
 import { writeAuditLog } from "@/lib/grading/audit"
 import { prisma } from "@/lib/prisma"
 import { recordManualMark } from "@/lib/grading/review-service"
+import { resolveMaxAttempts } from "@/lib/quiz-attempts/eligibility"
 import { quizDeliveryStatus } from "@/lib/quiz-attempts/metadata"
+import { describeRetakeSettingsProblem, type RetakePolicy } from "@/lib/quiz-attempts/retake-policy"
 import type { AuthUser } from "@/lib/session"
 import { teacherOwnsAssessment } from "@/lib/teacher-staff"
 import {
@@ -766,6 +768,16 @@ export type TeacherAssessmentRow = {
   courseName: string
   className: string
   releasedAt: string | null
+  /** The teacher's retake settings, so the settings surface can show what is stored (SN-35). */
+  retakePolicy: RetakePolicy
+  retakesAllowed: number | null
+  /**
+   * The cap `maxAttempts` resolves to (per-assessment → `QUIZ_MAX_ATTEMPTS` → default), computed
+   * on the server so the retake description states the number the enforcement path actually
+   * uses. With `retakesAllowed: null` the policy total *is* this value, so describing it without
+   * it would be a guess — and a client-side `resolveMaxAttempts` cannot see the env override.
+   */
+  effectiveMaxAttempts: number
   /** Questions authored on the modern store, drafts and published. */
   questionCount: number
   publishedQuestionCount: number
@@ -782,6 +794,9 @@ const ASSESSMENT_REGISTRY_SELECT = {
   type: true,
   dueDate: true,
   maxMarks: true,
+  maxAttempts: true,
+  retakePolicy: true,
+  retakesAllowed: true,
   offeringId: true,
   releasedAt: true,
   course: { select: { code: true, name: true } },
@@ -804,6 +819,9 @@ type AssessmentRegistryRecord = {
   type: AssessmentType
   dueDate: Date
   maxMarks: number
+  maxAttempts: number | null
+  retakePolicy: RetakePolicy
+  retakesAllowed: number | null
   offeringId: string
   releasedAt: Date | null
   course: { code: string; name: string }
@@ -826,6 +844,9 @@ function toTeacherAssessmentRow(record: AssessmentRegistryRecord): TeacherAssess
     type: record.type,
     dueDate: record.dueDate.toISOString(),
     maxMarks: record.maxMarks,
+    retakePolicy: record.retakePolicy,
+    retakesAllowed: record.retakesAllowed,
+    effectiveMaxAttempts: resolveMaxAttempts(record.maxAttempts),
     offeringId: record.offeringId,
     offeringLabel: `${record.course.code} · ${record.course.name} — ${room} · ${record.offering.academicYear} ${record.offering.term}`,
     courseName: record.course.name,
@@ -876,6 +897,9 @@ type OwnedAssessmentRecord = {
   title: string
   createdById: string
   offeringId: string
+  /** The stored retake pair, so a partial patch can be validated against the half it keeps. */
+  retakePolicy: RetakePolicy
+  retakesAllowed: number | null
   offering: { teacherId: string } | null
 }
 
@@ -894,6 +918,8 @@ async function loadOwnedAssessmentForWrite(
       title: true,
       createdById: true,
       offeringId: true,
+      retakePolicy: true,
+      retakesAllowed: true,
       offering: { select: { teacherId: true } },
     },
   })
@@ -908,16 +934,46 @@ async function loadOwnedAssessmentForWrite(
 }
 
 /**
- * Rename an assessment or move its deadline. `maxMarks` is accepted only while the assessment
- * has no marks and no submissions: changing the ceiling of a graded assessment would rescale
- * nothing (each `Grade` stores its own `maxPoints`) while making the column disagree with it.
+ * Rename an assessment, move its deadline, or set its retake policy and cap.
+ *
+ * `maxMarks` is accepted only while the assessment has no marks and no submissions: changing the
+ * ceiling of a graded assessment would rescale nothing (each `Grade` stores its own `maxPoints`)
+ * while making the column disagree with it.
+ *
+ * `retakePolicy` / `retakesAllowed` are the write path SN-35 found missing end-to-end: both
+ * columns existed and were read in roughly twenty places but written nowhere, so every assessment
+ * was stuck on `FIXED` and the student's approval-based request could never succeed. The fields
+ * are validated **as a pair** against the stored value, so a patch that changes only one half
+ * cannot leave an incoherent pair behind.
  */
 export async function updateAssessmentForSessionUser(
   sessionUser: AuthUser,
   assessmentId: string,
   input: UpdateAssessmentRequest,
 ): Promise<TeacherAssessmentRow> {
-  await loadOwnedAssessmentForWrite(sessionUser, assessmentId)
+  const current = await loadOwnedAssessmentForWrite(sessionUser, assessmentId)
+
+  /*
+   * A patch may carry either retake field, so resolve the **effective** pair — what each value
+   * will be after this write — and validate the pair, not the patch. Validating the patch alone
+   * would let `{ retakePolicy: "APPROVAL" }` land on an assessment with no retake count, or
+   * `{ retakesAllowed: null }` strand an existing `APPROVAL` policy, and either is a control the
+   * student can operate but no decision can satisfy (SN-35 in a new shape).
+   *
+   * `NONE` is one graded sitting by definition, so a count is meaningless there and is stored as
+   * `null` rather than left as dead data that would silently reappear if the policy changed back.
+   * `FIXED` deliberately keeps accepting `null` (fall back to `maxAttempts`) and `0` (one
+   * sitting): both are honest settings.
+   */
+  const retakePolicy = input.retakePolicy ?? current.retakePolicy
+  const retakesAllowed =
+    retakePolicy === "NONE"
+      ? null
+      : input.retakesAllowed !== undefined
+        ? input.retakesAllowed
+        : current.retakesAllowed
+  const retakeProblem = describeRetakeSettingsProblem({ policy: retakePolicy, retakesAllowed })
+  if (retakeProblem) throw new AssessmentWriteError(400, retakeProblem)
 
   if (input.maxMarks !== undefined) {
     const [gradeCount, submissionCount] = await Promise.all([
@@ -935,7 +991,13 @@ export async function updateAssessmentForSessionUser(
   await prisma.$transaction(async (tx) => {
     const before = await tx.assessment.findUniqueOrThrow({
       where: { id: assessmentId },
-      select: { title: true, dueDate: true, maxMarks: true },
+      select: {
+        title: true,
+        dueDate: true,
+        maxMarks: true,
+        retakePolicy: true,
+        retakesAllowed: true,
+      },
     })
     const updated = await tx.assessment.update({
       where: { id: assessmentId },
@@ -943,6 +1005,11 @@ export async function updateAssessmentForSessionUser(
         ...(input.title !== undefined ? { title: input.title.trim() } : {}),
         ...(input.date !== undefined ? { dueDate: new Date(input.date) } : {}),
         ...(input.maxMarks !== undefined ? { maxMarks: input.maxMarks } : {}),
+        // Both retake columns move together whenever either half is sent or a stale count is
+        // normalised away, so the stored pair is always the one validated above.
+        ...(input.retakePolicy !== undefined || retakesAllowed !== current.retakesAllowed
+          ? { retakePolicy, retakesAllowed }
+          : {}),
       },
       select: ASSESSMENT_REGISTRY_SELECT,
     })
@@ -964,11 +1031,15 @@ export async function updateAssessmentForSessionUser(
         title: before.title,
         dueDate: before.dueDate.toISOString(),
         maxMarks: before.maxMarks,
+        retakePolicy: before.retakePolicy,
+        retakesAllowed: before.retakesAllowed,
       },
       after: {
         title: updated.title,
         dueDate: updated.dueDate.toISOString(),
         maxMarks: updated.maxMarks,
+        retakePolicy: updated.retakePolicy,
+        retakesAllowed: updated.retakesAllowed,
       },
     })
     return updated

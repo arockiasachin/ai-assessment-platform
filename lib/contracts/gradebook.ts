@@ -1,5 +1,7 @@
 import { z } from "zod"
 
+import { RETAKE_POLICIES } from "@/lib/quiz-attempts/retake-policy"
+
 import { nonEmptyString, parseableDateString } from "./common"
 
 /** `POST /api/gradebook/marks` request body (teacher/admin only). */
@@ -47,6 +49,14 @@ export type CreateAssessmentRequest = z.infer<typeof createAssessmentRequestSche
  * what the assessment's children mean. A mis-kinded assessment is deleted and re-created while
  * it is still bare. `maxMarks` is accepted here but the service refuses it once marks exist,
  * because a changed ceiling would silently rescale recorded results.
+ *
+ * `retakePolicy` / `retakesAllowed` are the teacher's retake settings (`SN-35`). The enum is the
+ * one runtime list from `lib/quiz-attempts/retake-policy.ts`, not a copy. `retakesAllowed` is a
+ * count of *retakes after the first sitting*; an explicit `null` means "fall back to
+ * `maxAttempts`", which is distinct from an omitted key ("leave it as it was") — the service
+ * collapses neither. Whether the two fields are coherent *as a pair* is not decidable from the
+ * patch alone (a patch may change only one half), so that rule lives in the service against the
+ * stored value.
  */
 export const updateAssessmentRequestSchema = z
   .object({
@@ -58,10 +68,22 @@ export const updateAssessmentRequestSchema = z
       .positive()
       .max(1_000_000, "Max marks is too large.")
       .optional(),
+    retakePolicy: z.enum(RETAKE_POLICIES).optional(),
+    retakesAllowed: z
+      .union([
+        // `z.null()` first so an explicit null is preserved rather than coerced to 0.
+        z.null(),
+        z.coerce.number().int().min(0, "Retakes allowed cannot be negative.").max(1_000),
+      ])
+      .optional(),
   })
   .refine(
     (value) =>
-      value.title !== undefined || value.date !== undefined || value.maxMarks !== undefined,
+      value.title !== undefined ||
+      value.date !== undefined ||
+      value.maxMarks !== undefined ||
+      value.retakePolicy !== undefined ||
+      value.retakesAllowed !== undefined,
     {
       message: "At least one field must be provided.",
     },

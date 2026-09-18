@@ -22,7 +22,23 @@
  * are entitled to sit.
  */
 
-export type RetakePolicy = "NONE" | "FIXED" | "APPROVAL"
+/**
+ * The policy values, as the one runtime list.
+ *
+ * `Assessment.retakePolicy` is the Prisma enum, but the pure rules, the request contract and the
+ * teacher control all need the *same* set of values. Declaring them once here means a fourth
+ * policy added to the schema cannot be accepted by some surfaces and dropped by others.
+ */
+export const RETAKE_POLICIES = ["NONE", "FIXED", "APPROVAL"] as const
+
+export type RetakePolicy = (typeof RETAKE_POLICIES)[number]
+
+/** The teacher-facing name of each policy, so the control and its description agree. */
+export const RETAKE_POLICY_LABEL: Record<RetakePolicy, string> = {
+  NONE: "No retakes",
+  FIXED: "A fixed number of retakes",
+  APPROVAL: "Only with my approval",
+}
 
 export type RetakeContext = {
   policy: RetakePolicy
@@ -60,6 +76,39 @@ export function resolveSittingCap(input: {
   if (input.retakesAllowed === null) return input.maxAttempts
   if (!Number.isFinite(input.retakesAllowed) || input.retakesAllowed < 0) return input.maxAttempts
   return Math.max(1, Math.floor(input.retakesAllowed) + 1)
+}
+
+/**
+ * Whether a stored `(policy, retakesAllowed)` pair is coherent, and the sentence explaining why
+ * not. `null` means the pair is fine.
+ *
+ * The pair is written by `PATCH /api/gradebook/assessments/[assessmentId]`, and a client that
+ * sends only one half of it is validated against the other half's stored value — so this rule
+ * takes the **effective** pair, not the patch. The only incoherent combination is `APPROVAL`
+ * with a count that can never be granted:
+ *
+ * - no count (`null`) falls back to `maxAttempts`, which silently changes what "on approval"
+ *   means as the attempt cap is edited elsewhere, and
+ * - a count below `1` converts to a sitting cap of one, so even an approved request cannot
+ *   produce a second sitting.
+ *
+ * Either way the student would be offered a "Request a retake" control that no decision can
+ * ever satisfy — SN-35's dead control in a new shape. `FIXED` deliberately still accepts
+ * `null` (fall back to `maxAttempts`) and `0` (one sitting, no retakes), because both are
+ * honest settings; only `APPROVAL` promises a retake it must be able to grant.
+ */
+export function describeRetakeSettingsProblem(input: {
+  policy: RetakePolicy
+  retakesAllowed: number | null
+}): string | null {
+  if (input.policy !== "APPROVAL") return null
+  if (input.retakesAllowed === null) {
+    return "The approval policy needs a retake count, so an approved request can be used."
+  }
+  if (!Number.isInteger(input.retakesAllowed) || input.retakesAllowed < 1) {
+    return "The approval policy needs at least one retake allowed."
+  }
+  return null
 }
 
 /**

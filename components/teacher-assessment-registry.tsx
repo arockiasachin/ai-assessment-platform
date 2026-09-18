@@ -12,8 +12,22 @@ import { EmptyState } from "@/components/ui/empty-state"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { SectionCard } from "@/components/ui/section-card"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { ASSESSMENT_KIND_LABEL } from "@/lib/labels"
 import { formatDate } from "@/lib/format"
+import {
+  RETAKE_POLICIES,
+  RETAKE_POLICY_LABEL,
+  describeRetakePolicy,
+  describeRetakeSettingsProblem,
+  type RetakePolicy,
+} from "@/lib/quiz-attempts/retake-policy"
 import type { TeacherAssessmentRow } from "@/lib/gradebook-db"
 
 /**
@@ -64,6 +78,29 @@ function ReadinessBadge({ row }: { row: TeacherAssessmentRow }) {
   return <Badge variant="secondary">No extra body required</Badge>
 }
 
+const RETAKE_POLICY_ITEMS = RETAKE_POLICIES.map((policy) => ({
+  value: policy,
+  label: RETAKE_POLICY_LABEL[policy],
+}))
+
+/**
+ * Parse the form's text field into the count the pair rule takes, then ask the **same**
+ * `describeRetakeSettingsProblem` the server enforces — so the sentence a teacher reads here is
+ * the one the API would return, and the rule has one definition rather than two that can drift.
+ * The server remains the authority; this only keeps Save from posting a call that would 400.
+ *
+ * `null` means the count is acceptable; a string is the sentence to show.
+ */
+function retakeCountProblem(policy: RetakePolicy, raw: string): string | null {
+  if (policy === "NONE") return null
+  const trimmed = raw.trim()
+  const retakesAllowed = trimmed === "" ? null : Number(trimmed)
+  if (retakesAllowed !== null && (!Number.isInteger(retakesAllowed) || retakesAllowed < 0)) {
+    return "Enter a whole number of retakes (0 or more)."
+  }
+  return describeRetakeSettingsProblem({ policy, retakesAllowed })
+}
+
 export function TeacherAssessmentRegistry({ rows }: { rows: TeacherAssessmentRow[] }) {
   const router = useRouter()
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -72,7 +109,16 @@ export function TeacherAssessmentRegistry({ rows }: { rows: TeacherAssessmentRow
   const [message, setMessage] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [drafts, setDrafts] = useState<
-    Record<string, { title: string; date: string; maxMarks: string }>
+    Record<
+      string,
+      {
+        title: string
+        date: string
+        maxMarks: string
+        retakePolicy: RetakePolicy
+        retakesAllowed: string
+      }
+    >
   >({})
 
   const sorted = useMemo(() => rows, [rows])
@@ -83,13 +129,23 @@ export function TeacherAssessmentRegistry({ rows }: { rows: TeacherAssessmentRow
         title: row.title,
         date: row.dueDate.slice(0, 10),
         maxMarks: String(row.maxMarks),
+        retakePolicy: row.retakePolicy,
+        // A stored `null` is the empty field, not "0": the two mean different things (fall back
+        // to the attempt cap versus no retakes), so the form must not blur them.
+        retakesAllowed: row.retakesAllowed === null ? "" : String(row.retakesAllowed),
       }
     )
   }
 
   function setDraft(
     row: TeacherAssessmentRow,
-    patch: Partial<{ title: string; date: string; maxMarks: string }>,
+    patch: Partial<{
+      title: string
+      date: string
+      maxMarks: string
+      retakePolicy: RetakePolicy
+      retakesAllowed: string
+    }>,
   ) {
     setDrafts((prev) => ({ ...prev, [row.id]: { ...draftFor(row), ...patch } }))
   }
@@ -107,6 +163,14 @@ export function TeacherAssessmentRegistry({ rows }: { rows: TeacherAssessmentRow
           title: draft.title.trim(),
           date: draft.date,
           maxMarks: Number(draft.maxMarks),
+          retakePolicy: draft.retakePolicy,
+          // An empty field is an explicit `null` (fall back to the attempt cap), and `NONE`
+          // cannot carry a count at all — the server normalises that too, but sending the
+          // coherent pair keeps the audit's before/after honest.
+          retakesAllowed:
+            draft.retakePolicy === "NONE" || draft.retakesAllowed.trim() === ""
+              ? null
+              : Number(draft.retakesAllowed),
         }),
       })
       const data = (await response.json()) as { message?: string }
@@ -181,6 +245,7 @@ export function TeacherAssessmentRegistry({ rows }: { rows: TeacherAssessmentRow
             const busy = busyId === row.id
             const href = authoringHref(row)
             const draft = draftFor(row)
+            const retakeError = retakeCountProblem(draft.retakePolicy, draft.retakesAllowed)
             return (
               <Card key={row.id} className="border-border/70 shadow-sm">
                 <CardHeader className="border-b border-border/60 bg-muted/15 py-3">
@@ -228,56 +293,137 @@ export function TeacherAssessmentRegistry({ rows }: { rows: TeacherAssessmentRow
                     )}
                   </div>
 
+                  <p className="text-xs text-muted-foreground">
+                    Retakes:{" "}
+                    {describeRetakePolicy(
+                      row.retakePolicy,
+                      row.effectiveMaxAttempts,
+                      row.retakesAllowed,
+                    )}
+                  </p>
+
                   {editing ? (
-                    <div className="grid gap-3 rounded-md border border-border/70 bg-muted/10 p-3 sm:grid-cols-[1fr_auto_auto_auto]">
-                      <div className="grid gap-1.5">
-                        <Label htmlFor={`registry-title-${row.id}`}>Title</Label>
-                        <Input
-                          id={`registry-title-${row.id}`}
-                          value={draft.title}
-                          onChange={(event) => setDraft(row, { title: event.target.value })}
-                        />
+                    <>
+                      <div className="grid gap-3 rounded-md border border-border/70 bg-muted/10 p-3 sm:grid-cols-[1fr_auto_auto_auto]">
+                        <div className="grid gap-1.5">
+                          <Label htmlFor={`registry-title-${row.id}`}>Title</Label>
+                          <Input
+                            id={`registry-title-${row.id}`}
+                            value={draft.title}
+                            onChange={(event) => setDraft(row, { title: event.target.value })}
+                          />
+                        </div>
+                        <div className="grid gap-1.5">
+                          <Label htmlFor={`registry-date-${row.id}`}>Due date</Label>
+                          <Input
+                            id={`registry-date-${row.id}`}
+                            type="date"
+                            value={draft.date}
+                            onChange={(event) => setDraft(row, { date: event.target.value })}
+                          />
+                        </div>
+                        <div className="grid gap-1.5">
+                          <Label htmlFor={`registry-marks-${row.id}`}>Max marks</Label>
+                          <Input
+                            id={`registry-marks-${row.id}`}
+                            type="number"
+                            min={1}
+                            value={draft.maxMarks}
+                            disabled={row.gradedCount > 0 || row.submissionCount > 0}
+                            onChange={(event) => setDraft(row, { maxMarks: event.target.value })}
+                          />
+                        </div>
+                        <div className="flex items-end gap-2">
+                          <Button
+                            type="button"
+                            size="sm"
+                            onClick={() => void save(row)}
+                            disabled={busy || retakeError !== null}
+                          >
+                            Save
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            onClick={() => setEditingId(null)}
+                            disabled={busy}
+                          >
+                            Cancel
+                          </Button>
+                        </div>
                       </div>
-                      <div className="grid gap-1.5">
-                        <Label htmlFor={`registry-date-${row.id}`}>Due date</Label>
-                        <Input
-                          id={`registry-date-${row.id}`}
-                          type="date"
-                          value={draft.date}
-                          onChange={(event) => setDraft(row, { date: event.target.value })}
-                        />
+
+                      {/*
+                      The retake settings (SN-35), beside the other per-assessment fields rather
+                      than on a new page: this registry is where an assessment's settings already
+                      live. The pair rule (`APPROVAL` needs a count of at least one) is stated
+                      here and enforced again in `updateAssessmentForSessionUser`, which is the
+                      authority — the client check only stops a form that would certainly 400.
+                    */}
+                      <div className="grid gap-3 rounded-md border border-border/70 bg-muted/10 p-3 sm:grid-cols-2">
+                        <div className="grid gap-1.5">
+                          <Label htmlFor={`registry-retake-policy-${row.id}`}>Retake policy</Label>
+                          <Select
+                            value={draft.retakePolicy}
+                            onValueChange={(value) =>
+                              setDraft(row, { retakePolicy: (value ?? "FIXED") as RetakePolicy })
+                            }
+                            items={RETAKE_POLICY_ITEMS}
+                          >
+                            <SelectTrigger
+                              id={`registry-retake-policy-${row.id}`}
+                              aria-label="Retake policy"
+                            >
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {RETAKE_POLICIES.map((policy) => (
+                                <SelectItem key={policy} value={policy}>
+                                  {RETAKE_POLICY_LABEL[policy]}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <p className="text-xs text-muted-foreground">
+                            {describeRetakePolicy(
+                              draft.retakePolicy,
+                              row.effectiveMaxAttempts,
+                              draft.retakePolicy === "NONE" || draft.retakesAllowed.trim() === ""
+                                ? null
+                                : Number(draft.retakesAllowed),
+                            )}
+                          </p>
+                        </div>
+                        <div className="grid gap-1.5">
+                          <Label htmlFor={`registry-retakes-allowed-${row.id}`}>
+                            Retakes allowed
+                          </Label>
+                          <Input
+                            id={`registry-retakes-allowed-${row.id}`}
+                            type="number"
+                            min={0}
+                            placeholder={
+                              draft.retakePolicy === "FIXED"
+                                ? `Uses the attempt cap (${row.effectiveMaxAttempts})`
+                                : undefined
+                            }
+                            value={draft.retakesAllowed}
+                            disabled={draft.retakePolicy === "NONE"}
+                            onChange={(event) =>
+                              setDraft(row, { retakesAllowed: event.target.value })
+                            }
+                          />
+                          {retakeError ? (
+                            <p className="text-xs text-destructive">{retakeError}</p>
+                          ) : (
+                            <p className="text-xs text-muted-foreground">
+                              Retakes after the first sitting. Leave blank to use the attempt cap.
+                            </p>
+                          )}
+                        </div>
                       </div>
-                      <div className="grid gap-1.5">
-                        <Label htmlFor={`registry-marks-${row.id}`}>Max marks</Label>
-                        <Input
-                          id={`registry-marks-${row.id}`}
-                          type="number"
-                          min={1}
-                          value={draft.maxMarks}
-                          disabled={row.gradedCount > 0 || row.submissionCount > 0}
-                          onChange={(event) => setDraft(row, { maxMarks: event.target.value })}
-                        />
-                      </div>
-                      <div className="flex items-end gap-2">
-                        <Button
-                          type="button"
-                          size="sm"
-                          onClick={() => void save(row)}
-                          disabled={busy}
-                        >
-                          Save
-                        </Button>
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="outline"
-                          onClick={() => setEditingId(null)}
-                          disabled={busy}
-                        >
-                          Cancel
-                        </Button>
-                      </div>
-                    </div>
+                    </>
                   ) : (
                     <div className="flex flex-wrap items-center gap-2">
                       <Button
