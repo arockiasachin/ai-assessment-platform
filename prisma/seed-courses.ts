@@ -441,20 +441,26 @@ const TERM_START = fromNow(-63)
 const TERM_END = fromNow(42)
 
 /*
- * CAT deadlines sit deliberately in the **future**, so the seeded term reads as in progress rather
- * than as six weeks of past-due work: a student sees the "due in N days" states, and a teacher has
- * an item that has not closed yet to author against.
+ * CAT deadlines are **staggered across the term** so the seed demonstrates both a completed CAT and
+ * upcoming work. A uniform ladder would lose one or the other.
  *
- * One day per CAT **type**, so the five shapes are distinguishable at a glance instead of sharing a
- * date. They used to be a single past/soon/past ladder (`CAT1 -42`, `CAT2 -28`, `CAT3 -14`) with
- * `cat-quiz` and `cat-lab` sharing `CAT1`, and `cat-descriptive` and `cat-midterm-code` sharing
- * `CAT3` — which is why the constants are now per type rather than per CAT number.
+ * The CAT-1 pair (`cat-quiz`, `cat-lab`) stays in the **past**. The FAT gate only judges CAT work
+ * that has fallen due (`lib/grading/offering-eligibility.ts` — "only CAT work that has fallen due
+ * counts toward the gate", returning no verdict at all when nothing is due yet), so with no past
+ * CAT the seeded `below-cat-minimum` case stops reproducing and `tests/courses-spine.test.ts` loses
+ * its fixture. The pair is also the term's earliest CAT, which is what makes an already-marked,
+ * already-published CAT1 realistic.
+ *
+ * The later shapes sit **next week**, one per day, so a student sees the "due in N days" states and
+ * a teacher has work that has not closed yet. They used to be a past/soon/past ladder (CAT1 -42,
+ * CAT2 -28, CAT3 -14) with `cat-quiz` and `cat-lab` sharing CAT1 and `cat-descriptive` and
+ * `cat-midterm-code` sharing CAT3, so the five shapes were also indistinguishable by date.
  *
  * `DUE_FAT` stays in the future and the `RELEASED_*` dates stay in the past, so every CAT is still
- * released before it is due and the FAT is still the unreleased fixture.
+ * released before it is due and the FAT remains the unreleased fixture.
  */
-const DUE_CAT_QUIZ = fromNow(3)
-const DUE_CAT_LAB = fromNow(4)
+const DUE_CAT_QUIZ = fromNow(-42)
+const DUE_CAT_LAB = fromNow(-42)
 const DUE_CAT_ASSIGNMENT = fromNow(5)
 const DUE_CAT_MIDTERM_CODE = fromNow(6)
 const DUE_CAT_DESCRIPTIVE = fromNow(7)
