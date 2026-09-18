@@ -16,6 +16,7 @@ import {
 import { GradeBadge } from "@/components/grade-badge"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { Callout } from "@/components/ui/callout"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import {
@@ -26,6 +27,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { formatDateTime } from "@/lib/format"
+import { regimeForCourse, type StudentCourseRegime } from "@/lib/grading/regime-view"
 import {
   saveDraftAllowed,
   submissionLockReason,
@@ -79,8 +81,16 @@ function submissionTone(state: StudentAssessmentItem["submissionState"]) {
 
 export function StudentAssessmentsView({
   initialPayload,
+  courseRegimes = [],
 }: {
   initialPayload: StudentAssessmentsPayload
+  /**
+   * The grading regime of each of the student's courses, resolved on the server
+   * (`lib/student-grading-regime.ts`). Optional so the component renders without it, but the
+   * page always supplies it: a student who is graded on relative bands saw exactly the same
+   * page as one graded on VIT's absolute table because this fact never reached them (SN-16).
+   */
+  courseRegimes?: StudentCourseRegime[]
 }) {
   const [payload, setPayload] = useState<StudentAssessmentsPayload | null>(initialPayload)
   // No initial fetch: the page is a server component that passes the payload in.
@@ -157,6 +167,25 @@ export function StudentAssessmentsView({
   }
 
   const allAssessments = useMemo(() => payload?.assessments ?? [], [payload])
+
+  /**
+   * The regime notes to render, one per course that appears in the list.
+   *
+   * The payload carries `courseId` but no `offeringId`, so the lookup is by course (see
+   * `regimeForCourse`). Deduping here means the note is rendered once per course above the
+   * cards rather than repeated on every assessment of that course.
+   */
+  const courseRegimeNotes = useMemo(() => {
+    const seen = new Set<string>()
+    const notes: StudentCourseRegime[] = []
+    for (const assessment of allAssessments) {
+      if (seen.has(assessment.courseId)) continue
+      seen.add(assessment.courseId)
+      const regime = regimeForCourse(courseRegimes, assessment.courseId)
+      if (regime) notes.push(regime)
+    }
+    return notes
+  }, [allAssessments, courseRegimes])
 
   const courseOptions = useMemo(
     () =>
@@ -319,6 +348,30 @@ export function StudentAssessmentsView({
           </div>
         </CardContent>
       </Card>
+
+      {/* How each course is graded, above the marks it qualifies. Rendered here, above the
+          filter and the cards, because it changes how every score below should be read: a
+          relative-graded class and an absolute-graded one differ in exactly this and nothing
+          else on the page (SN-16). */}
+      {courseRegimeNotes.length > 0 && (
+        <div className="space-y-3">
+          {courseRegimeNotes.map((regime) => (
+            <Callout
+              key={regime.offeringId}
+              tone={regime.note.tone}
+              title={regime.note.title}
+              icon={Target}
+            >
+              <p>
+                <span className="font-medium">
+                  {regime.courseCode} · {regime.courseName}
+                </span>{" "}
+                — {regime.note.detail}
+              </p>
+            </Callout>
+          ))}
+        </div>
+      )}
 
       <Card className="border-border/70 shadow-sm">
         <CardHeader>

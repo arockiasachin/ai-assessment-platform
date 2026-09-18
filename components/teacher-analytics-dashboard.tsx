@@ -68,6 +68,22 @@ function formatIndex(value: number | null): string {
   return value === null ? "Insufficient data" : value.toFixed(2)
 }
 
+/**
+ * The offering selector's label — `MCSE501L · M.Tech (CSE) BDA — DSA — Section A · Semester-1`.
+ *
+ * `className` already carries the section once: it is built by `classroomLabel` in
+ * `lib/analytics/service.ts`, so this is the same string the popup options render and the
+ * same shape `/teacher` joins (`[courseCode, className, term].join(" · ")`).
+ *
+ * It is one function rather than two expressions because the trigger and the popup must
+ * agree: Base UI renders the raw value in the trigger unless the root is given a
+ * value→label map (TN-7), and the only way to guarantee the map matches what the popup
+ * draws is for both to call this.
+ */
+function offeringLabel(offering: AnalyticsOfferingSummary): string {
+  return `${offering.courseCode} · ${offering.className} · ${offering.term}`
+}
+
 export function TeacherAnalyticsDashboard({
   offerings,
   initialOfferingId,
@@ -217,14 +233,24 @@ export function TeacherAnalyticsDashboard({
           ) : (
             <>
               <div className="flex flex-wrap items-center gap-3">
-                <Select value={offeringId} onValueChange={(value) => selectOffering(value ?? "")}>
+                <Select
+                  value={offeringId}
+                  onValueChange={(value) => selectOffering(value ?? "")}
+                  // Base UI renders the raw offering id in the trigger unless the root is
+                  // given a value→label map (TN-7). The map calls the same `offeringLabel`
+                  // the popup does, so the two cannot disagree.
+                  items={offerings.map((offering) => ({
+                    value: offering.id,
+                    label: offeringLabel(offering),
+                  }))}
+                >
                   <SelectTrigger className="w-full sm:w-80" aria-label="Course offering">
                     <SelectValue placeholder="Select an offering" />
                   </SelectTrigger>
                   <SelectContent>
                     {offerings.map((offering) => (
                       <SelectItem key={offering.id} value={offering.id}>
-                        {offering.courseCode} · {offering.className} · {offering.term}
+                        {offeringLabel(offering)}
                       </SelectItem>
                     ))}
                   </SelectContent>

@@ -6,6 +6,7 @@ import { AppShell, PageHeader } from "@/components/shell"
 import { StudentAssessmentsView } from "@/components/student-assessments-view"
 import { getSessionUser } from "@/lib/auth"
 import { listStudentAssessments } from "@/lib/student-assessments"
+import { listStudentCourseRegimes } from "@/lib/student-grading-regime"
 import { initialsFromEmail, roleLabelFromRole } from "@/lib/user-identity"
 
 export const dynamic = "force-dynamic"
@@ -27,6 +28,11 @@ export default async function StudentAssessmentsPage() {
   const payload = await listStudentAssessments(user)
   if (payload === null) redirect("/login")
 
+  // The grading regime of each course, so a student can see how their mark is decided
+  // (SN-16). It is a separate read because `listStudentAssessments` is reserved for a
+  // queued migration; the two are independent and both scoped to this student.
+  const courseRegimes = await listStudentCourseRegimes(user)
+
   return (
     <RoleGuard role="student">
       <AppShell
@@ -43,7 +49,7 @@ export default async function StudentAssessmentsPage() {
           title="Assessments"
           description="Full assessment detail, due windows, and your coursework. A mark appears here only once it has been released."
         />
-        <StudentAssessmentsView initialPayload={payload} />
+        <StudentAssessmentsView initialPayload={payload} courseRegimes={courseRegimes} />
       </AppShell>
     </RoleGuard>
   )
