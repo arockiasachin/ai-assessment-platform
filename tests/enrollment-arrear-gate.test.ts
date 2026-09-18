@@ -5,7 +5,7 @@ import { afterAll, beforeEach, describe, expect, it, vi } from "vitest"
  *
  * Two layers, because the rule is pure but its consequences are not:
  *
- * - `selectBlockingArrear` is exercised with hand-built outcomes, so the three non-blocking
+ * - `selectBlockingArrear` is exercised with hand-built outcomes, so the four non-blocking
  *   cases — the arrear's own course, an acknowledged arrear, and an outcome whose `arrear` is
  *   `null` (a `not-judged` course) — are pinned without a database.
  * - The real route handlers are driven with a real student session against a real database, so
@@ -114,6 +114,31 @@ describe("selectBlockingArrear", () => {
       outcome: { status: "not-judged", reason: "no-grand-total" },
     })
     expect(selectBlockingArrear([notJudged], "course-new")).toBeNull()
+  })
+
+  it("does not block a course the student has already passed", () => {
+    // The arrear is scoped to what is outstanding, not to the whole programme: a failed theory
+    // paper must not hold the lab the student already cleared. A passed course does not need
+    // repeating.
+    const passedLab = outcome({
+      offeringId: "offering-lab-past",
+      courseId: "course-lab",
+      courseCode: "MCSE501P",
+      courseName: "Data Structures and Algorithms LAB",
+      outcome: { status: "pass", grandTotal: 68 },
+    })
+    expect(selectBlockingArrear([failed, passedLab], "course-lab")).toBeNull()
+  })
+
+  it("reads the verdict, so an unjudged target course is still gated", () => {
+    // The pass exemption must not swallow incomplete evidence: `not-judged` is not a pass, so a
+    // course whose outcome cannot be stated is held like any other new course.
+    const unjudgedLab = outcome({
+      offeringId: "offering-lab-open",
+      courseId: "course-lab",
+      outcome: { status: "not-judged", reason: "no-grand-total" },
+    })
+    expect(selectBlockingArrear([failed, unjudgedLab], "course-lab")?.reason).toBe("failed")
   })
 })
 

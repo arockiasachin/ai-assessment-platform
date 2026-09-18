@@ -17,7 +17,7 @@ import { listStudentCourseOutcomes, type StudentCourseOutcome } from "@/lib/stud
  * registration surface does with that answer, and it reads `outcome.arrear` rather than
  * re-deriving anything. One definition of an arrear, reused.
  *
- * ## The three ways this must never block
+ * ## The four ways this must never block
  *
  * - **`not-judged` is not an arrear.** It means the evidence is incomplete, not that the
  *   student failed, and `lib/arrears.ts` returns `null` for it. Nothing here needs a special
@@ -26,6 +26,9 @@ import { listStudentCourseOutcomes, type StudentCourseOutcome } from "@/lib/stud
  *   re-offering of the failed course has a different `offeringId`; `Enrollment` carries no
  *   `courseId`, so an id comparison would miss it. Re-registering is how a student *clears* the
  *   arrear, so the comparison is on `courseId` and it is load-bearing.
+ * - **A course the student has already passed is never blocked.** An arrear is about what is
+ *   outstanding, and a passed course is not. This is what stops a failed theory paper holding a
+ *   lab the student already cleared — a passed course does not need repeating.
  * - **An acknowledged arrear no longer blocks.** The block is mandatory but must not strand
  *   anyone, so the student can acknowledge it once (see `ArrearAcknowledgement`) and continue.
  *
@@ -74,6 +77,23 @@ export function selectBlockingArrear(
   targetCourseId: string,
   acknowledgedOfferingIds: ReadonlySet<string> = new Set(),
 ): ArrearHold | null {
+  /*
+   * A course the student has **already passed** is not outstanding work, so an arrear in some
+   * other course must not hold it.
+   *
+   * Without this, an arrear is scoped to the *programme* rather than the thing that is actually
+   * outstanding: a failed theory paper held the lab as well, so a student who had passed the lab
+   * could not register for it again. A passed course never needs repeating, and it is the one
+   * target the arrear cannot be said to be about.
+   *
+   * Reads the verdict rather than the raw mark, so a `not-judged` course (incomplete evidence) is
+   * not mistaken for a pass and is still gated normally.
+   */
+  const alreadyPassed = outcomes.some(
+    (outcome) => outcome.courseId === targetCourseId && outcome.outcome.status === "pass",
+  )
+  if (alreadyPassed) return null
+
   for (const outcome of outcomes) {
     if (outcome.arrear === null) continue
     // Re-registering for the arrear's own course is how it is cleared; never block it.
