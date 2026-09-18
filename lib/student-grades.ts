@@ -312,3 +312,80 @@ export function buildStudentGrades(items: readonly StudentAssessmentItem[]): Stu
     subjects,
   }
 }
+
+/** One subject's released marks in the derived current period. */
+export type CurrentTermSubject = {
+  courseId: string
+  courseCode: string
+  courseName: string
+  /** Always a current-period group; the subject exists here only if it has one. */
+  group: SubjectTermGroup
+}
+
+export type CurrentTermMarks = {
+  /** The derived current period, or `null` when the student has no work at all. */
+  period: GradePeriod | null
+  /** Subjects with released marks in the current period. */
+  subjects: CurrentTermSubject[]
+  /** Released marks across those subjects. */
+  releasedMarkCount: number
+  /** Marked but not yet released, across those subjects. */
+  awaitingReleaseCount: number
+  /** No mark row exists, across those subjects. */
+  notMarkedCount: number
+  /** Mean of the released percentages, or `null` when none is computable. */
+  average: number | null
+}
+
+/**
+ * The Marks page's view model: the current period only.
+ *
+ * `/student/grades` owns the outcome verdicts of *completed* courses; `/student/marks`
+ * owns the everyday "how am I doing now" reading, which is the current period's
+ * released marks grouped by subject. The split is by period, not by data source: this
+ * is built from the same `StudentGrades` the course hub uses, so the two cannot
+ * disagree about which marks are released or what a subject's average is.
+ *
+ * ## What this does not do
+ *
+ * - **It does not invent a term.** `grades.currentPeriod` is the newest period the
+ *   student has work in (see `buildStudentGrades`); a subject with no work there is
+ *   simply absent, and an empty period yields an empty `subjects` list rather than a
+ *   zeroed row.
+ * - **It does not fold an unreleased mark in.** Only `group.marks` — released marks —
+ *   reach the count and the mean. The awaiting/not-marked counts are carried through
+ *   so the page can say *why* a subject is thin without turning either into a `0`.
+ *   `average` is `null`, not `0`, when nothing in the period carries a percentage.
+ */
+export function buildCurrentTermMarks(grades: StudentGrades): CurrentTermMarks {
+  const subjects: CurrentTermSubject[] = []
+  for (const subject of grades.subjects) {
+    if (subject.current === null) continue
+    subjects.push({
+      courseId: subject.courseId,
+      courseCode: subject.courseCode,
+      courseName: subject.courseName,
+      group: subject.current,
+    })
+  }
+
+  const marks = subjects.flatMap((subject) => subject.group.marks)
+  const percentages = marks
+    .map((mark) => mark.percentage)
+    .filter((value): value is number => value !== null)
+
+  return {
+    period: grades.currentPeriod,
+    subjects,
+    releasedMarkCount: marks.length,
+    awaitingReleaseCount: subjects.reduce(
+      (total, subject) => total + subject.group.awaitingReleaseCount,
+      0,
+    ),
+    notMarkedCount: subjects.reduce((total, subject) => total + subject.group.notMarkedCount, 0),
+    average:
+      percentages.length > 0
+        ? percentages.reduce((sum, value) => sum + value, 0) / percentages.length
+        : null,
+  }
+}
