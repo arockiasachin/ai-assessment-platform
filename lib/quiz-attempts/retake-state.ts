@@ -3,7 +3,7 @@ import type { QuizAttemptKind } from "@/lib/generated/prisma/client"
 
 import { GRADED, isCounted } from "./kinds"
 import { resolveMaxAttempts } from "./eligibility"
-import { decideRetake, resolveSittingCap, type RetakePolicy } from "./retake-policy"
+import { decideRetake, resolveRetakeAllowance, type RetakePolicy } from "./retake-policy"
 
 /**
  * The retake picture for one student and assessment, in one place.
@@ -64,12 +64,14 @@ export function retakeStateFrom(input: {
     (attempt) => attempt.kind === GRADED && attempt.status === "SUBMITTED",
   )
 
-  // `resolveMaxAttempts` owns the per-assessment → env → default chain, so the cap is not
-  // re-derived here. A null `maxAttempts` means "use the platform default", not "zero sittings".
-  const effectiveCap = resolveSittingCap({
+  // `resolveRetakeAllowance` owns the per-assessment → env → default chain *and* the sitting an
+  // approved request grants, so the cap is not re-derived here. A null `maxAttempts` means "use
+  // the platform default", not "zero sittings".
+  const effectiveCap = resolveRetakeAllowance({
     policy: input.policy,
     maxAttempts: resolveMaxAttempts(input.maxAttempts),
     retakesAllowed: input.retakesAllowed,
+    hasApprovedRequest: input.requestStatus === "APPROVED",
   })
 
   const decision = decideRetake({

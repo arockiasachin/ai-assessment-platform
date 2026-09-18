@@ -20,7 +20,7 @@ import { selectAdaptiveRetakeQuestions } from "@/lib/analytics/retake"
 import { releasedAssessmentWhere } from "@/lib/assessment-visibility"
 import { finalizedAttemptWhere, GRADED, isCounted, isGraded, PRACTICE } from "./kinds"
 import { findResumableAttempt } from "./resumable"
-import { decideRetake, resolveSittingCap } from "./retake-policy"
+import { decideRetake, resolveRetakeAllowance } from "./retake-policy"
 import { recordAiSuggestion, writeAuditLog } from "@/lib/grading"
 import { QuizGenerationError } from "@/lib/quiz-generation/errors"
 import { gradeGeneratedQuiz, type GeneratedQuestionForScoring } from "@/lib/quiz-generation/grading"
@@ -823,11 +823,13 @@ export async function startQuizAttempt(user: AuthUser, input: unknown): Promise<
       )
     }
 
-    // `retakesAllowed` converts to total sittings here, so the cap is applied in one place.
-    const sittingCap = resolveSittingCap({
+    // `retakesAllowed` converts to total sittings here, including the sitting an approved
+    // request grants, so the cap is applied in one place (SN-51).
+    const sittingCap = resolveRetakeAllowance({
       policy: assessment.retakePolicy,
       maxAttempts: resolveMaxAttempts(assessment.maxAttempts),
       retakesAllowed: assessment.retakesAllowed,
+      hasApprovedRequest: request?.status === "APPROVED",
     })
     const eligibility = evaluateAttemptEligibility({
       existingAttemptCount: used,

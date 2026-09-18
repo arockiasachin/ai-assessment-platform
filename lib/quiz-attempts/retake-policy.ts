@@ -79,6 +79,39 @@ export function resolveSittingCap(input: {
 }
 
 /**
+ * The cap on total graded sittings **including any sitting an approved retake request grants**.
+ *
+ * ## Why this exists
+ *
+ * An `APPROVAL` assessment's only reason to exist is to let a teacher grant a sitting the cap
+ * would otherwise refuse — but the cap was applied independently of the decision, so an approved
+ * request changed nothing: `decideRetake` returned `allowed: true` and the cap check immediately
+ * refused. The approval was reachable only *below* the cap, which is the one case where a student
+ * does not need one. `APPROVAL` was therefore inert in its only meaningful scenario (SN-51).
+ *
+ * ## Why the grant needs no extra state
+ *
+ * An approved request raises the allowance by exactly one. Consumption is implicit: taking the
+ * granted sitting raises `gradedAttemptsUsed` to meet the raised allowance, so the student is back
+ * at the limit and a second approval cannot compound. That keeps the rule a pure function of rows
+ * the caller already has, rather than requiring a "granted at" column.
+ *
+ * `retakeStateFrom` (the read view) and `startQuizAttempt` (the authority) both call this, so the
+ * button and the route cannot disagree about whether the grant applies.
+ */
+export function resolveRetakeAllowance(input: {
+  policy: RetakePolicy
+  maxAttempts: number
+  retakesAllowed: number | null
+  hasApprovedRequest: boolean
+}): number {
+  const sittingCap = resolveSittingCap(input)
+  // Only `APPROVAL` has an approval to grant with; under `FIXED` the cap is absolute by definition.
+  if (input.policy !== "APPROVAL" || !input.hasApprovedRequest) return sittingCap
+  return sittingCap + 1
+}
+
+/**
  * Whether a stored `(policy, retakesAllowed)` pair is coherent, and the sentence explaining why
  * not. `null` means the pair is fine.
  *

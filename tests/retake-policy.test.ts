@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest"
 import {
   decideRetake,
   describeRetakePolicy,
+  resolveRetakeAllowance,
   resolveSittingCap,
   type RetakePolicy,
 } from "@/lib/quiz-attempts/retake-policy"
@@ -122,6 +123,61 @@ describe("resolveSittingCap", () => {
     expect(resolveSittingCap({ policy: "FIXED", maxAttempts: 3, retakesAllowed: Number.NaN })).toBe(
       3,
     )
+  })
+})
+
+describe("resolveRetakeAllowance", () => {
+  it("adds one sitting to an APPROVAL assessment once the request is approved", () => {
+    // The whole point of APPROVAL is a sitting the cap would otherwise refuse. Without this the
+    // approval changed nothing at the cap, which is the only case a student requests one (SN-51).
+    const base = { policy: "APPROVAL" as RetakePolicy, maxAttempts: 3, retakesAllowed: null }
+    expect(resolveRetakeAllowance({ ...base, hasApprovedRequest: false })).toBe(3)
+    expect(resolveRetakeAllowance({ ...base, hasApprovedRequest: true })).toBe(4)
+  })
+
+  it("adds nothing when there is no approval to spend", () => {
+    for (const policy of ["NONE", "FIXED", "APPROVAL"] as RetakePolicy[]) {
+      expect(
+        resolveRetakeAllowance({
+          policy,
+          maxAttempts: 3,
+          retakesAllowed: null,
+          hasApprovedRequest: false,
+        }),
+      ).toBe(resolveSittingCap({ policy, maxAttempts: 3, retakesAllowed: null }))
+    }
+  })
+
+  it("does not let an approval raise a FIXED or NONE cap", () => {
+    // Only APPROVAL has an approval to grant with. A stray APPROVED row must not widen a cap the
+    // teacher set absolutely.
+    expect(
+      resolveRetakeAllowance({
+        policy: "FIXED",
+        maxAttempts: 3,
+        retakesAllowed: 1,
+        hasApprovedRequest: true,
+      }),
+    ).toBe(2)
+    expect(
+      resolveRetakeAllowance({
+        policy: "NONE",
+        maxAttempts: 3,
+        retakesAllowed: 1,
+        hasApprovedRequest: true,
+      }),
+    ).toBe(1)
+  })
+
+  it("grants one sitting on top of a converted retake count", () => {
+    expect(
+      resolveRetakeAllowance({
+        policy: "APPROVAL",
+        maxAttempts: 3,
+        retakesAllowed: 1,
+        hasApprovedRequest: true,
+      }),
+    ).toBe(3)
   })
 })
 

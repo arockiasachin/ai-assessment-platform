@@ -1,7 +1,7 @@
 import { beforeAll, describe, expect, it } from "vitest"
 
 import { getRetakeStateForStudent, retakeStateFrom } from "@/lib/quiz-attempts/retake-state"
-import { decideRetake, resolveSittingCap } from "@/lib/quiz-attempts/retake-policy"
+import { decideRetake, resolveRetakeAllowance } from "@/lib/quiz-attempts/retake-policy"
 
 import { disconnectTestDatabase, prisma, truncateAll } from "./helpers/db"
 import { createSpineFixture } from "./fixtures/spine"
@@ -158,6 +158,12 @@ describe("getRetakeStateForStudent", () => {
       { policy: "FIXED", used: 1, approved: false },
       { policy: "APPROVAL", used: 1, approved: true },
       { policy: "APPROVAL", used: 1, approved: false },
+      // The cases the approval grant exists for, and the only ones where it changes the answer:
+      // at the cap (the grant applies) and one past it (the grant is spent). Before SN-51 these
+      // were absent, so the property held while the rule was wrong.
+      { policy: "APPROVAL", used: 3, approved: false },
+      { policy: "APPROVAL", used: 3, approved: true },
+      { policy: "APPROVAL", used: 4, approved: true },
     ]
 
     for (const scenario of cases) {
@@ -167,12 +173,15 @@ describe("getRetakeStateForStudent", () => {
         hasApprovedRequest: scenario.approved,
         hasPendingRequest: false,
       })
-      const cap = resolveSittingCap({
+      // The same function the state uses, so the property tests the real rule rather than a
+      // hand-copied approximation of it.
+      const allowance = resolveRetakeAllowance({
         policy: scenario.policy,
         maxAttempts: 3,
         retakesAllowed: null,
+        hasApprovedRequest: scenario.approved,
       })
-      const canRetake = decision.allowed && scenario.used < cap
+      const canRetake = decision.allowed && scenario.used < allowance
 
       await reset({ policy: scenario.policy, maxAttempts: 3 })
       for (let index = 0; index < scenario.used; index += 1) await addGraded("SUBMITTED")
@@ -185,6 +194,28 @@ describe("getRetakeStateForStudent", () => {
       const state = await getRetakeStateForStudent(studentId, f.assessment.id)
       expect(state?.canRetake, JSON.stringify(scenario)).toBe(canRetake)
     }
+  })
+
+  it("grants exactly one sitting once approved, and spends it (SN-51)", async () => {
+    // The defect: `decideRetake` allowed the retake and the cap then refused it independently, so
+    // an approval did nothing at the cap — the only situation anyone requests one. An approved
+    // request now raises the allowance by one, and taking that sitting consumes the grant.
+    await reset({ policy: "APPROVAL", maxAttempts: 3 })
+    for (let index = 0; index < 3; index += 1) await addGraded("SUBMITTED")
+
+    const atCap = await getRetakeStateForStudent(studentId, f.assessment.id)
+    expect(atCap).toMatchObject({ gradedAttemptsUsed: 3, sittingCap: 3, canRetake: false })
+
+    await prisma.retakeRequest.create({
+      data: { assessmentId: f.assessment.id, studentId, status: "APPROVED" },
+    })
+    const granted = await getRetakeStateForStudent(studentId, f.assessment.id)
+    expect(granted).toMatchObject({ canRetake: true, sittingCap: 4, blockedReason: null })
+
+    // Take the granted sitting: the grant is spent, and a standing approval grants nothing more.
+    await addGraded("SUBMITTED")
+    const spent = await getRetakeStateForStudent(studentId, f.assessment.id)
+    expect(spent).toMatchObject({ gradedAttemptsUsed: 4, sittingCap: 4, canRetake: false })
   })
 })
 
