@@ -4,6 +4,7 @@ import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { CheckCircle2, Loader2, Plus, Save, Send, Sparkles, Trash2 } from "lucide-react"
 
+import { AuthoringLifecycleBadge } from "@/components/authoring-lifecycle"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { QuizSubtopicsPanel } from "@/components/quiz-subtopics-panel"
@@ -22,6 +23,7 @@ import type {
   GenerationAssessmentSummary,
 } from "@/lib/contracts/quiz-generation"
 import type { SubtopicBreakdownValue } from "@/lib/contracts/analytics"
+import { questionSetLifecycle } from "@/lib/authoring-lifecycle-view"
 
 /**
  * Teacher quiz-generation workspace.
@@ -419,6 +421,13 @@ export function TeacherQuizGenerator({
     .sort((a, b) => a.order - b.order)
   const drafts = selectedQuestions.filter((question) => question.status === "draft")
   const published = selectedQuestions.filter((question) => question.status === "published")
+  // TL-1: the same lifecycle badge the other authoring surfaces render. The per-question
+  // Draft/Published badge below stays — this is the set-level answer to "is this assessment's
+  // question bank live?", which is what the header used to leave to a pair of counts.
+  const lifecycle = questionSetLifecycle({
+    draftCount: drafts.length,
+    publishedCount: published.length,
+  })
   // Scoring weights each question by its share of this total, projected onto the assessment's
   // max. Shown so the weighting is a visible fact rather than a stored number nothing displays.
   const totalQuestionPoints = selectedQuestions.reduce((sum, question) => sum + question.points, 0)
@@ -649,10 +658,13 @@ export function TeacherQuizGenerator({
 
       {selected && (
         <Card className="border-border/70 shadow-sm">
-          <CardHeader className="flex flex-wrap items-center justify-between gap-3">
-            <CardTitle className="text-base tracking-tight">
-              Drafts ({drafts.length}) · Published ({published.length})
-            </CardTitle>
+          <CardHeader className="flex flex-wrap items-start justify-between gap-3">
+            <div className="flex flex-wrap items-center gap-3">
+              <AuthoringLifecycleBadge view={lifecycle} />
+              <CardTitle className="text-base tracking-tight">
+                Drafts ({drafts.length}) · Published ({published.length})
+              </CardTitle>
+            </div>
             <Button
               type="button"
               variant="outline"

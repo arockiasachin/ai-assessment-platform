@@ -1,4 +1,7 @@
-import { formatDateTime } from "@/lib/format"
+import {
+  assessmentReleaseLifecycle,
+  type AuthoringLifecycleView,
+} from "@/lib/authoring-lifecycle-view"
 
 /**
  * Pure view state for the assessment-release control (TN-1 / TN-31).
@@ -13,6 +16,11 @@ import { formatDateTime } from "@/lib/format"
  * This lives here rather than in the control component because the repo has no jsdom, so
  * anything left inside a client component has no test — and the one-way rule is exactly
  * what needs pinning.
+ *
+ * The status/label/detail strings are now the one definition in
+ * `lib/authoring-lifecycle-view.ts`, so the release state reads identically to the other
+ * three authoring surfaces' lifecycle badges (TL-1). This module adds the one fact the
+ * shared mapping cannot know: whether the one-way write is still available.
  */
 
 export type AssessmentReleaseState = {
@@ -21,33 +29,25 @@ export type AssessmentReleaseState = {
   releasedAt: string | null
 }
 
-export type AssessmentReleaseView = {
+/**
+ * The shared lifecycle view, plus the one fact only release can know: whether its one-way
+ * write is still available. Narrowing `status` keeps the release control's existing type
+ * contract.
+ */
+export type AssessmentReleaseView = AuthoringLifecycleView & {
   /** Status-pill key: `published` reads as visible, `draft` as hidden. */
   status: "published" | "draft"
-  label: string
-  /** The line under the pill — what the state means for students. */
-  detail: string
   /** Whether to render the Release button. False once released: there is no unrelease path. */
   canRelease: boolean
 }
 
 export function assessmentReleaseView(state: AssessmentReleaseState): AssessmentReleaseView {
-  if (state.released) {
-    return {
-      status: "published",
-      label: "Released",
-      detail:
-        state.releasedAt === null
-          ? "Visible to students"
-          : `Visible to students since ${formatDateTime(state.releasedAt)}`,
-      canRelease: false,
-    }
-  }
+  const lifecycle = assessmentReleaseLifecycle(state)
   return {
-    status: "draft",
-    label: "Not released",
-    detail: "Hidden from students",
-    canRelease: true,
+    ...lifecycle,
+    status: lifecycle.stage === "live" ? "published" : "draft",
+    // Release is one-way, so the write is offered exactly while the stage is still `draft`.
+    canRelease: lifecycle.stage === "draft",
   }
 }
 

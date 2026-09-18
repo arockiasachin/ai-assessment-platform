@@ -5,6 +5,7 @@ import { Activity, Gauge, ShieldAlert, Terminal } from "lucide-react"
 
 import { RoleGuard } from "@/components/role-guard"
 import { AppShell, PageHeader } from "@/components/shell"
+import { AuthoringLifecycleBadge } from "@/components/authoring-lifecycle"
 import {
   CodeTaskSetupForm,
   SimilarityReview,
@@ -23,6 +24,7 @@ import { STATUS_META, StatusPill } from "@/components/ui/status-pill"
 import { SUCCESS_TEXT } from "@/components/ui/tone"
 import { TruncatedText } from "@/components/ui/truncated-text"
 import { getSessionUser } from "@/lib/auth"
+import { testCaseSetLifecycle } from "@/lib/authoring-lifecycle-view"
 import {
   getCodeTaskForTeacher,
   listRunsForTeacher,
@@ -511,6 +513,14 @@ export default async function TeacherCodeTasksPage({
                         testCases.length === 0
                           ? "No test cases yet. Add one, or generate drafts from the task instructions."
                           : `${hiddenCases} of ${testCases.length} cases are hidden. A hidden case never reveals its expected output to a student — only whether it passed.`
+                      }
+                      action={
+                        <AuthoringLifecycleBadge
+                          view={testCaseSetLifecycle({
+                            draftCount: draftCases,
+                            activeCount: testCases.length - draftCases,
+                          })}
+                        />
                       }
                     >
                       <DataTable

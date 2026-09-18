@@ -1,9 +1,11 @@
+import { AuthoringLifecycleBadge } from "@/components/authoring-lifecycle"
 import { Callout } from "@/components/ui/callout"
 import { EmptyState } from "@/components/ui/empty-state"
 import { MetricRow } from "@/components/ui/metric-row"
 import { ProgressBar } from "@/components/ui/progress-bar"
 import { SectionCard } from "@/components/ui/section-card"
 import { StatusPill } from "@/components/ui/status-pill"
+import { rubricLifecycle } from "@/lib/authoring-lifecycle-view"
 import type { RubricResponse, TeacherAssessmentSummary } from "@/lib/rubric-grading/contracts"
 
 /**
@@ -37,11 +39,21 @@ function RubricPanel({ assessment }: { assessment: TeacherAssessmentSummary }) {
         `${assessment.courseCode} · ${assessment.className} · marking out of ${assessment.maxMarks}`
       }
       action={
-        <StatusPill
-          status={criteria.length > 0 ? "active" : "pending"}
-          label={`${criteria.length} ${criteria.length === 1 ? "criterion" : "criteria"}`}
-          dot
-        />
+        <div className="flex flex-wrap items-start gap-3">
+          {/*
+            TL-1: rubrics have no publish flag — a rubric is the grading contract as soon as
+            it is saved, and it freezes once a grade is published against it. The badge states
+            that real fact (Authored / Frozen) instead of inventing a draft/publish control.
+          */}
+          <AuthoringLifecycleBadge
+            view={rubricLifecycle({ hasRubric: true, locked: assessment.locked })}
+          />
+          <StatusPill
+            status={criteria.length > 0 ? "active" : "pending"}
+            label={`${criteria.length} ${criteria.length === 1 ? "criterion" : "criteria"}`}
+            dot
+          />
+        </div>
       }
     >
       <div className="space-y-4">

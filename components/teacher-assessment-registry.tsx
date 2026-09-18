@@ -3,8 +3,9 @@
 import { useMemo, useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { CheckCircle2, ClipboardList, Pencil, Trash2, X } from "lucide-react"
+import { ClipboardList, Pencil, Trash2, X } from "lucide-react"
 
+import { AssessmentReleaseControl } from "@/components/assessment-release-control"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -258,16 +259,19 @@ export function TeacherAssessmentRegistry({ rows }: { rows: TeacherAssessmentRow
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
                       <Badge variant="outline">{ASSESSMENT_KIND_LABEL[row.type]}</Badge>
-                      {row.releasedAt ? (
-                        <Badge
-                          variant="outline"
-                          className="border-emerald-500/30 text-emerald-700 dark:text-emerald-400"
-                        >
-                          <CheckCircle2 /> Released
-                        </Badge>
-                      ) : (
-                        <Badge variant="secondary">Not released</Badge>
-                      )}
+                      {/*
+                        TL-1: the state was a read-only badge and the write path lived only on
+                        the planner and the dashboard, so this authoring surface could show
+                        "Not released" and offer no way to change it. The control is the same
+                        one those two surfaces render, so the lifecycle reads and writes
+                        identically wherever a teacher meets it.
+                      */}
+                      <AssessmentReleaseControl
+                        assessmentId={row.id}
+                        assessmentTitle={row.title}
+                        released={row.releasedAt !== null}
+                        releasedAt={row.releasedAt}
+                      />
                       <ReadinessBadge row={row} />
                     </div>
                   </div>

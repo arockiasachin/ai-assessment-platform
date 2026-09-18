@@ -4,6 +4,7 @@ import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { Loader2, Send } from "lucide-react"
 
+import { AuthoringLifecycleBadge } from "@/components/authoring-lifecycle"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -13,7 +14,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { StatusPill } from "@/components/ui/status-pill"
 import { RELEASE_CONFIRMATION_BODY, assessmentReleaseView } from "@/lib/assessment-release-view"
 
 /**
@@ -71,8 +71,7 @@ export function AssessmentReleaseControl({
 
   return (
     <div className="space-y-1">
-      <StatusPill status={view.status} label={view.label} dot />
-      <p className="text-xs text-muted-foreground">{view.detail}</p>
+      <AuthoringLifecycleBadge view={view} />
       {view.canRelease && (
         <>
           <Button type="button" variant="outline" size="sm" onClick={() => setOpen(true)}>

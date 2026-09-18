@@ -4,6 +4,7 @@ import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { ArrowDown, ArrowUp, Plus, Save, Trash2 } from "lucide-react"
 
+import { AuthoringLifecycleBadge } from "@/components/authoring-lifecycle"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -16,6 +17,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { rubricLifecycle } from "@/lib/authoring-lifecycle-view"
 import type { RubricResponse, TeacherAssessmentSummary } from "@/lib/rubric-grading/contracts"
 
 /**
@@ -94,6 +96,17 @@ export function TeacherRubricEditor({
   const [isSaving, setIsSaving] = useState(false)
 
   const selected = assessments.find((assessment) => assessment.id === selectedId) ?? null
+
+  /**
+   * TL-1: the freeze was computed on the server (`locked`) and enforced on save with a 409,
+   * but nothing rendered it — so the only way to learn a rubric was frozen was to try to edit
+   * it. The badge states it up front, and `isLocked` turns Save off rather than letting the
+   * teacher fill in a form the server will reject.
+   */
+  const lifecycle = selected
+    ? rubricLifecycle({ hasRubric: selected.rubric !== null, locked: selected.locked })
+    : null
+  const isLocked = selected?.locked === true
 
   const totalPoints = criteria.reduce((total, criterion) => {
     const value = Number(criterion.maxPoints)
@@ -282,10 +295,13 @@ export function TeacherRubricEditor({
               </SelectContent>
             </Select>
             {selected && (
-              <p className="text-xs text-muted-foreground">
-                {selected.courseCode} · {selected.courseName} · {selected.className} · max{" "}
-                {selected.maxMarks} marks
-              </p>
+              <div className="space-y-1">
+                <p className="text-xs text-muted-foreground">
+                  {selected.courseCode} · {selected.courseName} · {selected.className} · max{" "}
+                  {selected.maxMarks} marks
+                </p>
+                {lifecycle && <AuthoringLifecycleBadge view={lifecycle} />}
+              </div>
             )}
           </div>
 
@@ -509,10 +525,18 @@ export function TeacherRubricEditor({
               <Plus />
               Add criterion
             </Button>
-            <Button type="button" onClick={save} disabled={isSaving || !selected}>
-              <Save />
-              {isSaving ? "Saving…" : "Save rubric"}
-            </Button>
+            <div className="flex flex-col items-end gap-1">
+              <Button type="button" onClick={save} disabled={isSaving || !selected || isLocked}>
+                <Save />
+                {isSaving ? "Saving…" : "Save rubric"}
+              </Button>
+              {isLocked && (
+                <p role="status" className="text-xs text-muted-foreground">
+                  Frozen — a grade has been published against this rubric, so it can no longer be
+                  edited.
+                </p>
+              )}
+            </div>
           </div>
         </CardContent>
       </Card>

@@ -12,7 +12,10 @@ import { RELEASE_CONFIRMATION_BODY, assessmentReleaseView } from "@/lib/assessme
  */
 describe("assessmentReleaseView", () => {
   it("offers the control for an unreleased assessment", () => {
+    // TL-1 added the shared `stage` to the release view, so this pins it as well as the
+    // release-specific facts: the assertion is strictly stronger than before, not relaxed.
     expect(assessmentReleaseView({ released: false, releasedAt: null })).toEqual({
+      stage: "draft",
       status: "draft",
       label: "Not released",
       detail: "Hidden from students",

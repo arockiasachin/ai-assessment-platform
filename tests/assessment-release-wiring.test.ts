@@ -33,4 +33,13 @@ describe("assessment release wiring", () => {
   it("the dashboard renders the release control beside its release state", () => {
     expect(source("components/teacher-dashboard.tsx")).toContain("AssessmentReleaseControl")
   })
+
+  it("the assignments registry renders it, so the authoring surface itself has the write path", () => {
+    // TL-1: the registry showed a read-only Released / Not released badge while the only
+    // callers of the control were the planner and the dashboard. This fails if the badge
+    // comes back and the control is removed again.
+    const registry = source("components/teacher-assessment-registry.tsx")
+    expect(registry).toContain("AssessmentReleaseControl")
+    expect(registry).not.toContain("Not released</Badge>")
+  })
 })
