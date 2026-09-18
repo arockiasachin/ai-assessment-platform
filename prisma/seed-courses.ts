@@ -440,9 +440,24 @@ function fromNow(days: number, hourUtc = 8): Date {
 const TERM_START = fromNow(-63)
 const TERM_END = fromNow(42)
 
-const DUE_CAT1 = fromNow(-42)
-const DUE_CAT2 = fromNow(-28)
-const DUE_CAT3 = fromNow(-14)
+/*
+ * CAT deadlines sit deliberately in the **future**, so the seeded term reads as in progress rather
+ * than as six weeks of past-due work: a student sees the "due in N days" states, and a teacher has
+ * an item that has not closed yet to author against.
+ *
+ * One day per CAT **type**, so the five shapes are distinguishable at a glance instead of sharing a
+ * date. They used to be a single past/soon/past ladder (`CAT1 -42`, `CAT2 -28`, `CAT3 -14`) with
+ * `cat-quiz` and `cat-lab` sharing `CAT1`, and `cat-descriptive` and `cat-midterm-code` sharing
+ * `CAT3` — which is why the constants are now per type rather than per CAT number.
+ *
+ * `DUE_FAT` stays in the future and the `RELEASED_*` dates stay in the past, so every CAT is still
+ * released before it is due and the FAT is still the unreleased fixture.
+ */
+const DUE_CAT_QUIZ = fromNow(3)
+const DUE_CAT_LAB = fromNow(4)
+const DUE_CAT_ASSIGNMENT = fromNow(5)
+const DUE_CAT_MIDTERM_CODE = fromNow(6)
+const DUE_CAT_DESCRIPTIVE = fromNow(7)
 const DUE_FAT = fromNow(28)
 
 const RELEASED_CAT1 = fromNow(-56)
@@ -1015,7 +1030,7 @@ async function createAssessments(): Promise<AssessmentSeed[]> {
       createdById: input.createdById,
       title: `${input.label} — CAT 1 (quiz)`,
       type: "QUIZ",
-      dueDate: DUE_CAT1,
+      dueDate: DUE_CAT_QUIZ,
       maxMarks: THEORY_MAX_MARKS.cat1,
       releasedAt: RELEASED_CAT1,
     },
@@ -1028,7 +1043,7 @@ async function createAssessments(): Promise<AssessmentSeed[]> {
       createdById: input.createdById,
       title: `${input.label} — CAT 2 (written assignment)`,
       type: "ASSIGNMENT",
-      dueDate: DUE_CAT2,
+      dueDate: DUE_CAT_ASSIGNMENT,
       maxMarks: THEORY_MAX_MARKS.cat2,
       releasedAt: RELEASED_CAT2,
     },
@@ -1041,7 +1056,7 @@ async function createAssessments(): Promise<AssessmentSeed[]> {
       createdById: input.createdById,
       title: `${input.label} — CAT 3 (descriptive)`,
       type: "DESCRIPTIVE",
-      dueDate: DUE_CAT3,
+      dueDate: DUE_CAT_DESCRIPTIVE,
       maxMarks: THEORY_MAX_MARKS.cat3,
       releasedAt: RELEASED_CAT3,
     },
@@ -1102,7 +1117,7 @@ async function createAssessments(): Promise<AssessmentSeed[]> {
       createdById: input.createdById,
       title: `${input.label} — CAT (lab record and exercises)`,
       type: "ASSIGNMENT",
-      dueDate: DUE_CAT1,
+      dueDate: DUE_CAT_LAB,
       maxMarks: LAB_MAX_MARKS.cat,
       releasedAt: RELEASED_CAT1,
     },
@@ -1117,7 +1132,7 @@ async function createAssessments(): Promise<AssessmentSeed[]> {
       createdById: input.createdById,
       title: `${input.label} — Mid-Term Lab (code task)`,
       type: "CODE",
-      dueDate: DUE_CAT3,
+      dueDate: DUE_CAT_MIDTERM_CODE,
       maxMarks: LAB_MAX_MARKS.midterm,
       releasedAt: RELEASED_CAT3,
     },
