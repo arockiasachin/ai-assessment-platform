@@ -171,42 +171,81 @@ export const submissionRequestSchema = z.object({
 })
 export type SubmissionRequest = z.infer<typeof submissionRequestSchema>
 
-const importedQuizOptionSchema = z.object({
-  optionId: z.string().optional(),
-  text: nonEmptyString,
-})
+/**
+ * One option, in either accepted shape.
+ *
+ * A bare string is the **minimal** shape the downloadable template ships
+ * (`"options": ["[0,1,2,3]", "[0,2,1,3]"]`); `{ optionId, text }` is the
+ * historical **rich** shape. `optionId` stays optional and defaults positionally
+ * to `A`, `B`, `C`… in the normaliser.
+ */
+const importedQuizOptionSchema = z.union([
+  nonEmptyString,
+  z.object({
+    optionId: z.string().optional(),
+    text: nonEmptyString,
+  }),
+])
 
-const importedQuizQuestionSchema = z
-  .object({
-    questionText: nonEmptyString,
-    options: z.array(importedQuizOptionSchema).min(2, "Each question needs at least two options."),
-    correctIndex: z.number().int().optional(),
-    correctAnswerId: z.string().optional(),
-    marks: z.number().positive().optional(),
-  })
-  .refine(
-    (question) => question.correctIndex !== undefined || question.correctAnswerId !== undefined,
-    {
-      message: "Each question must include correctAnswerId or correctIndex.",
-    },
-  )
+/**
+ * One imported question.
+ *
+ * `questionText` is the rich shape's key; `question` is the minimal shape's. The
+ * normaliser reads whichever is present (rich wins) and reports a single clear
+ * error when neither is. `answer` is the minimal shape's answer — a letter, a
+ * 1-based index, or the exact option text — while `correctIndex` (0-based) and
+ * `correctAnswerId` stay the rich shape's. **`correctIndex` still wins when both
+ * are present**, exactly as the service did before this contract widened.
+ */
+const importedQuizQuestionSchema = z.object({
+  questionText: nonEmptyString.optional(),
+  question: nonEmptyString.optional(),
+  options: z.array(importedQuizOptionSchema).min(2, "Each question needs at least two options."),
+  correctIndex: z.number().int().optional(),
+  correctAnswerId: z.string().optional(),
+  answer: z.union([z.string(), z.number()]).optional(),
+  marks: z.number().positive().optional(),
+})
 
 /**
  * `POST /api/teacher/quiz` request body (JSON quiz import).
  *
- * `offeringId` is required for the same reason the create-assessment contract
- * requires it: a teacher can teach the same course in several offerings, and
- * resolving by `courseId`/course name silently imported the quiz into the wrong
- * class. The offering is resolved and ownership-checked server-side; the legacy
- * `quizMetadata.courseId`/`quizMetadata.course` keys are no longer read.
+ * **Two shapes, one contract.** The historical rich shape supplies `offeringId`
+ * and `quizMetadata.title`; the minimal shape a teacher authors by hand supplies
+ * `courseCode` and `title`. `offeringId` is still preferred and still required
+ * over `courseCode` whenever both are present — the UI always sends the offering
+ * the teacher picked, so a template that also carries a `courseCode` cannot
+ * override it.
+ *
+ * `courseCode` exists because requiring an opaque id made hand-authoring
+ * impossible, but it **reintroduces the wrong-class hazard** the id was added to
+ * remove: a teacher may teach the same course in several offerings. The service
+ * therefore resolves a course code against the teacher's *own* offerings and
+ * refuses on ambiguity rather than guessing (see
+ * `createQuizFromImportForSessionUser`). An optional `assessmentId` appends the
+ * questions to an existing quiz the teacher owns; without it a new quiz is
+ * created, which stays the default.
+ *
+ * The schema is deliberately loose about *which* of the alternative keys is
+ * present: a missing key is a semantic error, and
+ * `mapQuizImportIssues`/`parseImportedQuestions` phrase it better than a zod
+ * type error can. It still pins the types, so a structurally wrong body never
+ * reaches the normaliser.
  */
 export const quizImportRequestSchema = z.object({
-  offeringId: nonEmptyString,
-  quizMetadata: z.object({
-    title: nonEmptyString,
-    dueDate: z.string().optional(),
-    totalMarks: z.number().positive().optional(),
-  }),
+  offeringId: nonEmptyString.optional(),
+  courseCode: nonEmptyString.optional(),
+  assessmentId: nonEmptyString.optional(),
+  title: nonEmptyString.optional(),
+  /** The minimal shape's due date; rich payloads use `quizMetadata.dueDate`. */
+  dueDate: z.string().optional(),
+  quizMetadata: z
+    .object({
+      title: nonEmptyString.optional(),
+      dueDate: z.string().optional(),
+      totalMarks: z.number().positive().optional(),
+    })
+    .optional(),
   questions: z.array(importedQuizQuestionSchema).min(1, "Quiz must include at least one question."),
 })
 export type QuizImportRequest = z.infer<typeof quizImportRequestSchema>

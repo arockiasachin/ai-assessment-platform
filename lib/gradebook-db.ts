@@ -11,6 +11,12 @@ import { recordManualMark } from "@/lib/grading/review-service"
 import { resolveMaxAttempts } from "@/lib/quiz-attempts/eligibility"
 import { quizDeliveryStatus } from "@/lib/quiz-attempts/metadata"
 import { describeRetakeSettingsProblem, type RetakePolicy } from "@/lib/quiz-attempts/retake-policy"
+import {
+  answerLetterOutOfRange,
+  optionLetter,
+  optionLetters,
+  QuizImportError,
+} from "@/lib/quiz-import-errors"
 import type { AuthUser } from "@/lib/session"
 import { teacherOwnsAssessment } from "@/lib/teacher-staff"
 import {
@@ -1131,68 +1137,386 @@ function toStringValue(value: unknown) {
   return typeof value === "string" ? value.trim() : ""
 }
 
-function parseImportedQuestions(input: unknown): ParsedQuizQuestion[] {
-  if (!Array.isArray(input) || input.length === 0) {
-    throw new Error("Quiz must include at least one question.")
+/** A minimal-shape option or the rich shape's option, normalised to one form. */
+function normaliseImportedOption(option: unknown, optionIndex: number) {
+  // Positional ids mirror the contract's documented default, so a minimal
+  // `answer: "B"` resolves the same way an explicit `optionId: "B"` would.
+  const positionalId = optionLetter(optionIndex)
+  if (typeof option === "string") {
+    return { optionId: positionalId, text: option.trim() }
+  }
+  const row = asRecord(option)
+  if (!row) return { optionId: positionalId, text: "" }
+  return {
+    optionId: toStringValue(row.optionId) || positionalId,
+    text: toStringValue(row.text),
+  }
+}
+
+/**
+ * Resolve the minimal shape's `answer` — a letter, a 1-based index, or the exact
+ * option text — to a 0-based option index, pushing a layman message on failure.
+ *
+ * Precedence is deliberate: option **id** first (letters are the default ids),
+ * then the option **text**, then a numeric 1-based index. So `answer: "B"` with
+ * options `["A", "B"]` resolves by id to index 1, matching the letter the teacher
+ * wrote, rather than by the text "B" to index 0.
+ */
+function resolveMinimalAnswer(
+  answer: unknown,
+  options: { optionId: string; text: string }[],
+  questionNumber: number,
+  errors: string[],
+): number | null {
+  if (typeof answer === "number") {
+    if (!Number.isInteger(answer) || answer < 1 || answer > options.length) {
+      errors.push(
+        `Question ${questionNumber}: the answer number ${answer} is out of range — its ${options.length} options are numbered 1 to ${options.length}.`,
+      )
+      return null
+    }
+    return answer - 1
   }
 
-  return input.map((item, index) => {
+  if (typeof answer !== "string") {
+    errors.push(
+      `Question ${questionNumber}: the answer must be a letter (A), a number, or the exact option text.`,
+    )
+    return null
+  }
+
+  const raw = answer.trim()
+  if (!raw) {
+    errors.push(`Question ${questionNumber}: the answer is empty.`)
+    return null
+  }
+
+  const byId = options.findIndex((option) => option.optionId.toLowerCase() === raw.toLowerCase())
+  if (byId >= 0) return byId
+
+  const byText = options.findIndex((option) => option.text.toLowerCase() === raw.toLowerCase())
+  if (byText >= 0) return byText
+
+  if (/^\d+$/.test(raw)) {
+    const index = Number(raw)
+    if (index >= 1 && index <= options.length) return index - 1
+    errors.push(
+      `Question ${questionNumber}: the answer number ${raw} is out of range — its ${options.length} options are numbered 1 to ${options.length}.`,
+    )
+    return null
+  }
+
+  if (/^[a-z]$/i.test(raw)) {
+    errors.push(answerLetterOutOfRange(questionNumber, raw.toUpperCase(), options.length))
+    return null
+  }
+
+  errors.push(
+    `Question ${questionNumber}: the answer "${raw}" does not match any of its ${options.length} options (${optionLetters(options.length)}).`,
+  )
+  return null
+}
+
+/** The rich shape's answer keys plus the minimal `answer`, resolved to one index. */
+function resolveCorrectIndex(
+  row: Record<string, unknown>,
+  options: { optionId: string; text: string }[],
+  questionNumber: number,
+  errors: string[],
+): number | null {
+  // `correctIndex` wins when both are present, as it did before the minimal shape
+  // existed. A non-integer or negative value falls through to the other keys,
+  // which is also the old importer's behaviour.
+  if (Number.isInteger(row.correctIndex)) {
+    const index = row.correctIndex as number
+    if (index >= 0 && index < options.length) return index
+    errors.push(
+      `Question ${questionNumber}: correctIndex ${index} is out of range — its ${options.length} options are indexed 0 to ${options.length - 1}.`,
+    )
+    return null
+  }
+
+  const correctAnswerId = toStringValue(row.correctAnswerId)
+  if (correctAnswerId) {
+    const found = options.findIndex(
+      (option) => option.optionId.toLowerCase() === correctAnswerId.toLowerCase(),
+    )
+    if (found >= 0) return found
+    errors.push(
+      `Question ${questionNumber}: the answer id "${correctAnswerId}" does not match any of its ${options.length} options (${optionLetters(options.length)}).`,
+    )
+    return null
+  }
+
+  if (row.answer !== undefined && row.answer !== null) {
+    return resolveMinimalAnswer(row.answer, options, questionNumber, errors)
+  }
+
+  errors.push(
+    `Question ${questionNumber}: give the correct answer with "answer", "correctIndex", or "correctAnswerId".`,
+  )
+  return null
+}
+
+/** One question → its normalised form, or `null` after pushing why it failed. */
+function parseImportedQuestion(
+  row: Record<string, unknown>,
+  questionNumber: number,
+  errors: string[],
+): ParsedQuizQuestion | null {
+  // Rich `questionText` wins over the minimal `question` when both are present.
+  const prompt = toStringValue(row.questionText) || toStringValue(row.question)
+  if (!prompt) {
+    errors.push(`Question ${questionNumber}: the question text is required.`)
+    return null
+  }
+
+  if (!Array.isArray(row.options) || row.options.length < 2) {
+    errors.push(`Question ${questionNumber}: at least two options are required.`)
+    return null
+  }
+
+  const options = row.options.map((option, optionIndex) =>
+    normaliseImportedOption(option, optionIndex),
+  )
+  const emptyOption = options.findIndex((option) => !option.text)
+  if (emptyOption >= 0) {
+    errors.push(`Question ${questionNumber}: option ${optionLetter(emptyOption)} is empty.`)
+    return null
+  }
+
+  const correctIndex = resolveCorrectIndex(row, options, questionNumber, errors)
+  if (correctIndex === null) return null
+
+  // A bad `marks` falls back to 1 rather than failing the whole import, which is
+  // the behaviour the importer has always had.
+  const marksRaw = toNumber(row.marks)
+  const marks = Number.isFinite(marksRaw) && marksRaw > 0 ? marksRaw : 1
+
+  return {
+    prompt,
+    options: options.map((option) => option.text),
+    correctIndex,
+    marks,
+  }
+}
+
+/**
+ * Parse every question, collecting *all* problems rather than throwing on the
+ * first, so the import card can show the teacher a checklist. Throws one
+ * `QuizImportError` carrying the list when any question failed.
+ */
+function parseImportedQuestions(input: unknown): ParsedQuizQuestion[] {
+  if (!Array.isArray(input) || input.length === 0) {
+    throw new QuizImportError(["Add at least one question."])
+  }
+
+  const errors: string[] = []
+  const parsed: ParsedQuizQuestion[] = []
+
+  input.forEach((item, index) => {
     const row = asRecord(item)
-    if (!row) throw new Error(`Question ${index + 1} has an invalid shape.`)
-
-    const prompt = toStringValue(row.questionText)
-    if (!prompt) throw new Error(`Question ${index + 1} is missing questionText.`)
-
-    if (!Array.isArray(row.options) || row.options.length < 2) {
-      throw new Error(`Question ${index + 1} must include at least two options.`)
+    if (!row) {
+      errors.push(`Question ${index + 1}: it must be an object with a question and its options.`)
+      return
     }
-
-    const options = row.options.map((option, optionIndex) => {
-      const value = asRecord(option)
-      if (!value)
-        throw new Error(
-          `Question ${index + 1} has an invalid option at position ${optionIndex + 1}.`,
-        )
-      const text = toStringValue(value.text)
-      if (!text)
-        throw new Error(`Question ${index + 1} has an empty option at position ${optionIndex + 1}.`)
-      const optionIdRaw = toStringValue(value.optionId)
-      return {
-        optionId: optionIdRaw || String.fromCharCode(65 + optionIndex),
-        text,
-      }
-    })
-
-    let correctIndex = Number.isInteger(row.correctIndex) ? (row.correctIndex as number) : -1
-
-    if (correctIndex < 0) {
-      const correctAnswerId = toStringValue(row.correctAnswerId)
-      if (!correctAnswerId) {
-        throw new Error(`Question ${index + 1} must include correctAnswerId or correctIndex.`)
-      }
-      const found = options.findIndex(
-        (option) => option.optionId.toLowerCase() === correctAnswerId.toLowerCase(),
-      )
-      if (found < 0) {
-        throw new Error(`Question ${index + 1} correctAnswerId does not match any optionId.`)
-      }
-      correctIndex = found
-    }
-
-    if (correctIndex >= options.length) {
-      throw new Error(`Question ${index + 1} has a correct answer index out of range.`)
-    }
-
-    const marksRaw = toNumber(row.marks)
-    const marks = Number.isFinite(marksRaw) && marksRaw > 0 ? marksRaw : 1
-
-    return {
-      prompt,
-      options: options.map((option) => option.text),
-      correctIndex,
-      marks,
-    }
+    const question = parseImportedQuestion(row, index + 1, errors)
+    if (question) parsed.push(question)
   })
+
+  if (errors.length > 0) throw new QuizImportError(errors)
+  return parsed
+}
+
+/** The offering an import targets, resolved and ownership-checked. */
+type ImportTargetOffering = {
+  id: string
+  courseId: string
+  classId: string
+  courseName: string
+}
+
+/**
+ * Resolve the offering an import targets.
+ *
+ * `offeringId` wins whenever it is present: the import card always sends the
+ * offering the teacher picked, so a hand-authored template that also carries a
+ * `courseCode` can never redirect the upload. Falling back to `courseCode` is
+ * where the wrong-class hazard lives, so it resolves only against the acting
+ * teacher's *own* offerings and **refuses on ambiguity** rather than guessing
+ * which of two sections the teacher meant. Both the missing and the not-owned
+ * `offeringId` case keep the one shared message, so the endpoint cannot confirm
+ * another teacher's offering exists.
+ */
+async function resolveImportTargetOffering(
+  body: Record<string, unknown>,
+  staffId: string,
+): Promise<ImportTargetOffering> {
+  const offeringId = toStringValue(body.offeringId)
+  if (offeringId) {
+    const offering = await prisma.courseOffering.findFirst({
+      where: { id: offeringId, teacherId: staffId },
+      select: {
+        id: true,
+        courseId: true,
+        classId: true,
+        course: { select: { name: true } },
+      },
+    })
+    // Deliberately identical to the not-owned case below.
+    if (!offering) throw new Error("Offering not found or not owned by you.")
+    return {
+      id: offering.id,
+      courseId: offering.courseId,
+      classId: offering.classId,
+      courseName: offering.course.name,
+    }
+  }
+
+  const courseCode = toStringValue(body.courseCode)
+  if (!courseCode) {
+    throw new QuizImportError([
+      'Add "offeringId" or "courseCode" so the import knows which class to target.',
+    ])
+  }
+
+  const candidates = await prisma.courseOffering.findMany({
+    where: {
+      teacherId: staffId,
+      course: { code: { equals: courseCode, mode: "insensitive" } },
+    },
+    select: {
+      id: true,
+      courseId: true,
+      classId: true,
+      term: true,
+      academicYear: true,
+      course: { select: { code: true, name: true } },
+      classRoom: { select: { name: true } },
+    },
+    // Stable order so the ambiguity message (and any test asserting its wording)
+    // does not depend on insert order.
+    orderBy: [{ academicYear: "asc" }, { term: "asc" }, { id: "asc" }],
+  })
+
+  if (candidates.length === 0) {
+    throw new QuizImportError([`No offering you teach matches the course code "${courseCode}".`])
+  }
+
+  if (candidates.length > 1) {
+    const described = candidates
+      .map(
+        (offering) =>
+          `${offering.course.code} — ${offering.classRoom.name} (${offering.term} ${offering.academicYear}, id: ${offering.id})`,
+      )
+      .join("; ")
+    throw new QuizImportError([
+      `Course code "${courseCode}" matches ${candidates.length} of your offerings: ${described}. Add "offeringId" to the JSON to choose one.`,
+    ])
+  }
+
+  const [only] = candidates
+  return {
+    id: only.id,
+    courseId: only.courseId,
+    classId: only.classId,
+    courseName: only.course.name,
+  }
+}
+
+/**
+ * Append imported questions to an existing quiz the acting teacher owns.
+ *
+ * Ownership uses the shared `teacherOwnsAssessment` rule (creator or offering
+ * teacher). A missing assessment and another teacher's assessment share one
+ * message, as offerings do. The ceiling is extended by exactly the marks that
+ * were appended so the total stays coherent without rescaling recorded results.
+ */
+async function appendQuestionsToOwnedQuiz(
+  assessmentId: string,
+  staffId: string,
+  questions: ParsedQuizQuestion[],
+) {
+  const existing = await prisma.assessment.findUnique({
+    where: { id: assessmentId },
+    select: {
+      id: true,
+      title: true,
+      type: true,
+      courseId: true,
+      offeringId: true,
+      maxMarks: true,
+      dueDate: true,
+      createdById: true,
+      offering: { select: { teacherId: true, course: { select: { name: true } } } },
+    },
+  })
+
+  if (
+    !existing ||
+    !existing.offering ||
+    !teacherOwnsAssessment(
+      { createdById: existing.createdById, offering: existing.offering },
+      staffId,
+    )
+  ) {
+    throw new Error("Assessment not found or not owned by you.")
+  }
+
+  if (existing.type !== "QUIZ") {
+    throw new QuizImportError([
+      `"${existing.title}" is not a quiz, so questions cannot be added to it.`,
+    ])
+  }
+
+  const addedMarks = questions.reduce((sum, question) => sum + question.marks, 0)
+  const maxMarks = existing.maxMarks + Math.max(1, Math.round(addedMarks))
+  const publishedAt = new Date()
+
+  await prisma.$transaction(async (tx) => {
+    const aggregate = await tx.question.aggregate({
+      where: { assessmentId: existing.id },
+      _max: { order: true },
+    })
+    const startOrder = (aggregate._max.order ?? -1) + 1
+
+    for (const [index, question] of questions.entries()) {
+      await tx.question.create({
+        data: {
+          assessmentId: existing.id,
+          type: "MULTIPLE_CHOICE",
+          order: startOrder + index,
+          prompt: question.prompt,
+          explanation: null,
+          points: question.marks,
+          status: "published",
+          publishedAt,
+          publishedById: staffId,
+          options: {
+            create: question.options.map((text, optionIndex) => ({
+              order: optionIndex,
+              text,
+              isCorrect: optionIndex === question.correctIndex,
+            })),
+          },
+        },
+      })
+    }
+
+    await tx.assessment.update({ where: { id: existing.id }, data: { maxMarks } })
+  })
+
+  return {
+    id: existing.id,
+    title: existing.title,
+    courseName: existing.offering.course.name,
+    courseId: existing.courseId,
+    offeringId: existing.offeringId,
+    questionCount: questions.length,
+    maxMarks,
+    dueDate: existing.dueDate.toISOString().slice(0, 10),
+    appended: true,
+  }
 }
 
 export async function createQuizFromImportForSessionUser(payload: unknown, sessionUser: AuthUser) {
@@ -1202,27 +1526,7 @@ export async function createQuizFromImportForSessionUser(payload: unknown, sessi
   if (!body) throw new Error("Invalid payload.")
 
   const metadata = asRecord(body.quizMetadata)
-  const title = toStringValue(metadata?.title)
-  if (!title) throw new Error("quizMetadata.title is required.")
-
   const questions = parseImportedQuestions(body.questions)
-  const totalMarksFromQuestions = questions.reduce((sum, question) => sum + question.marks, 0)
-  const metadataTotalMarks = toNumber(metadata?.totalMarks)
-  const resolvedMaxMarks =
-    Number.isFinite(metadataTotalMarks) && metadataTotalMarks > 0
-      ? Math.round(metadataTotalMarks)
-      : Math.max(1, Math.round(totalMarksFromQuestions))
-
-  const dueDateValue = toStringValue(metadata?.dueDate) || new Date().toISOString().slice(0, 10)
-  const dueDate = new Date(dueDateValue)
-  if (Number.isNaN(dueDate.getTime())) throw new Error("quizMetadata.dueDate is invalid.")
-
-  // The offering is the single source of truth for course/class, exactly as in
-  // `createAssessmentForSessionUser`. A teacher who teaches the same course in
-  // two offerings can no longer import into the wrong class: the client sends
-  // the offering id, never a bare course id/name.
-  const offeringId = toStringValue(body.offeringId)
-  if (!offeringId) throw new Error("offeringId is required.")
 
   const staff = await prisma.staffProfile.findUnique({
     where: { userId: sessionUser.id },
@@ -1230,20 +1534,41 @@ export async function createQuizFromImportForSessionUser(payload: unknown, sessi
   })
   if (!staff) throw new Error("Teacher profile not found")
 
-  const offering = await prisma.courseOffering.findFirst({
-    where: { id: offeringId, teacherId: staff.id },
-    select: {
-      id: true,
-      courseId: true,
-      classId: true,
-      course: { select: { name: true } },
-    },
-  })
-  // A missing offering and another teacher's offering are deliberately the same
-  // error, so the endpoint never confirms that someone else's offering exists.
-  if (!offering) {
-    throw new Error("Offering not found or not owned by you.")
+  // Append short-circuits offering resolution: the assessment already knows its
+  // offering, and an ambiguous `courseCode` in the file must not block an append
+  // the teacher addressed explicitly by id. It also does not need a title — the
+  // existing quiz keeps its own — so the title check belongs to the create path.
+  const assessmentId = toStringValue(body.assessmentId)
+  if (assessmentId) {
+    return appendQuestionsToOwnedQuiz(assessmentId, staff.id, questions)
   }
+
+  // Rich `quizMetadata.title` wins; the minimal shape puts `title` at the root.
+  const title = toStringValue(metadata?.title) || toStringValue(body.title)
+  if (!title) throw new QuizImportError(['Give the quiz a title ("title").'])
+
+  const totalMarksFromQuestions = questions.reduce((sum, question) => sum + question.marks, 0)
+  const metadataTotalMarks = toNumber(metadata?.totalMarks)
+  const resolvedMaxMarks =
+    Number.isFinite(metadataTotalMarks) && metadataTotalMarks > 0
+      ? Math.round(metadataTotalMarks)
+      : Math.max(1, Math.round(totalMarksFromQuestions))
+
+  const dueDateValue =
+    toStringValue(metadata?.dueDate) ||
+    toStringValue(body.dueDate) ||
+    new Date().toISOString().slice(0, 10)
+  const dueDate = new Date(dueDateValue)
+  if (Number.isNaN(dueDate.getTime())) {
+    throw new QuizImportError(["The due date is not a valid date."])
+  }
+
+  // The offering is the single source of truth for course/class, exactly as in
+  // `createAssessmentForSessionUser`. A teacher who teaches the same course in
+  // two offerings can no longer import into the wrong class: an explicit
+  // `offeringId` wins, and a bare `courseCode` only resolves when it names
+  // exactly one of *their* offerings.
+  const offering = await resolveImportTargetOffering(body, staff.id)
 
   const publishedAt = new Date()
 
@@ -1307,11 +1632,12 @@ export async function createQuizFromImportForSessionUser(payload: unknown, sessi
   return {
     id: created.assessmentId,
     title,
-    courseName: offering.course.name,
+    courseName: offering.courseName,
     courseId: offering.courseId,
     offeringId: offering.id,
     questionCount: questions.length,
     maxMarks: resolvedMaxMarks,
     dueDate: dueDate.toISOString().slice(0, 10),
+    appended: false,
   }
 }

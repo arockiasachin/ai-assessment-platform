@@ -2,12 +2,19 @@
 
 import { useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
-import { BookOpenCheck, FileUp, ListChecks, PlusCircle, Sparkles } from "lucide-react"
+import { BookOpenCheck, Download, FileUp, ListChecks, PlusCircle, Sparkles } from "lucide-react"
 import { useGradebook } from "@/components/gradebook-provider"
 import { isOfferingClosed } from "@/lib/offering-window"
-import { Button } from "@/components/ui/button"
+import { Button, buttonVariants } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import {
+  Card,
+  CardAction,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import {
@@ -25,11 +32,15 @@ import { ASSESSMENT_KIND_LABEL } from "@/lib/labels"
 type QuizImportResponse = {
   success: boolean
   message: string
+  /** Every problem the import found, in question order. Absent on success. */
+  errors?: string[]
   assessment?: {
     id: string
     title: string
     courseName: string
     questionCount: number
+    /** True when the questions were appended to an existing quiz. */
+    appended?: boolean
   }
 }
 
@@ -115,6 +126,12 @@ export function TeacherAssignmentsManager({
 
   const [message, setMessage] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  /**
+   * The per-question problems the import route returns. Held separately from
+   * `error` so the card can show a checklist rather than one line; an import can
+   * fail several questions at once.
+   */
+  const [quizErrors, setQuizErrors] = useState<string[]>([])
 
   // Derive the effective offering rather than syncing it into state via an effect.
   const selectedOfferingId = offeringId || openOfferings[0]?.id || ""
@@ -198,6 +215,7 @@ export function TeacherAssignmentsManager({
     }
 
     setError(null)
+    setQuizErrors([])
     setMessage(null)
 
     try {
@@ -216,6 +234,7 @@ export function TeacherAssignmentsManager({
     if (!quizPayload || !quizSelectedOfferingId) return
 
     setError(null)
+    setQuizErrors([])
     setMessage(null)
     setIsImportingQuiz(true)
 
@@ -229,11 +248,15 @@ export function TeacherAssignmentsManager({
       const data = (await response.json()) as QuizImportResponse
       if (!response.ok || !data.success || !data.assessment) {
         setError(data.message || "Unable to import quiz.")
+        setQuizErrors(data.errors ?? [])
         return
       }
 
+      const { assessment } = data
       setMessage(
-        `Quiz created: ${data.assessment.title} (${data.assessment.questionCount} questions) for ${data.assessment.courseName}.`,
+        assessment.appended
+          ? `Added ${assessment.questionCount} question${assessment.questionCount === 1 ? "" : "s"} to ${assessment.title} in ${assessment.courseName}.`
+          : `Quiz created: ${assessment.title} (${assessment.questionCount} questions) for ${assessment.courseName}.`,
       )
       setQuizFileName("")
       setQuizPayload(null)
@@ -279,12 +302,23 @@ export function TeacherAssignmentsManager({
         </p>
       )}
       {error && (
-        <p
+        <div
           role="alert"
           className="rounded-md border border-destructive/60 bg-destructive/10 px-3 py-2 text-sm text-destructive"
         >
-          {error}
-        </p>
+          {quizErrors.length > 0 ? (
+            <>
+              <p className="font-medium">The quiz could not be imported:</p>
+              <ul className="mt-1 list-disc space-y-1 pl-5">
+                {quizErrors.map((issue) => (
+                  <li key={issue}>{issue}</li>
+                ))}
+              </ul>
+            </>
+          ) : (
+            <p>{error}</p>
+          )}
+        </div>
       )}
 
       <Card className="border-border/70 shadow-sm">
@@ -397,9 +431,20 @@ export function TeacherAssignmentsManager({
             <ListChecks className="size-4 text-primary" />
             Import quiz JSON
           </CardTitle>
-          <p className="text-sm text-muted-foreground">
-            Upload JSON and create a quiz assessment with questions in one action.
-          </p>
+          <CardDescription>
+            Upload JSON and create a quiz assessment with questions in one action. The blank
+            template shows the shortest accepted shape.
+          </CardDescription>
+          <CardAction>
+            <a
+              href="/quiz-template.json"
+              download="quiz-template.json"
+              className={buttonVariants({ variant: "outline", size: "sm" })}
+            >
+              <Download className="size-4" />
+              Download template
+            </a>
+          </CardAction>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid gap-2">
