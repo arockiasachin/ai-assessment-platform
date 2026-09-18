@@ -1,5 +1,12 @@
 # Phase 4 — Legacy quiz store retirement (`Quiz` / `QuizQuestion`)
 
+> **Superseded in one respect (2026-09-18).** `lib/quiz-grading.ts`, its test and the
+> empty `app/api/quiz/grade/` route were deleted; `lib/quiz-generation/grading.ts`
+> (`gradeGeneratedQuiz`) is the modern scorer. The findings below are a record of what
+> was true when this verification ran — the line citations into that module no longer
+> resolve. `tests/legacy-quiz-retirement.test.ts` remains, re-pointed at the modern
+> scorer, and still guards that imported questions are gradeable.
+
 Retires the last duplicate store from the schema unfreeze list. The JSON quiz
 import now writes the modern `Question` / `QuestionOption` spine, every reader
 was migrated, and the legacy tables were dropped after a repo-wide reference

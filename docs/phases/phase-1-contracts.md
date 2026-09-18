@@ -68,10 +68,10 @@ New enums: `MaterialKind`, `QuestionType`, `QuizAttemptStatus`, `GradeReviewStat
 
 ### Closed after the first draft
 
-| Area                              | Path                                                                        | State                    |
-| --------------------------------- | --------------------------------------------------------------------------- | ------------------------ |
-| Server-authoritative quiz answers | `lib/quiz-scoring.ts`, `lib/quiz-grading.ts`, `app/api/quiz/grade/route.ts` | Landed (answer key gone) |
-| Student gradebook payload scoping | `lib/gradebook-db.ts`, `components/gradebook-provider.tsx`                  | Landed (own rows only)   |
+| Area                              | Path                                                       | State                    |
+| --------------------------------- | ---------------------------------------------------------- | ------------------------ |
+| Server-authoritative quiz answers | `lib/quiz-scoring.ts`, `lib/quiz-generation/grading.ts`    | Landed (answer key gone) |
+| Student gradebook payload scoping | `lib/gradebook-db.ts`, `components/gradebook-provider.tsx` | Landed (own rows only)   |
 
 - The legacy quiz path is no longer client-trusted: `lib/gradebook-db.ts` no longer returns
   `QuizQuestion.correctIndex`, and `components/quiz-runner.tsx` submits selected answers to

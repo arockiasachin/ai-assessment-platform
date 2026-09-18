@@ -144,6 +144,11 @@ and the earned ratio is projected onto the assessment's `maxScore`:
 scoring and post-submission result re-derivation use the weights.
 `lib/quiz-attempts/serialize.ts` — the teacher view's `maxPoints` uses the same normalizer instead of
 a hard-coded `1`, so it cannot disagree with the persisted `QuizResponse.pointsAwarded`.
+
+> **Note (2026-09-18).** The `lib/quiz-grading.ts` references below are historical: the
+> module was deleted. `lib/quiz-generation/grading.ts` is the modern scorer, and it
+> likewise persists no grade.
+
 `lib/quiz-grading.ts` — documented that the legacy path intentionally keeps the default weight.
 
 **Test.** `tests/quiz-scoring-points.test.ts` (5 tests): weighted scores and per-question

@@ -68,7 +68,9 @@ search of every `Grade` write:
   published row (`existingGrade?.publishedAt != null`); `submitReviewDecision`
   sets `publishedAt` only for `accept` and `override`. Every other action
   (`flag`, `reject`, `reopen`) leaves it null.
-- `lib/quiz-grading.ts` computes a score and returns it; it persists no grade.
+- `lib/quiz-scoring.ts` computes a score and returns it; it persists no grade. (The
+  retired `lib/quiz-grading.ts` was deleted on 2026-09-18; `lib/quiz-generation/grading.ts`
+  is the modern scorer it was superseded by.)
 - `lib/rubric-grading/**`, `lib/groups/**`, `lib/analytics/**` and
   `lib/code-eval/**` never write `Grade` or `GradeReview`. Group analysis returns
   `suggestedIndividualGrades` only; contribution data is stamped `gradeBasis:false`.

@@ -147,8 +147,9 @@ The legacy `Quiz` / `QuizQuestion` models were retired in Phase 4
 teacher, so an imported quiz is delivered and scored by the same pipeline as a
 generated one. The import requires an explicit, ownership-checked `offeringId`
 (a non-owner is a `403`) instead of resolving an offering by course id/name.
-`lib/quiz-grading.ts` (`POST /api/quiz/grade`) also reads the modern store, so
-there is no second, separately-graded quiz representation. See
+The modern store is the only quiz representation: `lib/quiz-generation/grading.ts`
+scores it, and the retired `lib/quiz-grading.ts` — which once read the legacy store —
+was deleted on 2026-09-18, so there is no second, separately-graded path. See
 [`docs/verification/legacy-quiz-retirement.md`](../verification/legacy-quiz-retirement.md).
 
 ## Deferred items and limits
