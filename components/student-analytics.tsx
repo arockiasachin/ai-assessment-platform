@@ -289,7 +289,19 @@ function CourseAnalytics({
                     ? "primary"
                     : "warning"
               }
-              caption={`${catGate.markedCount} of ${catGate.totalCount} continuous assessments have a released mark. Gate: ${catStatusLabel(catGate.status)}.`}
+              caption={[
+                `${catGate.markedCount} of ${catGate.totalCount} continuous assessments have a released mark.`,
+                catGate.percent !== null
+                  ? `Your CAT standing is ${formatPercent(catGate.percent, 1)}${
+                      catGate.minimumPercent !== null
+                        ? ` against a ${formatPercent(catGate.minimumPercent, 1)} requirement`
+                        : ""
+                    }.`
+                  : null,
+                `Gate: ${catStatusLabel(catGate.status)}.`,
+              ]
+                .filter(Boolean)
+                .join(" ")}
             />
           </SectionCard>
         )}

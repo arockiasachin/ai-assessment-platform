@@ -88,6 +88,15 @@ export type StudentCatProgress = {
   completionRatio: number
   percent: number | null
   status: "eligible" | "below-cat-minimum" | "insufficient-cat-work" | "no-cat-gate"
+  /**
+   * The mark the CAT pool must reach for the FAT to be sat, or `null` when the
+   * offering sets no gate (a course with no CAT/FAT split).
+   *
+   * Surfaced here rather than only on the `fat-ineligible` verdict branch so a
+   * reader can show "where this student stands against the requirement" *before*
+   * the requirement is breached — the verdict only tells you once it is too late.
+   */
+  minimumPercent: number | null
 }
 
 export type StudentCourseOutcome = {
@@ -267,6 +276,7 @@ function buildOutcome(
       completionRatio: progress.completionRatio,
       percent: progress.percent,
       status: catStatus,
+      minimumPercent: hasSplit ? config.minimumCatPercent : null,
     },
     grandTotal,
     completedWeight: computation.completedWeight,

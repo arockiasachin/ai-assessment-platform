@@ -488,6 +488,15 @@ export type CatGateGauge = {
   ratio: number
   /** The reader's gate verdict: `eligible`, `below-cat-minimum`, `insufficient-cat-work`, … */
   status: string
+  /**
+   * The CAT percentage required to sit the FAT, or `null` when the offering sets no gate.
+   *
+   * Carried alongside the verdict so the gauge can say where the student stands
+   * *against* the requirement, rather than only naming the verdict once it is breached.
+   */
+  minimumPercent: number | null
+  /** The CAT percentage achieved so far, or `null` while nothing is marked. */
+  percent: number | null
 }
 
 /**
@@ -507,6 +516,8 @@ export function catGateGauge(
       totalCount: number
       completionRatio: number
       status: string
+      minimumPercent?: number | null
+      percent?: number | null
     }
   } | null,
 ): CatGateGauge | null {
@@ -518,6 +529,10 @@ export function catGateGauge(
     totalCount: outcome.cat.totalCount,
     ratio: outcome.cat.completionRatio,
     status: outcome.cat.status,
+    // Optional on the input so an older caller that has not been updated still compiles;
+    // the reader supplies both.
+    minimumPercent: outcome.cat.minimumPercent ?? null,
+    percent: outcome.cat.percent ?? null,
   }
 }
 

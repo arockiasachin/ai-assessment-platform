@@ -39,6 +39,7 @@ function outcome(overrides: Overrides): StudentCourseOutcome {
       completionRatio: 0,
       percent: null,
       status: "no-cat-gate",
+      minimumPercent: null,
     },
     grandTotal: null,
     completedWeight: 0,
