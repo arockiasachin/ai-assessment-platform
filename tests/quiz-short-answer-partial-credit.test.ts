@@ -629,8 +629,10 @@ describe("short-answer submissions end to end", () => {
         staffProfile: { create: { fullName: "Other Teacher", empId: "EMP-OTHER-SA" } },
       },
     })
+    // The attempt-id sibling now resolves ownership through the same merged
+    // existence/ownership check (TN-69), so a foreign attempt is a 404 too.
     await expect(getTeacherAttempt(teacherSession(otherTeacher), view.id)).rejects.toMatchObject({
-      status: 403,
+      status: 404,
     })
   })
 })

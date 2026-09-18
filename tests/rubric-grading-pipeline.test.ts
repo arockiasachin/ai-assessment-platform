@@ -7,6 +7,7 @@ import {
   RUBRIC_PROMPT_VERSION,
   evaluateSubmissionForTeacher,
   getReviewDetailForTeacher,
+  getRubricForAssessment,
   listEvaluationCandidatesForTeacher,
   listReviewQueueForTeacher,
   listRubricsForTeacher,
@@ -15,6 +16,7 @@ import {
 } from "@/lib/rubric-grading"
 
 import { disconnectTestDatabase, prisma, truncateAll } from "./helpers/db"
+import { captureRefusal, expectIndistinguishable } from "./helpers/refusal"
 import { createSpineFixture } from "./fixtures/spine"
 
 /**
@@ -417,9 +419,18 @@ describe("rubric grading pipeline", () => {
     const { assessment, submission, teacherUser, studentId } = await seedAssessment()
     const otherTeacher = await createOtherTeacher()
 
+    // TN-69 alignment: the assessment-scoped read and write answer a foreign id
+    // exactly as a missing one, so the refusal cannot confirm the id exists.
+    const foreignRead = await captureRefusal(getRubricForAssessment(otherTeacher, assessment.id))
+    const missingRead = await captureRefusal(
+      getRubricForAssessment(otherTeacher, "no-such-assessment-zzz"),
+    )
+    expect(foreignRead).toEqual({ status: 404, message: "Assessment not found." })
+    expectIndistinguishable(foreignRead, missingRead)
+
     await expect(
       upsertRubricForTeacher(otherTeacher, rubricPayload(assessment.id)),
-    ).rejects.toMatchObject({ status: 403 })
+    ).rejects.toMatchObject({ status: 404 })
 
     await evaluateSubmissionForTeacher(teacherUser, submission.id, {
       provider: fakeProvider([argumentEval(), evidenceEval()]),

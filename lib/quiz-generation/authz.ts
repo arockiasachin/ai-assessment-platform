@@ -41,7 +41,14 @@ export type OwnedAssessment = {
   staffId: string
 }
 
-/** Load an assessment the signed-in teacher owns, or throw 404/403. */
+/**
+ * Load an assessment the signed-in teacher owns, or throw 404.
+ *
+ * Existence and ownership answer identically (TN-69): a foreign-but-real id
+ * must not be distinguishable from a nonexistent one, or a teacher could
+ * enumerate other teachers' assessment ids. The read/write is still refused;
+ * only the confirmation that the row exists is removed.
+ */
 export async function loadOwnedAssessment(
   user: AuthUser,
   assessmentId: string,
@@ -60,9 +67,8 @@ export async function loadOwnedAssessment(
       offering: { select: { teacherId: true } },
     },
   })
-  if (!assessment) throw new QuizGenerationError(404, "Assessment not found.")
-  if (!teacherOwnsAssessment(assessment, staffId)) {
-    throw new QuizGenerationError(403, "Forbidden")
+  if (!assessment || !teacherOwnsAssessment(assessment, staffId)) {
+    throw new QuizGenerationError(404, "Assessment not found.")
   }
   // Generation, editing and publishing all begin here, so the kind check lives here too: a
   // generated question on a group project or a code task can never be scored (TN-40). 409 rather

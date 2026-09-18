@@ -4,6 +4,7 @@ import { listAssessmentSubtopics, listSubtopicBreakdowns } from "@/lib/analytics
 import type { AuthUser } from "@/lib/session"
 
 import { disconnectTestDatabase, prisma, truncateAll } from "./helpers/db"
+import { captureRefusal, expectIndistinguishable } from "./helpers/refusal"
 import { createSpineFixture } from "./fixtures/spine"
 
 /**
@@ -58,7 +59,7 @@ describe("listAssessmentSubtopics", () => {
     expect(breakdown.tokens.map((token) => token.subtopic)).not.toContain("Uncategorised")
   })
 
-  it("refuses an assessment the teacher does not own", async () => {
+  it("refuses an assessment the teacher does not own, identically to a missing one", async () => {
     const outsider = await prisma.user.create({
       data: {
         email: "subtopic-outsider@spine.test",
@@ -67,12 +68,15 @@ describe("listAssessmentSubtopics", () => {
         staffProfile: { create: { fullName: "Ola Outsider", empId: "EMP-SUB-9" } },
       },
     })
-    await expect(
-      listAssessmentSubtopics(
-        { id: outsider.id, email: outsider.email, role: "teacher" },
-        f.assessment.id,
-      ),
-    ).rejects.toMatchObject({ status: 403 })
+    const outsiderSession = { id: outsider.id, email: outsider.email, role: "teacher" as const }
+    // TN-69 alignment: a foreign-but-real assessment and a nonexistent one are
+    // indistinguishable, so the refusal cannot confirm the id exists.
+    const foreign = await captureRefusal(listAssessmentSubtopics(outsiderSession, f.assessment.id))
+    const missing = await captureRefusal(
+      listAssessmentSubtopics(outsiderSession, "no-such-assessment-zzz"),
+    )
+    expect(foreign).toEqual({ status: 404, message: "Assessment not found." })
+    expectIndistinguishable(foreign, missing)
   })
 })
 

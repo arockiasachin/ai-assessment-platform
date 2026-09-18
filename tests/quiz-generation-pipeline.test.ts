@@ -17,6 +17,7 @@ import {
 import { indexMaterial } from "@/lib/vector"
 
 import { disconnectTestDatabase, prisma, truncateAll } from "./helpers/db"
+import { captureRefusal, expectIndistinguishable } from "./helpers/refusal"
 import { createSpineFixture } from "./fixtures/spine"
 
 /**
@@ -291,16 +292,26 @@ describe("quiz generation pipeline", () => {
     const questionId = outcome.questions[0].id
 
     const otherTeacher = await createOtherTeacher()
+    // TN-69 alignment: the assessment-scoped entry points answer a foreign id
+    // exactly as a missing one, so the refusal cannot confirm the id exists.
+    const foreignList = await captureRefusal(
+      listGeneratedQuestionsForTeacher(otherTeacher, fixture.assessment.id),
+    )
+    const missingList = await captureRefusal(
+      listGeneratedQuestionsForTeacher(otherTeacher, "no-such-assessment-zzz"),
+    )
+    expect(foreignList).toEqual({ status: 404, message: "Assessment not found." })
+    expectIndistinguishable(foreignList, missingList)
+
     await expect(
       generateQuizDraftsForTeacher(
         otherTeacher,
         { assessmentId: fixture.assessment.id, topic: "photosynthesis", questionCount: 1 },
         { provider },
       ),
-    ).rejects.toMatchObject({ status: 403 })
-    await expect(
-      listGeneratedQuestionsForTeacher(otherTeacher, fixture.assessment.id),
-    ).rejects.toMatchObject({ status: 403 })
+    ).rejects.toMatchObject({ status: 404 })
+    // The single-question reader takes a question id, not an assessment id, so
+    // its own 404-vs-403 split is outside this alignment's scope.
     await expect(getGeneratedQuestionForTeacher(otherTeacher, questionId)).rejects.toMatchObject({
       status: 403,
     })
@@ -309,7 +320,7 @@ describe("quiz generation pipeline", () => {
         assessmentId: fixture.assessment.id,
         questionIds: [questionId],
       }),
-    ).rejects.toMatchObject({ status: 403 })
+    ).rejects.toMatchObject({ status: 404 })
 
     const studentUser: AuthUser = {
       id: fixture.student.id,

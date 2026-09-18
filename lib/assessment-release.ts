@@ -45,9 +45,9 @@ export type ReleaseAssessmentResult =
  *
  * A foreign assessment and a nonexistent one are reported identically as
  * `not-found`, so the endpoint never confirms that another teacher's assessment
- * exists. This differs on purpose from `loadOwnedAssessment` in
- * `lib/code-eval/authz.ts`, which separates 404 from 403 — that helper runs after
- * a caller has already been scoped, whereas this is a bare id from a URL.
+ * exists. `loadOwnedAssessment` in `lib/code-eval/authz.ts` (and its four
+ * sibling pods) follows the same rule since the TN-69 alignment, because they
+ * too take a bare id from a URL.
  */
 export async function releaseAssessment(
   actor: AuthUser,

@@ -48,7 +48,14 @@ export type OwnedCodeAssessment = {
   staffId: string
 }
 
-/** Load an assessment the signed-in teacher owns, or throw 404/403. */
+/**
+ * Load an assessment the signed-in teacher owns, or throw 404.
+ *
+ * Existence and ownership answer identically (TN-69): a foreign-but-real id
+ * must not be distinguishable from a nonexistent one, or a teacher could
+ * enumerate other teachers' assessment ids. The read/write is still refused;
+ * only the confirmation that the row exists is removed.
+ */
 export async function loadOwnedAssessment(
   user: AuthUser,
   assessmentId: string,
@@ -68,9 +75,8 @@ export async function loadOwnedAssessment(
       offering: { select: { teacherId: true } },
     },
   })
-  if (!assessment) throw new CodeEvalError(404, "Assessment not found.")
-  if (!teacherOwnsAssessment(assessment, staffId)) {
-    throw new CodeEvalError(403, "Forbidden")
+  if (!assessment || !teacherOwnsAssessment(assessment, staffId)) {
+    throw new CodeEvalError(404, "Assessment not found.")
   }
   return {
     id: assessment.id,

@@ -4,7 +4,7 @@ import { releasedAssessmentWhere } from "@/lib/assessment-visibility"
 import { writeAuditLog } from "@/lib/grading/audit"
 import { prisma } from "@/lib/prisma"
 import type { AuthUser } from "@/lib/session"
-import { resolveStudentProfileId, teacherOwnsAssessment } from "./authz"
+import { resolveStudentProfileId, resolveTeacherStaffId, teacherOwnsAssessment } from "./authz"
 import { QuizAttemptError } from "./errors"
 
 /**
@@ -190,6 +190,7 @@ export async function decideRetakeRequest(
   studentId: string,
   decision: { approve: boolean; note: string | null },
 ): Promise<RetakeRequestView> {
+  const staffId = await resolveTeacherStaffId(user)
   const assessment = await prisma.assessment.findUnique({
     where: { id: assessmentId },
     select: {
@@ -198,15 +199,11 @@ export async function decideRetakeRequest(
       offering: { select: { teacherId: true } },
     },
   })
-  if (!assessment) throw new QuizAttemptError(404, "Assessment not found.")
-
-  const staff = await prisma.staffProfile.findUnique({
-    where: { userId: user.id },
-    select: { id: true },
-  })
-  if (!staff) throw new QuizAttemptError(403, "Teacher profile not found.")
-  if (!teacherOwnsAssessment(assessment, staff.id)) {
-    throw new QuizAttemptError(403, "Forbidden")
+  // Existence and ownership answer identically (TN-69). A distinct 403 for a
+  // foreign-but-real id would confirm that another teacher's assessment exists;
+  // a bare id from a URL must not reveal that. The decision is still refused.
+  if (!assessment || !teacherOwnsAssessment(assessment, staffId)) {
+    throw new QuizAttemptError(404, "Assessment not found.")
   }
 
   const existing = await prisma.retakeRequest.findUnique({
@@ -220,7 +217,7 @@ export async function decideRetakeRequest(
       where: { id: existing.id },
       data: {
         status: decision.approve ? "APPROVED" : "REJECTED",
-        decidedById: staff.id,
+        decidedById: staffId,
         decidedAt: new Date(),
         decisionNote: decision.note,
       },
@@ -252,18 +249,14 @@ export async function listRetakeRequestsForTeacher(
   user: AuthUser,
   assessmentId: string,
 ): Promise<RetakeRequestView[]> {
+  const staffId = await resolveTeacherStaffId(user)
   const assessment = await prisma.assessment.findUnique({
     where: { id: assessmentId },
     select: { id: true, createdById: true, offering: { select: { teacherId: true } } },
   })
-  if (!assessment) throw new QuizAttemptError(404, "Assessment not found.")
-
-  const staff = await prisma.staffProfile.findUnique({
-    where: { userId: user.id },
-    select: { id: true },
-  })
-  if (!staff || !teacherOwnsAssessment(assessment, staff.id)) {
-    throw new QuizAttemptError(403, "Forbidden")
+  // Existence and ownership answer identically (TN-69); see `decideRetakeRequest`.
+  if (!assessment || !teacherOwnsAssessment(assessment, staffId)) {
+    throw new QuizAttemptError(404, "Assessment not found.")
   }
 
   const rows = await prisma.retakeRequest.findMany({

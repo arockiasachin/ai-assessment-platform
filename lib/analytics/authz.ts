@@ -77,8 +77,10 @@ export type OwnedAssessment = {
 
 /**
  * Load an assessment and confirm the signed-in teacher owns it: either they
- * created it, or they teach its offering. Anything else is a 403, so a teacher
- * can never read another teacher's item analysis by guessing an id.
+ * created it, or they teach its offering. Ownership is decided **before and
+ * merged with** existence (TN-69), so a foreign-but-real assessment answers
+ * exactly what a nonexistent one does. A teacher can never read another
+ * teacher's item analysis by guessing an id, and cannot confirm it exists.
  */
 export async function loadOwnedAssessment(
   user: AuthUser,
@@ -97,9 +99,16 @@ export async function loadOwnedAssessment(
       offering: { select: { teacherId: true } },
     },
   })
-  if (!assessment) throw new AnalyticsError(404, "Assessment not found.")
-  const ownsIt = assessment.createdById === staffId || assessment.offering.teacherId === staffId
-  if (!ownsIt) throw new AnalyticsError(403, "Forbidden")
+  // Existence and ownership answer identically (TN-69). A distinct 403 for a
+  // foreign-but-real id confirms that another teacher's assessment exists, so
+  // the two checks are folded into one 404. The read is still refused; only the
+  // confirmation that the row exists is removed.
+  if (
+    !assessment ||
+    (assessment.createdById !== staffId && assessment.offering.teacherId !== staffId)
+  ) {
+    throw new AnalyticsError(404, "Assessment not found.")
+  }
   return {
     id: assessment.id,
     title: assessment.title,

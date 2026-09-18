@@ -11,6 +11,8 @@ import {
   getStudentAttempt,
   getTeacherAttempt,
   latestFailedQuestionIds,
+  listStudentAttempts,
+  listStudentQuizzes,
   listTeacherAttempts,
   saveQuizAttemptDraft,
   startQuizAttempt,
@@ -19,6 +21,7 @@ import {
 import type { AuthUser } from "@/lib/session"
 
 import { disconnectTestDatabase, prisma, truncateAll } from "./helpers/db"
+import { captureRefusal, expectIndistinguishable } from "./helpers/refusal"
 import { createSpineFixture } from "./fixtures/spine"
 
 /**
@@ -299,6 +302,45 @@ describe("quiz attempts", () => {
     expect(attempts[0].gradePublishedAt).not.toBeNull()
   })
 
+  it("reports the pending-versus-published state of the auto-score (SN-11)", async () => {
+    const { fixture, questions, studentId, studentUser } = await seedQuiz({ questionCount: 2 })
+
+    const view = await startQuizAttempt(studentUser, { assessmentId: fixture.assessment.id })
+    await submitQuizAttempt(studentUser, view.id, {
+      answers: questions.map((question) => ({
+        questionId: question.id,
+        selectedIndex: 0,
+      })),
+    })
+
+    // The auto-score is recorded so the grade pipeline has a suggestion, but no teacher has
+    // released it — so every student-facing read must say so rather than present it as the mark.
+    const attempt = await getStudentAttempt(studentUser, view.id)
+    expect(attempt.score).not.toBeNull()
+    expect(attempt.gradePublished).toBe(false)
+
+    const history = await listStudentAttempts(studentUser, fixture.assessment.id)
+    expect(history[0].score).not.toBeNull()
+    expect(history[0].gradePublished).toBe(false)
+
+    const quizzes = await listStudentQuizzes(studentUser)
+    const quiz = quizzes.find((entry) => entry.assessmentId === fixture.assessment.id)
+    expect(quiz?.latestAttempt?.score).not.toBeNull()
+    expect(quiz?.latestAttempt?.gradePublished).toBe(false)
+
+    // A human releases. Only now does the same score read as published.
+    await submitReviewDecision({
+      assessmentId: fixture.assessment.id,
+      studentId,
+      reviewer: { id: fixture.teacher.id, role: "teacher" },
+      decision: { action: "accept" },
+    })
+
+    const released = await getStudentAttempt(studentUser, view.id)
+    expect(released.gradePublished).toBe(true)
+    expect(released.score).not.toBeNull()
+  })
+
   it("does not let a practice sitting consume a graded attempt", async () => {
     // The invariant the `kind` column exists for, and precisely the one the old shape could not
     // express. Before it, exercising the retake surface silently burned one of a student's
@@ -485,10 +527,17 @@ describe("quiz attempts", () => {
     ).rejects.toMatchObject({ status: 404 })
 
     const otherTeacher = await createOtherTeacher()
-    await expect(listTeacherAttempts(otherTeacher, fixture.assessment.id)).rejects.toMatchObject({
-      status: 403,
-    })
-    await expect(getTeacherAttempt(otherTeacher, view.id)).rejects.toMatchObject({ status: 403 })
+    // TN-69 alignment: a foreign-but-real assessment and a nonexistent one are
+    // indistinguishable, so the refusal cannot confirm the id exists.
+    const foreign = await captureRefusal(listTeacherAttempts(otherTeacher, fixture.assessment.id))
+    const missing = await captureRefusal(
+      listTeacherAttempts(otherTeacher, "no-such-assessment-zzz"),
+    )
+    expect(foreign).toEqual({ status: 404, message: "Assessment not found." })
+    expectIndistinguishable(foreign, missing)
+    // Sibling read on a foreign attempt resolves to the same ownership refusal
+    // (now a 404); the attempt is still not disclosed.
+    await expect(getTeacherAttempt(otherTeacher, view.id)).rejects.toMatchObject({ status: 404 })
   })
 
   it("feeds the existing adaptive-retake selector from persisted responses", async () => {

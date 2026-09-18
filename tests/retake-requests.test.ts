@@ -14,6 +14,7 @@ import {
 import type { AuthUser } from "@/lib/session"
 
 import { disconnectTestDatabase, prisma, truncateAll } from "./helpers/db"
+import { captureRefusal, expectIndistinguishable } from "./helpers/refusal"
 import { createSpineFixture } from "./fixtures/spine"
 
 /**
@@ -104,7 +105,7 @@ describe("requestRetake", () => {
 })
 
 describe("decideRetakeRequest", () => {
-  it("refuses a teacher who does not own the assessment", async () => {
+  it("refuses a teacher who does not own the assessment, identically to a missing one", async () => {
     const outsider = await prisma.user.create({
       data: {
         email: "retake-teacher-outsider@spine.test",
@@ -113,14 +114,24 @@ describe("decideRetakeRequest", () => {
         staffProfile: { create: { fullName: "Ola Outsider", empId: "EMP-RT-9" } },
       },
     })
-    await expect(
-      decideRetakeRequest(
-        { id: outsider.id, email: outsider.email, role: "teacher" },
-        f.assessment.id,
-        f.student.studentProfile!.id,
-        { approve: true, note: null },
-      ),
-    ).rejects.toMatchObject({ status: 403 })
+    const outsiderSession = { id: outsider.id, email: outsider.email, role: "teacher" as const }
+    // TN-69 alignment: a foreign-but-real assessment and a nonexistent one are
+    // indistinguishable. The decision is still refused; only the confirmation
+    // that the row exists is removed.
+    const foreign = await captureRefusal(
+      decideRetakeRequest(outsiderSession, f.assessment.id, f.student.studentProfile!.id, {
+        approve: true,
+        note: null,
+      }),
+    )
+    const missing = await captureRefusal(
+      decideRetakeRequest(outsiderSession, "no-such-assessment-zzz", f.student.studentProfile!.id, {
+        approve: true,
+        note: null,
+      }),
+    )
+    expect(foreign).toEqual({ status: 404, message: "Assessment not found." })
+    expectIndistinguishable(foreign, missing)
   })
 
   it("records 404 when there is no request to decide", async () => {
@@ -163,6 +174,26 @@ describe("decideRetakeRequest", () => {
     const requests = await listRetakeRequestsForTeacher(teacher, f.assessment.id)
     expect(requests).toHaveLength(1)
     expect(requests[0].status).toBe("APPROVED")
+  })
+
+  it("lists a foreign assessment identically to a missing one (TN-69)", async () => {
+    const outsider = await prisma.user.create({
+      data: {
+        email: "retake-list-outsider@spine.test",
+        passwordHash: "test-only-not-a-real-hash",
+        role: "TEACHER",
+        staffProfile: { create: { fullName: "List Outsider", empId: "EMP-RT-11" } },
+      },
+    })
+    const outsiderSession = { id: outsider.id, email: outsider.email, role: "teacher" as const }
+    const foreign = await captureRefusal(
+      listRetakeRequestsForTeacher(outsiderSession, f.assessment.id),
+    )
+    const missing = await captureRefusal(
+      listRetakeRequestsForTeacher(outsiderSession, "no-such-assessment-zzz"),
+    )
+    expect(foreign).toEqual({ status: 404, message: "Assessment not found." })
+    expectIndistinguishable(foreign, missing)
   })
 
   it("returns the student their own request, so a page can say 'awaiting approval'", async () => {

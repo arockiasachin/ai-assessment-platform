@@ -10,6 +10,7 @@ import {
 } from "@/lib/analytics/service"
 
 import { disconnectTestDatabase, prisma, truncateAll } from "./helpers/db"
+import { captureRefusal, expectIndistinguishable } from "./helpers/refusal"
 import {
   analyticsStudentSession,
   analyticsTeacherSession,
@@ -264,11 +265,21 @@ describe("analytics service — teacher scoping", () => {
     await expect(
       getTeacherAnalyticsOverview(otherTeacher, { offeringId: fixture.offering.id }),
     ).rejects.toMatchObject({ status: 403 })
-    await expect(
+
+    // TN-69 alignment: a foreign-but-real assessment and a nonexistent one are
+    // indistinguishable, so the refusal cannot confirm the id exists.
+    const foreign = await captureRefusal(
       getAssessmentItemAnalysisForTeacher(otherTeacher, {
         assessmentId: fixture.assessment.id,
       }),
-    ).rejects.toMatchObject({ status: 403 })
+    )
+    const missing = await captureRefusal(
+      getAssessmentItemAnalysisForTeacher(otherTeacher, {
+        assessmentId: "no-such-assessment-zzz",
+      }),
+    )
+    expect(foreign).toEqual({ status: 404, message: "Assessment not found." })
+    expectIndistinguishable(foreign, missing)
 
     // The other teacher's own offering list never contains the fixture offering.
     const theirOfferings = await listTeacherOfferingsForAnalytics(otherTeacher)

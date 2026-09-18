@@ -18,6 +18,7 @@ import {
 } from "@/lib/code-eval"
 
 import { disconnectTestDatabase, prisma, truncateAll } from "./helpers/db"
+import { captureRefusal, expectIndistinguishable } from "./helpers/refusal"
 import { createSpineFixture } from "./fixtures/spine"
 
 /**
@@ -344,14 +345,19 @@ describe("code evaluation pipeline", () => {
     )
 
     const otherTeacher = await createOtherTeacher()
-    await expect(getCodeTaskForTeacher(otherTeacher, assessment.id)).rejects.toMatchObject({
-      status: 403,
-    })
+    // TN-69 alignment: a foreign-but-real assessment and a nonexistent one are
+    // indistinguishable, so the refusal cannot confirm the id exists.
+    const foreignTask = await captureRefusal(getCodeTaskForTeacher(otherTeacher, assessment.id))
+    const missingTask = await captureRefusal(
+      getCodeTaskForTeacher(otherTeacher, "no-such-assessment-zzz"),
+    )
+    expect(foreignTask).toEqual({ status: 404, message: "Assessment not found." })
+    expectIndistinguishable(foreignTask, missingTask)
     await expect(listRunsForTeacher(otherTeacher, assessment.id)).rejects.toMatchObject({
-      status: 403,
+      status: 404,
     })
     await expect(listSimilarityForTeacher(otherTeacher, assessment.id)).rejects.toMatchObject({
-      status: 403,
+      status: 404,
     })
 
     const student = studentSession(fixture.student)

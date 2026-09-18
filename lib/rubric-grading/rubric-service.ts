@@ -71,9 +71,12 @@ async function loadOwnedAssessment(
       offering: { select: { teacherId: true } },
     },
   })
-  if (!assessment) throw new RubricGradingError(404, "Assessment not found.")
-  if (!teacherOwnsAssessment(assessment, staffId)) {
-    throw new RubricGradingError(403, "Forbidden")
+  // Existence and ownership answer identically (TN-69): a foreign-but-real id
+  // must not be distinguishable from a nonexistent one, or a teacher could
+  // enumerate other teachers' assessment ids. The read/write is still refused;
+  // only the confirmation that the row exists is removed.
+  if (!assessment || !teacherOwnsAssessment(assessment, staffId)) {
+    throw new RubricGradingError(404, "Assessment not found.")
   }
   return {
     id: assessment.id,
