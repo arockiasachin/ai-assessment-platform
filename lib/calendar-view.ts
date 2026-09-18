@@ -21,6 +21,16 @@ export type CalendarFilters = {
   kind: CalendarKindFilter
   /** A month key from `monthKey`, or `"all"`. */
   month: string
+  /**
+   * A course code, or `"all"`.
+   *
+   * Optional so the existing callers that predate the course control — and their
+   * tests — keep the meaning they had: no `course` key is the same as `"all"`.
+   * An event with a `null` course (an institution-wide holiday) is only in `all`:
+   * it belongs to no course, so scoping to one must exclude it rather than
+   * silently claim it.
+   */
+  course?: string
 }
 
 /**
@@ -56,6 +66,9 @@ export function filterCalendarEvents(
   return events.filter((event) => {
     if (filters.kind !== "all" && event.kind !== filters.kind) return false
     if (filters.month !== "all" && monthKey(event.startAt) !== filters.month) return false
+    if (filters.course && filters.course !== "all" && event.courseCode !== filters.course) {
+      return false
+    }
     if (needle === "") return true
     return (
       event.title.toLowerCase().includes(needle) ||
@@ -66,7 +79,12 @@ export function filterCalendarEvents(
 
 /** Whether the user has narrowed anything, so the empty state can differ. */
 export function isFiltered(filters: CalendarFilters): boolean {
-  return filters.search.trim() !== "" || filters.kind !== "all" || filters.month !== "all"
+  return (
+    filters.search.trim() !== "" ||
+    filters.kind !== "all" ||
+    filters.month !== "all" ||
+    (filters.course !== undefined && filters.course !== "all")
+  )
 }
 
 /**
@@ -90,6 +108,25 @@ export function calendarKindOptions(events: readonly CalendarEventItem[]): Calen
   return [
     { value: "all", label: "All kinds" },
     ...present.map((value) => ({ value, label: CALENDAR_KIND_LABEL[value] })),
+  ]
+}
+
+/**
+ * Only the courses actually present, plus All.
+ *
+ * Holidays carry a `null` course (they are institution-wide), so they are omitted
+ * from the option list rather than offered as a fake course. They remain visible
+ * under All, which is the only scope they belong to.
+ */
+export function calendarCourseOptions(events: readonly CalendarEventItem[]): CalendarOption[] {
+  const present = [
+    ...new Set(
+      events.map((event) => event.courseCode).filter((code): code is string => code !== null),
+    ),
+  ].sort()
+  return [
+    { value: "all", label: "All courses" },
+    ...present.map((code) => ({ value: code, label: code })),
   ]
 }
 

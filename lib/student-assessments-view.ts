@@ -1,4 +1,5 @@
 import type { AssessmentType } from "@/lib/generated/prisma/enums"
+import { ASSESSMENT_KIND_LABEL } from "@/lib/labels"
 import type { StudentAssessmentItem, SubmissionState } from "@/lib/student-assessments"
 
 /**
@@ -45,6 +46,104 @@ const ASSESSMENT_TYPES = [
 
 /** The stored kinds the `WRITTEN` grouping expands to. */
 const WRITTEN_TYPES: readonly AssessmentType[] = ["DESCRIPTIVE", "ASSIGNMENT"]
+
+/**
+ * The course scope the hub starts on: every course the student is enrolled in.
+ *
+ * The scope is a single course **or** All, never a multi-select, because the
+ * point of the control is to pick the course hub the student is looking at.
+ */
+export const ASSESSMENT_COURSE_FILTER_ALL = "all"
+
+/**
+ * The type filter's own label map.
+ *
+ * `WRITTEN` and `all` are filter groupings with no entry in the shared kind map,
+ * so they are added here. This is the vocabulary the FilterBar options, the
+ * compact icon toggles and the "what is applied" summary all read, so none of the
+ * three can render a different word for the same filter.
+ */
+export const ASSESSMENT_TYPE_FILTER_LABEL: Record<AssessmentTypeFilter, string> = {
+  all: "All types",
+  ...ASSESSMENT_KIND_LABEL,
+  WRITTEN: "Written and assignments",
+}
+
+export const ASSESSMENT_STATUS_FILTER_LABEL: Record<AssessmentStatusFilter, string> = {
+  all: "All statuses",
+  graded: "Graded",
+  pending: "Pending",
+  overdue: "Overdue",
+}
+
+/** A select option whose value is constrained to the filter it configures. */
+export type AssessmentFilterOption<T extends string> = { value: T; label: string }
+
+/**
+ * The type options the control offers, in order.
+ *
+ * Deliberately not derived from `Object.entries(ASSESSMENT_KIND_LABEL)`: that
+ * reads as "every stored kind" and would offer Descriptive and Assignment as two
+ * separate entries, while the sidebar links them together as "Written and
+ * assignments". A menu entry the sidebar never links to is a worse menu.
+ */
+export function assessmentTypeFilterOptions(): AssessmentFilterOption<AssessmentTypeFilter>[] {
+  return [
+    { value: "all", label: ASSESSMENT_TYPE_FILTER_LABEL.all },
+    { value: "QUIZ", label: ASSESSMENT_TYPE_FILTER_LABEL.QUIZ },
+    { value: "WRITTEN", label: ASSESSMENT_TYPE_FILTER_LABEL.WRITTEN },
+    { value: "CODE", label: ASSESSMENT_TYPE_FILTER_LABEL.CODE },
+    { value: "GROUP_PROJECT", label: ASSESSMENT_TYPE_FILTER_LABEL.GROUP_PROJECT },
+  ]
+}
+
+export function assessmentStatusFilterOptions(): AssessmentFilterOption<AssessmentStatusFilter>[] {
+  return [
+    { value: "all", label: ASSESSMENT_STATUS_FILTER_LABEL.all },
+    { value: "graded", label: ASSESSMENT_STATUS_FILTER_LABEL.graded },
+    { value: "pending", label: ASSESSMENT_STATUS_FILTER_LABEL.pending },
+    { value: "overdue", label: ASSESSMENT_STATUS_FILTER_LABEL.overdue },
+  ]
+}
+
+/**
+ * Whether an item belongs to the selected course hub.
+ *
+ * `"all"` (or an unknown/empty value) matches everything, so the default scope is
+ * the full list. The filter matches on `courseId`, not the code, because the code
+ * is display data and two offerings of one course share it.
+ */
+export function matchesCourseFilter(
+  item: Pick<StudentAssessmentItem, "courseId">,
+  courseFilter: string,
+): boolean {
+  if (!courseFilter || courseFilter === ASSESSMENT_COURSE_FILTER_ALL) return true
+  return item.courseId === courseFilter
+}
+
+/**
+ * The filters currently applied, named in words rather than raw values.
+ *
+ * The compact icon toggles have no visible text, so this is what tells the
+ * student what is narrowing the list without making them open a select — and it
+ * reads the same label maps the controls do, so a `?type=QUIZ` link says "Type:
+ * Quiz", never "QUIZ".
+ */
+export function activeAssessmentFilters(input: {
+  courseLabel: string | null
+  typeFilter: AssessmentTypeFilter
+  statusFilter: AssessmentStatusFilter
+}): string[] {
+  const applied: string[] = []
+  if (input.courseLabel) applied.push(`Course: ${input.courseLabel}`)
+  if (input.typeFilter !== "all") {
+    applied.push(`Type: ${ASSESSMENT_TYPE_FILTER_LABEL[input.typeFilter]}`)
+  }
+  if (input.statusFilter !== "all") {
+    applied.push(`Status: ${ASSESSMENT_STATUS_FILTER_LABEL[input.statusFilter]}`)
+  }
+  return applied
+}
 
 /**
  * Whether an item matches the type filter.

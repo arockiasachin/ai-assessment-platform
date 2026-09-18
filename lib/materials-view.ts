@@ -20,6 +20,15 @@ export type MaterialKindFilter = "all" | StudentMaterialView["kind"]
 export type MaterialFilters = {
   search: string
   kind: MaterialKindFilter
+  /**
+   * A course code, or `"all"`.
+   *
+   * Optional so the existing callers and their tests keep the meaning they had:
+   * no `course` key is the same as `"all"`. A material always has a course
+   * (`courseId` is non-nullable), so unlike the calendar there is no null case —
+   * every row is reachable under both All and its own course.
+   */
+  course?: string
 }
 
 /**
@@ -36,6 +45,9 @@ export function filterMaterials(
 
   return materials.filter((material) => {
     if (filters.kind !== "all" && material.kind !== filters.kind) return false
+    if (filters.course && filters.course !== "all" && material.courseCode !== filters.course) {
+      return false
+    }
     if (needle === "") return true
     return (
       material.title.toLowerCase().includes(needle) ||
@@ -46,7 +58,11 @@ export function filterMaterials(
 
 /** Whether the user has narrowed the list at all, so the empty state can differ. */
 export function isFiltered(filters: MaterialFilters): boolean {
-  return filters.search.trim() !== "" || filters.kind !== "all"
+  return (
+    filters.search.trim() !== "" ||
+    filters.kind !== "all" ||
+    (filters.course !== undefined && filters.course !== "all")
+  )
 }
 
 export type MaterialKindOption = { value: string; label: string }
@@ -62,6 +78,22 @@ export function materialKindOptions(
   return [
     { value: "all", label: "All kinds" },
     ...present.map((value) => ({ value, label: MATERIAL_KIND_LABEL[value] })),
+  ]
+}
+
+/**
+ * Only the courses actually represented, plus All.
+ *
+ * Label and value are both the course code: the page has the code, not the name,
+ * and inventing a name here would be a second vocabulary for one fact.
+ */
+export function materialCourseOptions(
+  materials: readonly StudentMaterialView[],
+): MaterialKindOption[] {
+  const present = [...new Set(materials.map((material) => material.courseCode))].sort()
+  return [
+    { value: "all", label: "All courses" },
+    ...present.map((code) => ({ value: code, label: code })),
   ]
 }
 

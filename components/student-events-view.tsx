@@ -11,6 +11,7 @@ import { StatusPill } from "@/components/ui/status-pill"
 import { Timeline, type TimelineItem } from "@/components/ui/timeline"
 import type { CalendarEventItem } from "@/lib/calendar"
 import {
+  calendarCourseOptions,
   calendarKindOptions,
   calendarMonthOptions,
   eventLocationLabel,
@@ -34,7 +35,8 @@ import { CALENDAR_KIND_LABEL, CALENDAR_KIND_TONE } from "@/lib/labels"
  * **The Upcoming panel is not affected by the filters.** Its own description says
  * "the next few entries after today", so it is a time window rather than a filtered
  * view, and having it shrink as the user types would make it a worse answer to
- * "what is coming up". The table below is what the filters act on.
+ * "what is coming up". The table below is what the filters act on — and the bar
+ * sits with that table, not above the panel, so it does not read as broken.
  *
  * Assessment events are **kept** here, unlike the teacher planner (decision E3
  * removes them there because a separate deadlines table owns them). A student's
@@ -50,14 +52,16 @@ export function StudentEventsView({
   const [search, setSearch] = useState("")
   const [kind, setKind] = useState<CalendarKindFilter>("all")
   const [month, setMonth] = useState("all")
+  // Course-scoped like every other course-related list, with All as the default.
+  // A holiday has no course, so it is listed only under All.
+  const [course, setCourse] = useState("all")
 
   const kindOptions = useMemo(() => calendarKindOptions(events), [events])
   const monthOptions = useMemo(() => calendarMonthOptions(events), [events])
-  const filtered = useMemo(
-    () => filterCalendarEvents(events, { search, kind, month }),
-    [events, search, kind, month],
-  )
-  const showFilteredEmpty = isFiltered({ search, kind, month })
+  const courseOptions = useMemo(() => calendarCourseOptions(events), [events])
+  const filters = useMemo(() => ({ search, kind, month, course }), [search, kind, month, course])
+  const filtered = useMemo(() => filterCalendarEvents(events, filters), [events, filters])
+  const showFilteredEmpty = isFiltered(filters)
 
   const timelineItems: TimelineItem[] = upcoming.map((event) => ({
     id: event.id,
@@ -78,12 +82,43 @@ export function StudentEventsView({
 
   return (
     <div className="space-y-6">
+      <SectionCard
+        title="Upcoming"
+        action={
+          <InfoHint label="Which events the Upcoming list shows">
+            The next few entries after today. Assessments that have not been released to students
+            are not listed.
+          </InfoHint>
+        }
+      >
+        {timelineItems.length === 0 ? (
+          <EmptyState
+            title="Nothing scheduled"
+            description="There are no upcoming classes, deadlines or reminders."
+          />
+        ) : (
+          <Timeline items={timelineItems} />
+        )}
+      </SectionCard>
+
+      {/*
+        The bar now sits with the table it actually filters. It used to sit above
+        the Upcoming panel, which it deliberately does not filter (see the file
+        docblock), so it read as if that panel were broken.
+      */}
       <FilterBar
         searchLabel="Search events"
         searchPlaceholder="Search by title or location…"
         searchValue={search}
         onSearchChange={setSearch}
         selects={[
+          {
+            id: "event-course",
+            label: "Course",
+            value: course,
+            options: courseOptions,
+            onValueChange: setCourse,
+          },
           {
             id: "event-month",
             label: "Month",
@@ -104,25 +139,6 @@ export function StudentEventsView({
       />
 
       <SectionCard
-        title="Upcoming"
-        action={
-          <InfoHint label="Which events the Upcoming list shows">
-            The next few entries after today. Assessments that have not been released to students
-            are not listed.
-          </InfoHint>
-        }
-      >
-        {timelineItems.length === 0 ? (
-          <EmptyState
-            title="Nothing scheduled"
-            description="There are no upcoming classes, deadlines or reminders."
-          />
-        ) : (
-          <Timeline items={timelineItems} />
-        )}
-      </SectionCard>
-
-      <SectionCard
         title="All events"
         action={
           <InfoHint label="What the All events table includes">
@@ -141,7 +157,7 @@ export function StudentEventsView({
               <EmptyState
                 size="sm"
                 title="No events match"
-                description="No event matches the current search, month and kind filter. Clear the filters to see everything."
+                description="No event matches the current search, course, month and kind filter. Clear the filters to see everything."
               />
             ) : (
               <EmptyState

@@ -19,6 +19,7 @@ import {
   deriveMaterialKpis,
   filterMaterials,
   isFiltered,
+  materialCourseOptions,
   materialKindOptions,
   type MaterialKindFilter,
 } from "@/lib/materials-view"
@@ -126,14 +127,15 @@ const columns: Column<StudentMaterialView>[] = [
 export function StudentResourcesView({ materials }: { materials: StudentMaterialView[] }) {
   const [search, setSearch] = useState("")
   const [kind, setKind] = useState<MaterialKindFilter>("all")
+  // Course-scoped like every other course-related list, with All as the default.
+  const [course, setCourse] = useState("all")
 
   const kindOptions = useMemo(() => materialKindOptions(materials), [materials])
-  const filtered = useMemo(
-    () => filterMaterials(materials, { search, kind }),
-    [materials, search, kind],
-  )
+  const courseOptions = useMemo(() => materialCourseOptions(materials), [materials])
+  const filters = useMemo(() => ({ search, kind, course }), [search, kind, course])
+  const filtered = useMemo(() => filterMaterials(materials, filters), [materials, filters])
   const kpis = deriveMaterialKpis(materials)
-  const showFilteredEmpty = isFiltered({ search, kind })
+  const showFilteredEmpty = isFiltered(filters)
 
   const cards = [
     {
@@ -195,6 +197,13 @@ export function StudentResourcesView({ materials }: { materials: StudentMaterial
         onSearchChange={setSearch}
         selects={[
           {
+            id: "material-course",
+            label: "Course",
+            value: course,
+            options: courseOptions,
+            onValueChange: setCourse,
+          },
+          {
             id: "material-kind",
             label: "Kind",
             value: kind,
@@ -227,7 +236,7 @@ export function StudentResourcesView({ materials }: { materials: StudentMaterial
               // nothing".
               <EmptyState
                 title="No materials match"
-                description="No material matches the current search and kind filter. Clear the filters to see everything."
+                description="No material matches the current search, course and kind filter. Clear the filters to see everything."
               />
             ) : (
               <EmptyState
