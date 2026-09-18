@@ -1,6 +1,10 @@
+import { access, mkdtemp, rm } from "node:fs/promises"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
 
 import { PURGED_RATIONALE_PLACEHOLDER, runRetentionPurge } from "@/lib/retention/purge"
+import { createLocalDiskStorage, createStorageKey } from "@/lib/storage"
 import { DEMO_IDS, seedDemo } from "@/prisma/seed-demo"
 import { disconnectTestDatabase, prisma as db, truncateAll } from "./helpers/db"
 
@@ -17,9 +21,20 @@ import { disconnectTestDatabase, prisma as db, truncateAll } from "./helpers/db"
 const DAY_MS = 24 * 60 * 60 * 1000
 const NOW = new Date("2026-09-12T00:00:00.000Z")
 
+/**
+ * The uploaded attachment the purge must remove from storage as well as redact
+ * in the database. Its directory is a per-run temporary one so the test never
+ * touches (or needs) the application's configured storage root.
+ */
+let attachmentDir: string
+let attachmentPath: string
+let attachmentId: string
+const ATTACHMENT_BYTES = Buffer.from("attachment body that the purge must delete")
+
 const PURGE_ENTITIES = [
   "Submission",
   "SubmissionVersion",
+  "SubmissionAttachment",
   "QuizResponse",
   "TestRun",
   "AIGradeSuggestion",
@@ -39,6 +54,7 @@ async function snapshotCounts() {
     auditLog: await db.auditLog.count(),
     submission: await db.submission.count(),
     submissionVersion: await db.submissionVersion.count(),
+    submissionAttachment: await db.submissionAttachment.count(),
     quizAttempt: await db.quizAttempt.count(),
     quizResponse: await db.quizResponse.count(),
     testRun: await db.testRun.count(),
@@ -54,6 +70,11 @@ async function retentionAuditCount(): Promise<number> {
 
 describe("retention purge", () => {
   beforeAll(async () => {
+    // A private storage root for this run; `getStorage()` reads the variable on
+    // each purge, so the purge below resolves this directory.
+    attachmentDir = await mkdtemp(join(tmpdir(), "retention-attachments-"))
+    process.env.SUBMISSION_STORAGE_DIR = attachmentDir
+
     await truncateAll()
     await seedDemo()
 
@@ -85,9 +106,27 @@ describe("retention purge", () => {
         wordCount: 120,
       },
     })
+
+    // An attachment whose file actually exists on disk, so the purge's
+    // file-deletion half is observed rather than assumed.
+    const storageKey = createStorageKey(essaySubmission.id)
+    attachmentPath = join(attachmentDir, storageKey)
+    await createLocalDiskStorage(attachmentDir).put(storageKey, ATTACHMENT_BYTES)
+    const attachment = await db.submissionAttachment.create({
+      data: {
+        submissionId: essaySubmission.id,
+        filename: "essay.pdf",
+        mimeType: "application/pdf",
+        sizeBytes: ATTACHMENT_BYTES.byteLength,
+        storageKey,
+      },
+    })
+    attachmentId = attachment.id
   })
 
   afterAll(async () => {
+    delete process.env.SUBMISSION_STORAGE_DIR
+    await rm(attachmentDir, { recursive: true, force: true })
     await disconnectTestDatabase()
   })
 
@@ -117,6 +156,8 @@ describe("retention purge", () => {
     expect(submissionAfter.contentText).toBe(submissionBefore.contentText)
     expect(submissionAfter.artifactUrl).toBe(submissionBefore.artifactUrl)
     expect(submissionAfter.purgedAt).toBeNull()
+    // Dry run must not touch storage either: the file is still on disk.
+    await expect(access(attachmentPath)).resolves.toBeUndefined()
     expect(await retentionAuditCount()).toBe(0)
   })
 
@@ -199,6 +240,19 @@ describe("retention purge", () => {
     expect(version.artifactUrl).toBeNull()
     expect(version.purgedAt).not.toBeNull()
     expect(version.wordCount).toBe(120)
+
+    // The attachment row survives as provenance — size retained — while its
+    // identifying metadata and storage pointer are cleared and the stored file
+    // is gone from disk.
+    const attachment = await db.submissionAttachment.findUniqueOrThrow({
+      where: { id: attachmentId },
+    })
+    expect(attachment.filename).toBeNull()
+    expect(attachment.mimeType).toBeNull()
+    expect(attachment.storageKey).toBeNull()
+    expect(attachment.purgedAt).not.toBeNull()
+    expect(attachment.sizeBytes).toBe(ATTACHMENT_BYTES.byteLength)
+    await expect(access(attachmentPath)).rejects.toThrow()
 
     const response = await db.quizResponse.findFirstOrThrow()
     expect(response.selectedOptionIds).toBeNull()

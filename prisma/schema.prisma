@@ -342,11 +342,44 @@ model Submission {
 
   // Phase 1 assessment spine
   versions           SubmissionVersion[]
+  attachments        SubmissionAttachment[]
   aiGradeSuggestions AIGradeSuggestion[]
   testRuns           TestRun[]
 
   @@unique([assessmentId, studentId])
   @@index([studentId, status])
+}
+
+/// One uploaded file attached to a `Submission`.
+///
+/// The file body lives in object storage, not in the database; `storageKey` is
+/// the opaque pointer to it (see `lib/storage.ts`, which is deliberately free of
+/// Prisma/Next imports so this is the only link between the two). A submission
+/// may carry more than one attachment, so this is a child table rather than a
+/// column on `Submission`.
+///
+/// `filename`/`mimeType`/`storageKey` are **nullable** because the retention
+/// purge redacts them, exactly as it nulls `Submission.contentText`. The row
+/// survives as provenance (the attachment existed, and how big it was), while the
+/// identifying metadata and the pointer to the stored file are cleared alongside
+/// deletion of the file itself. `sizeBytes` is retained as a numeric fact, like
+/// `CourseRating.rating`. `purgedAt` is the idempotency marker the purge selects
+/// on, matching `Submission`/`SubmissionVersion`/`QuizResponse`.
+model SubmissionAttachment {
+  id           String     @id @default(cuid())
+  submissionId String
+  filename     String?
+  mimeType     String?
+  sizeBytes    Int
+  storageKey   String?
+  // Set by the retention purge when the stored file was removed and its
+  // metadata redacted. Null means the row has not been purged.
+  purgedAt     DateTime?
+  createdAt    DateTime   @default(now())
+
+  submission Submission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+
+  @@index([submissionId])
 }
 
 model CalendarEvent {

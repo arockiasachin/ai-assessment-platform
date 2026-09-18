@@ -19,6 +19,10 @@ pass
 .pdf-extract/
 .docx-extract/
 
+# Submission attachments written by the local-disk storage driver. Runtime data, never
+# committed; a deployment points SUBMISSION_STORAGE_DIR at a persistent volume instead.
+.data/
+
 # Build and tooling artifacts
 node_modules
 .next/

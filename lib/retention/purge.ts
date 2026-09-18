@@ -5,6 +5,7 @@ import {
   RESULT_RETENTION_WINDOW_MS,
   decideRetention,
 } from "@/lib/retention/policy"
+import { getStorage } from "@/lib/storage"
 
 /**
  * Server-side retention purge.
@@ -146,6 +147,44 @@ async function purgeOffering(
               where: { submission: { assessmentId: { in: assessmentIds } }, purgedAt: null },
               data: { contentText: null, artifactUrl: null, purgedAt: now },
             }),
+        )
+      : 0,
+  })
+
+  // SubmissionAttachment — the uploaded files themselves.
+  //
+  // This is the one entity whose personal content lives *outside* the database,
+  // so redaction has two halves: remove the file from object storage, then clear
+  // the row's identifying metadata and its pointer to that file. The row survives
+  // (like `Submission`/`SubmissionVersion`) and keeps `sizeBytes` as provenance.
+  // Both halves run only on a real purge: the dry run's `count()` never reaches
+  // the update callback, so it neither reads storage nor touches a row. Storage
+  // deletion is idempotent, so a retry after a partial failure is safe.
+  const attachmentWhere = {
+    submission: { assessmentId: { in: assessmentIds } },
+    purgedAt: null,
+  }
+  entities.push({
+    entity: "SubmissionAttachment",
+    fields: ["filename", "mimeType", "storageKey"],
+    count: hasAssessments
+      ? await countOrUpdate(
+          dryRun,
+          () => prisma.submissionAttachment.count({ where: attachmentWhere }),
+          async () => {
+            const attachments = await prisma.submissionAttachment.findMany({
+              where: attachmentWhere,
+              select: { storageKey: true },
+            })
+            const storage = getStorage()
+            for (const attachment of attachments) {
+              if (attachment.storageKey) await storage.delete(attachment.storageKey)
+            }
+            return prisma.submissionAttachment.updateMany({
+              where: attachmentWhere,
+              data: { filename: null, mimeType: null, storageKey: null, purgedAt: now },
+            })
+          },
         )
       : 0,
   })
