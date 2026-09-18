@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-09-17T23:52:46.122Z",
+  "generatedAt": "2026-09-18T00:32:46.099Z",
   "source": {
     "convention": "docs/audit/README.md",
     "files": [
@@ -1340,9 +1340,9 @@
           "severity": "minor",
           "category": "missing-empty-state",
           "title": "A student with zero assessments is told No assessments match the current filters",
-          "evidence": "The empty state implies a filter exists when the student has no assessments. Re-verified 2026-09-17 against the re-seeded database: still reproduces.",
+          "evidence": "The empty state implies a filter exists when the student has no assessments. Re-verified 2026-09-17 against the re-seeded database: still reproduces. Fixed 2026-09-18: the empty state now distinguishes 'no assessments yet' from 'no filter match' (assessmentsEmptyDescription in lib/student-assessments-view.ts); a zero-assessment student (bda.student31) reads 'You have no assessments yet'. SN-46 is the same defect.",
           "location": "components/student-assessments-view.tsx:528-533",
-          "status": "open"
+          "status": "fixed"
         },
         {
           "id": "SN-19",
@@ -1353,9 +1353,9 @@
           "severity": "minor",
           "category": "partial-implementation",
           "title": "Registration Window column is always \"— → —\"",
-          "evidence": "All offerings have null windows, so the column renders the same empty placeholder for every row. Re-verified 2026-09-17 against the re-seeded database: still reproduces.",
+          "evidence": "All offerings have null windows, so the column renders the same empty placeholder for every row. Re-verified 2026-09-17 against the re-seeded database: still reproduces. Fixed 2026-09-18: the Window column rendered '— → —' because both ends are null; registrationWindowLabel now says 'Not scheduled' and names a one-sided window. bda.student01's catalog shows 'Not scheduled'.",
           "location": "components/student-courses-view.tsx:145-154",
-          "status": "open"
+          "status": "fixed"
         },
         {
           "id": "SN-20",
@@ -1379,9 +1379,9 @@
           "severity": "minor",
           "category": "inconsistency",
           "title": "\"1 chunks\" on every resources row",
-          "evidence": "components/student-resources-view.tsx:107 renders the plural noun for a count of 1.",
+          "evidence": "components/student-resources-view.tsx:107 renders the plural noun for a count of 1. Fixed 2026-09-18: chunkCountLabel pluralizes; bda.student01's resources now read '1 chunk' (was '1 chunks' x26).",
           "location": "components/student-resources-view.tsx:107",
-          "status": "open"
+          "status": "fixed"
         },
         {
           "id": "SN-22",
@@ -1392,9 +1392,9 @@
           "severity": "minor",
           "category": "inconsistency",
           "title": "Type badges render raw enums while the filter and dashboard use friendly labels",
-          "evidence": "components/student-assessments-view.tsx:393 renders QUIZ, CODE and GROUP_PROJECT raw while the same page's filter uses friendly labels.",
+          "evidence": "components/student-assessments-view.tsx:393 renders QUIZ, CODE and GROUP_PROJECT raw while the same page's filter uses friendly labels. Fixed 2026-09-18: the type badge renders ASSESSMENT_KIND_LABEL, so it reads Quiz/Code/Descriptive beside the friendly filter. Verified on demo.student1.",
           "location": "components/student-assessments-view.tsx:393",
-          "status": "open"
+          "status": "fixed"
         },
         {
           "id": "SN-23",
@@ -1405,9 +1405,9 @@
           "severity": "minor",
           "category": "partial-implementation",
           "title": "No Resume affordance on an in-progress attempt and Open to attempt counts it",
-          "evidence": "components/student-quiz-attempts.tsx:285 offers no way back into an IN_PROGRESS attempt while counting it as open to attempt.",
+          "evidence": "components/student-quiz-attempts.tsx:285 offers no way back into an IN_PROGRESS attempt while counting it as open to attempt. Fixed 2026-09-18: the primary action reads 'Resume attempt' and reopens the in-progress sitting when one exists (resumableAttempt in lib/quiz-attempts/attempt-view.ts); confirmed the server resumes the same row (a second POST returned the existing attempt id).",
           "location": "components/student-quiz-attempts.tsx:285",
-          "status": "open"
+          "status": "fixed"
         },
         {
           "id": "SN-24",
@@ -1418,9 +1418,9 @@
           "severity": "minor",
           "category": "partial-implementation",
           "title": "FAT refusal is only explained after the student tries to submit",
-          "evidence": "The 403 explanation exists only at app/api/student/assessments/[assessmentId]/submission/route.ts:100 with no pre-emptive hint in the UI.",
+          "evidence": "The 403 explanation exists only at app/api/student/assessments/[assessmentId]/submission/route.ts:100 with no pre-emptive hint in the UI. Fixed 2026-09-18: listStudentAssessments now carries submissionBlockedReason from the same evaluateFatGateForStudent the route uses, and the card shows it and disables the controls before Submit. Covered by tests/student-assessments-fat-hint.test.ts.",
           "location": "app/api/student/assessments/[assessmentId]/submission/route.ts:100",
-          "status": "open"
+          "status": "fixed"
         },
         {
           "id": "SN-25",
@@ -1431,9 +1431,9 @@
           "severity": "minor",
           "category": "inconsistency",
           "title": "Overdue filter keys on isPastDue only and Due today fires after today's due time",
-          "evidence": "components/student-assessments-view.tsx:161 lets already-submitted past-due items match Overdue and fires Due today after the due time.",
+          "evidence": "components/student-assessments-view.tsx:161 lets already-submitted past-due items match Overdue and fires Due today after the due time. Fixed 2026-09-18: dueLabel checks isPastDue before daysUntilDue (first day overdue no longer reads 'Due today') and the Overdue filter excludes handed-in states; one definition in lib/student-assessments-view.ts. bda.student01 has a past-due SUBMITTED item the old filter counted as Overdue.",
           "location": "components/student-assessments-view.tsx:161",
-          "status": "open"
+          "status": "fixed"
         },
         {
           "id": "SN-26",
@@ -1444,9 +1444,9 @@
           "severity": "minor",
           "category": "inconsistency",
           "title": "Stale doc comment claims practice is not servable",
-          "evidence": "app/(dashboard)/student/quizzes/page.tsx:20-25 documents practice as not servable while QuizAttempt.kind exists and practice is live.",
+          "evidence": "app/(dashboard)/student/quizzes/page.tsx:20-25 documents practice as not servable while QuizAttempt.kind exists and practice is live. Fixed: already corrected in c270d7b — the doc comment now states practice is live and /student/quizzes/[attemptId] serves it. No code change needed; the row's stated cause was superseded by that fix.",
           "location": "app/(dashboard)/student/quizzes/page.tsx:20-25",
-          "status": "open"
+          "status": "fixed"
         },
         {
           "id": "SN-27",
@@ -1602,9 +1602,9 @@
           "severity": "minor",
           "category": "inconsistency",
           "title": "Self-rating labelled optional but is mandatory",
-          "evidence": "The page says Rating yourself is expected but not required yet POST without self returns 400 \"A self-evaluation is required.\" and the progress denominator counts it, giving three meanings of 3 in one card. Re-verified 2026-09-17 against the re-seeded database: still reproduces.",
+          "evidence": "The page says Rating yourself is expected but not required yet POST without self returns 400 \"A self-evaluation is required.\" and the progress denominator counts it, giving three meanings of 3 in one card. Re-verified 2026-09-17 against the re-seeded database: still reproduces. Fixed 2026-09-18: the hint now says the self-rating is required, matching the server rule that refuses a POST without it. The page renders 'Required — you rate yourself as well as every teammate'.",
           "location": "components/student-peer-evaluation.tsx:316-327",
-          "status": "open"
+          "status": "fixed"
         },
         {
           "id": "SN-39",
@@ -1615,9 +1615,9 @@
           "severity": "minor",
           "category": "broken-flow",
           "title": "Submitted evaluations are silently overwritten",
-          "evidence": "A second POST with submit true replaced an already-SUBMITTED row with no confirmation or editable notice (lib/groups/student-service.ts:214-235); docs call submissions editable but the UI never says so. Caveat (re-verification 2026-09-17): the re-seeded database's 6 PeerEvaluations are the seed's SUBMITTED non-self rows; the original 'second POST replaced a submitted row' observation came from an audit POST and was not repeated, to avoid mutating seeded rows. The mechanism is unchanged: the upsert's update branch overwrites status, dimensions and submittedAt unconditionally (lib/groups/student-service.ts:214-235).",
+          "evidence": "A second POST with submit true replaced an already-SUBMITTED row with no confirmation or editable notice (lib/groups/student-service.ts:214-235); docs call submissions editable but the UI never says so. Caveat (re-verification 2026-09-17): the re-seeded database's 6 PeerEvaluations are the seed's SUBMITTED non-self rows; the original 'second POST replaced a submitted row' observation came from an audit POST and was not repeated, to avoid mutating seeded rows. The mechanism is unchanged: the upsert's update branch overwrites status, dimensions and submittedAt unconditionally (lib/groups/student-service.ts:214-235). Fixed 2026-09-18: the panel warns when a submission already exists, relabels the action 'Resubmit evaluations' behind a confirm, and disables Save draft (which would have downgraded the submitted rows through the same upsert).",
           "location": "lib/groups/student-service.ts:214-235",
-          "status": "open"
+          "status": "fixed"
         },
         {
           "id": "SN-40",
@@ -1628,9 +1628,9 @@
           "severity": "minor",
           "category": "fabricated-number",
           "title": "Seeded run timestamps finish before they start",
-          "evidence": "bda.student01 run cmu5mn713002emdk60wbb5odk shows Task tab Last run 17 Sept 2026 14:30 and Runs tab Finished 4 Sept 2026 11:00, finishing 13 days before creation (prisma/seed-demo.ts:1188,1201). Re-verified 2026-09-17: bda.student01's page still pairs Task-tab \"Last run 17 Sept 2026, 15:51\" (the re-seed's createdAt) with a run whose finishedAt is 4 Sept 2026, 11:00, a run that finishes 13 days before it was created.",
+          "evidence": "bda.student01 run cmu5mn713002emdk60wbb5odk shows Task tab Last run 17 Sept 2026 14:30 and Runs tab Finished 4 Sept 2026 11:00, finishing 13 days before creation (prisma/seed-demo.ts:1188,1201). Re-verified 2026-09-17: bda.student01's page still pairs Task-tab \"Last run 17 Sept 2026, 15:51\" (the re-seed's createdAt) with a run whose finishedAt is 4 Sept 2026, 11:00, a run that finishes 13 days before it was created. Fixed 2026-09-18: the Task tab's 'Last run' now uses the run's finishedAt (falling back to createdAt), and latestRunAt prefers finishedAt/startedAt. bda.student01 now reads '4 Sept 2026, 11:00', matching the Runs tab. The stated location (prisma/seed-demo.ts) was wrong; the reproducing run is seed-courses.ts's and the display was the defect.",
           "location": "prisma/seed-demo.ts:1188",
-          "status": "open"
+          "status": "fixed"
         },
         {
           "id": "SN-41",
@@ -1641,9 +1641,9 @@
           "severity": "minor",
           "category": "inconsistency",
           "title": "Institution-wide holidays bleed across institutions",
-          "evidence": "demo.student1 sees Mid-semester break described as No classes for the postgraduate CSE cohort and bda.student01 sees the demo school's Mid-term break (INSTITUTION_WIDE at lib/calendar.ts:102). Re-verified 2026-09-17 against the re-seeded database: still reproduces.",
+          "evidence": "demo.student1 sees Mid-semester break described as No classes for the postgraduate CSE cohort and bda.student01 sees the demo school's Mid-term break (INSTITUTION_WIDE at lib/calendar.ts:102). Re-verified 2026-09-17 against the re-seeded database: still reproduces. Reviewed 2026-09-18 and left open: the schema has no institution dimension, so the reader cannot scope an unscoped event; the global treatment of institution-wide events is deliberate and pinned by tests/seed-coexistence.test.ts and tests/calendar-read.test.ts. Fixing it needs a schema change (out of scope) or an owner decision on what 'institution-wide' means. The page-copy half is fixed as SN-47. Reported as a wontfix candidate. WONTFIX 2026-09-18 (owner decision; owner noted multi-tenancy is planned future work): there is no Institution, Organization or Tenant model anywhere in the schema, so this is a single-tenant product and an unscoped event is correctly global. The two \"institutions\" in the evidence are two seed datasets — seed-demo.ts's demo school and seed-courses.ts's postgraduate CSE cohort — coexisting in one testbed database, not two tenants, so no cross-institution bleed is reachable in this deployment. This becomes a genuine cross-tenant leak the moment multi-tenancy lands: CalendarEvent will need a tenant dimension and every unscoped read will need scoping, at which point this row should be reopened. Noted here so it is not lost: prisma/seed-courses.ts:1264 puts cohort-specific copy (\"No classes for the postgraduate CSE cohort this week.\") on an event with no classId or offeringId, so the description asserts a scope the row does not have; that string is not asserted by any test.",
           "location": "lib/calendar.ts:102",
-          "status": "open"
+          "status": "wontfix"
         },
         {
           "id": "SN-42",
@@ -1654,9 +1654,9 @@
           "severity": "minor",
           "category": "inconsistency",
           "title": "Same absence, two renderings: No location set versus an em dash",
-          "evidence": "components/student-events-view.tsx:73 shows No location set in the Upcoming timeline while :181-186 shows an em dash in the table.",
+          "evidence": "components/student-events-view.tsx:73 shows No location set in the Upcoming timeline while :181-186 shows an em dash in the table. Fixed 2026-09-18: both the timeline and the table render a null location through eventLocationLabel (em dash); the 'No location set' variant is gone.",
           "location": "components/student-events-view.tsx:73",
-          "status": "open"
+          "status": "fixed"
         },
         {
           "id": "SN-43",
@@ -1667,9 +1667,9 @@
           "severity": "minor",
           "category": "partial-implementation",
           "title": "Retake cap message computed but never rendered",
-          "evidence": "The blockedReason \"Attempt limit reached (N of N attempts used)\" is dropped whenever canPractise is true (student-adaptive-retake.tsx:272-279 versus lib/quiz-attempts/retake-state.ts:93-96).",
+          "evidence": "The blockedReason \"Attempt limit reached (N of N attempts used)\" is dropped whenever canPractise is true (student-adaptive-retake.tsx:272-279 versus lib/quiz-attempts/retake-state.ts:93-96). Fixed 2026-09-18: RetakeActions renders state.blockedReason whenever it is set, so the attempt-limit message is no longer dropped when practice is available.",
           "location": "components/student-adaptive-retake.tsx:272-279",
-          "status": "open"
+          "status": "fixed"
         },
         {
           "id": "SN-44",
@@ -1680,9 +1680,9 @@
           "severity": "minor",
           "category": "inconsistency",
           "title": "Practice serves the full quiz, not the retake subset",
-          "evidence": "demo.student3's retake API returned 3 questions while practice returned 4, though the button says these questions. Caveat (re-verification 2026-09-17): the original observation compared a retake payload (3 questions) with a practice sitting (4); the re-seeded database has no practice attempt. The retake/practice query difference is unchanged in lib/quiz-attempts/service.ts.",
+          "evidence": "demo.student3's retake API returned 3 questions while practice returned 4, though the button says these questions. Caveat (re-verification 2026-09-17): the original observation compared a retake payload (3 questions) with a practice sitting (4); the re-seeded database has no practice attempt. The retake/practice query difference is unchanged in lib/quiz-attempts/service.ts. Fixed 2026-09-18: the practice button and helper text now say the whole quiz is served, matching startPracticeAttempt; the button no longer claims to practise 'these questions'.",
           "location": "components/student-adaptive-retake.tsx",
-          "status": "open"
+          "status": "fixed"
         },
         {
           "id": "SN-45",
@@ -1693,9 +1693,9 @@
           "severity": "minor",
           "category": "inconsistency",
           "title": "Perfect score labelled (0 to retry) while the card below says Nothing to retry",
-          "evidence": "student-adaptive-retake.tsx:110 labels a perfect score as 0 to retry while the card below says Nothing to retry.",
+          "evidence": "student-adaptive-retake.tsx:110 labels a perfect score as 0 to retry while the card below says Nothing to retry. Fixed 2026-09-18: the dropdown uses retakeCountPhrase, so a perfect score reads '(nothing to retry)' and the card heading omits the count at zero. demo.student1's retake page renders 'nothing to retry'.",
           "location": "components/student-adaptive-retake.tsx:110",
-          "status": "open"
+          "status": "fixed"
         },
         {
           "id": "SN-46",
@@ -1706,9 +1706,9 @@
           "severity": "minor",
           "category": "missing-empty-state",
           "title": "Empty state blames filters that do not exist",
-          "evidence": "bda.student31's /student/assessments shows Total 0, Average em dash and No assessments match the current filters. Re-verified 2026-09-17 against the re-seeded database: still reproduces.",
+          "evidence": "bda.student31's /student/assessments shows Total 0, Average em dash and No assessments match the current filters. Re-verified 2026-09-17 against the re-seeded database: still reproduces. Fixed 2026-09-18: same fix as SN-18 (dupOf). bda.student31 now renders the no-assessments copy rather than the filter copy.",
           "location": "components/student-assessments-view.tsx:528-531",
-          "status": "open",
+          "status": "fixed",
           "dupOf": "SN-18"
         },
         {
@@ -1720,9 +1720,9 @@
           "severity": "minor",
           "category": "inconsistency",
           "title": "Events copy promises course events but shows global holidays to a 0-enrolment student",
-          "evidence": "app/(dashboard)/student/events/page.tsx:52-54 promises course events while the page renders global holidays for a student with no enrolments. Re-verified 2026-09-17 against the re-seeded database: still reproduces.",
+          "evidence": "app/(dashboard)/student/events/page.tsx:52-54 promises course events while the page renders global holidays for a student with no enrolments. Re-verified 2026-09-17 against the re-seeded database: still reproduces. Fixed 2026-09-18: the page copy now names institution-wide holidays, which the reader deliberately shows to a 0-enrolment student.",
           "location": "app/(dashboard)/student/events/page.tsx:52-54",
-          "status": "open"
+          "status": "fixed"
         },
         {
           "id": "SN-48",
@@ -1733,9 +1733,9 @@
           "severity": "minor",
           "category": "partial-implementation",
           "title": "No reaper for stuck RUNNING runs",
-          "evidence": "A crash between the two transactions leaves Still running forever (lib/code-eval/submissions.ts:282).",
+          "evidence": "A crash between the two transactions leaves Still running forever (lib/code-eval/submissions.ts:282). Fixed 2026-09-18: reapStuckRuns marks a RUNNING run older than a 15-minute grace as ERROR with a finish time, called by the code-task reads. Covered by tests/code-eval-reaper.test.ts.",
           "location": "lib/code-eval/submissions.ts:282",
-          "status": "open"
+          "status": "fixed"
         },
         {
           "id": "SN-49",
@@ -1759,9 +1759,9 @@
           "severity": "minor",
           "category": "unreachable-ui",
           "title": "/api/student/assessments/[assessmentId] does not exist",
-          "evidence": "Only the submission sub-route exists; the path returns the HTML 404 page and no client calls it, so latent. Reviewed 2026-09-18 and deliberately left open: no code changes. Nothing calls the path — the only assessments fetch any client makes is the list route GET /api/student/assessments (components/student-assessments-view.tsx:123), and the page renders server-side from listStudentAssessments. GET /api/student/assessments/demo-assessment-quiz returns the app-shell 404 page (HTTP 404), as it did before. Building an unused detail route would create exactly the dead surface this audit exists to catch, so the finding is reported as a wontfix candidate for the owner rather than declined here.",
+          "evidence": "Only the submission sub-route exists; the path returns the HTML 404 page and no client calls it, so latent. Reviewed 2026-09-18 and deliberately left open: no code changes. Nothing calls the path — the only assessments fetch any client makes is the list route GET /api/student/assessments (components/student-assessments-view.tsx:123), and the page renders server-side from listStudentAssessments. GET /api/student/assessments/demo-assessment-quiz returns the app-shell 404 page (HTTP 404), as it did before. Building an unused detail route would create exactly the dead surface this audit exists to catch, so the finding is reported as a wontfix candidate for the owner rather than declined here. WONTFIX 2026-09-18 (owner decision): not a defect. The path was never created — it was inferred from the REST convention that an `[assessmentId]/submission` child implies an `[assessmentId]` parent; no such directory has ever existed. The assessment id _is_ passed at runtime, at three sites: the list fetch carries none, `fetch(/api/student/assessments/${assessmentId}/submission)` sends it to the submission route, and the code-editor link sends it as a navigation query param. There is also no detail page to match — the only student assessments page is a single non-segmented route, and detail renders from the list payload plus the inline submission box. Building the route would create the dead surface this audit exists to catch. Confirmed 2026-09-18 as a wontfix candidate: left open rather than declined, because declining needs the owner.",
           "location": "app/api/student/assessments/[assessmentId]",
-          "status": "open"
+          "status": "wontfix"
         }
       ],
       "total": 50,
@@ -1775,7 +1775,7 @@
       "bySeverityOpen": {
         "blocker": 0,
         "major": 4,
-        "minor": 20
+        "minor": 0
       },
       "byCategory": {
         "broken-flow": 7,
@@ -1789,9 +1789,9 @@
         "confidentiality-leak": 3
       },
       "byStatus": {
-        "open": 24,
-        "fixed": 26,
-        "wontfix": 0
+        "open": 4,
+        "fixed": 44,
+        "wontfix": 2
       },
       "byAgent": {
         "student-core-learning": 26,
@@ -1829,9 +1829,9 @@
           "severity": "minor",
           "category": "inconsistency",
           "title": "\"Round progress ... Evaluations submitted 3 of 3\" counts the student's own ratings while the results gate counts teammates' ratings, so the round looks complete and still shows no results",
-          "evidence": "GET /student/peer-evaluation as demo.student1@school.edu returned 200 and rendered \"Round progress — Team Alpha\" / \"DEMO-MATH-101 · Algebra Foundations\" with the progress line \"Evaluations submitted 3 of 3\"; the same session's GET /api/student/peer-evaluation returns submittedEvaluations:3, expectedEvaluations:3 and received:{withheld:true, ratingCount:2, minRatersRequired:3}, which the component renders as the withheld card \"Ratings received 2 of 3 needed\", directly under the copy \"Results appear only after at least 3 teammates have submitted\". Why it matters: A student sees the round reported as 3 of 3 submitted yet is told results are not available because only 2 of 3 ratings are in; the two counters share the same denominator but measure different things (my submissions including my self-rating vs ratings received from others), so the page reads as if it contradicts itself. Caveat (re-verification 2026-09-17): the 'Evaluations submitted 3 of 3' line depended on a self-evaluation the audit created. The seed writes no self-evaluation (3 students x 2 non-self peers; GET now reports submittedEvaluations 2 and selfEvaluationSubmitted false), so /student/peer-evaluation renders '2 of 3' and the 'round complete yet no results' contradiction is no longer visible. The withheld card still reproduces: received withheld true, ratingCount 2, minRatersRequired 3 ('2 of 3 needed'), because a 3-member team can never have 3 non-self raters.",
+          "evidence": "GET /student/peer-evaluation as demo.student1@school.edu returned 200 and rendered \"Round progress — Team Alpha\" / \"DEMO-MATH-101 · Algebra Foundations\" with the progress line \"Evaluations submitted 3 of 3\"; the same session's GET /api/student/peer-evaluation returns submittedEvaluations:3, expectedEvaluations:3 and received:{withheld:true, ratingCount:2, minRatersRequired:3}, which the component renders as the withheld card \"Ratings received 2 of 3 needed\", directly under the copy \"Results appear only after at least 3 teammates have submitted\". Why it matters: A student sees the round reported as 3 of 3 submitted yet is told results are not available because only 2 of 3 ratings are in; the two counters share the same denominator but measure different things (my submissions including my self-rating vs ratings received from others), so the page reads as if it contradicts itself. Caveat (re-verification 2026-09-17): the 'Evaluations submitted 3 of 3' line depended on a self-evaluation the audit created. The seed writes no self-evaluation (3 students x 2 non-self peers; GET now reports submittedEvaluations 2 and selfEvaluationSubmitted false), so /student/peer-evaluation renders '2 of 3' and the 'round complete yet no results' contradiction is no longer visible. The withheld card still reproduces: received withheld true, ratingCount 2, minRatersRequired 3 ('2 of 3 needed'), because a 3-member team can never have 3 non-self raters. Fixed 2026-09-18: the progress bar is labelled 'Your evaluations submitted' so it no longer reads as the round total, and the withheld card explains when the team is too small to reach the threshold. Fixed in the same component pass as SN-38.",
           "location": "/student/peer-evaluation (components/student-peer-evaluation.tsx:315-333, 427-436)",
-          "status": "open"
+          "status": "fixed"
         },
         {
           "id": "SL-3",
@@ -1842,9 +1842,9 @@
           "severity": "minor",
           "category": "inconsistency",
           "title": "Attempt panel says 'answer all questions, then submit' but Submit quiz silently accepts and scores unanswered questions",
-          "evidence": "The rendered in-progress attempt SectionCard description reads 'In progress — answer all questions, then submit.' while the only control is a plain 'Submit quiz' button with no remaining-answer count, no disabled state and no confirmation; the submit payload sends selectedIndex: null for any question the student skipped, and lib/quiz-attempts/service.ts:830-839 persists an unanswered question with isCorrect: null rather than rejecting it. Why it matters: The copy implies submission requires a complete set of answers, but the button fires immediately with blanks that score zero, so a student can submit a half-answered quiz believing the instruction has been enforced.",
+          "evidence": "The rendered in-progress attempt SectionCard description reads 'In progress — answer all questions, then submit.' while the only control is a plain 'Submit quiz' button with no remaining-answer count, no disabled state and no confirmation; the submit payload sends selectedIndex: null for any question the student skipped, and lib/quiz-attempts/service.ts:830-839 persists an unanswered question with isCorrect: null rather than rejecting it. Why it matters: The copy implies submission requires a complete set of answers, but the button fires immediately with blanks that score zero, so a student can submit a half-answered quiz believing the instruction has been enforced. Fixed 2026-09-18: the in-progress copy says blanks score zero and the Submit row shows the unanswered count; verified on a live attempt ('unanswered · scores zero').",
           "location": "components/student-quiz-attempts.tsx:330-331, 421-430",
-          "status": "open"
+          "status": "fixed"
         }
       ],
       "total": 3,
@@ -1858,7 +1858,7 @@
       "bySeverityOpen": {
         "blocker": 0,
         "major": 0,
-        "minor": 2
+        "minor": 0
       },
       "byCategory": {
         "broken-flow": 1,
@@ -1872,8 +1872,8 @@
         "confidentiality-leak": 0
       },
       "byStatus": {
-        "open": 2,
-        "fixed": 1,
+        "open": 0,
+        "fixed": 3,
         "wontfix": 0
       },
       "byAgent": {
@@ -3150,9 +3150,9 @@
           "severity": "minor",
           "category": "missing-empty-state",
           "title": "A student with zero assessments is told No assessments match the current filters",
-          "evidence": "The empty state implies a filter exists when the student has no assessments. Re-verified 2026-09-17 against the re-seeded database: still reproduces.",
+          "evidence": "The empty state implies a filter exists when the student has no assessments. Re-verified 2026-09-17 against the re-seeded database: still reproduces. Fixed 2026-09-18: the empty state now distinguishes 'no assessments yet' from 'no filter match' (assessmentsEmptyDescription in lib/student-assessments-view.ts); a zero-assessment student (bda.student31) reads 'You have no assessments yet'. SN-46 is the same defect.",
           "location": "components/student-assessments-view.tsx:528-533",
-          "status": "open"
+          "status": "fixed"
         },
         {
           "id": "SN-19",
@@ -3163,9 +3163,9 @@
           "severity": "minor",
           "category": "partial-implementation",
           "title": "Registration Window column is always \"— → —\"",
-          "evidence": "All offerings have null windows, so the column renders the same empty placeholder for every row. Re-verified 2026-09-17 against the re-seeded database: still reproduces.",
+          "evidence": "All offerings have null windows, so the column renders the same empty placeholder for every row. Re-verified 2026-09-17 against the re-seeded database: still reproduces. Fixed 2026-09-18: the Window column rendered '— → —' because both ends are null; registrationWindowLabel now says 'Not scheduled' and names a one-sided window. bda.student01's catalog shows 'Not scheduled'.",
           "location": "components/student-courses-view.tsx:145-154",
-          "status": "open"
+          "status": "fixed"
         },
         {
           "id": "SN-20",
@@ -3189,9 +3189,9 @@
           "severity": "minor",
           "category": "inconsistency",
           "title": "\"1 chunks\" on every resources row",
-          "evidence": "components/student-resources-view.tsx:107 renders the plural noun for a count of 1.",
+          "evidence": "components/student-resources-view.tsx:107 renders the plural noun for a count of 1. Fixed 2026-09-18: chunkCountLabel pluralizes; bda.student01's resources now read '1 chunk' (was '1 chunks' x26).",
           "location": "components/student-resources-view.tsx:107",
-          "status": "open"
+          "status": "fixed"
         },
         {
           "id": "SN-22",
@@ -3202,9 +3202,9 @@
           "severity": "minor",
           "category": "inconsistency",
           "title": "Type badges render raw enums while the filter and dashboard use friendly labels",
-          "evidence": "components/student-assessments-view.tsx:393 renders QUIZ, CODE and GROUP_PROJECT raw while the same page's filter uses friendly labels.",
+          "evidence": "components/student-assessments-view.tsx:393 renders QUIZ, CODE and GROUP_PROJECT raw while the same page's filter uses friendly labels. Fixed 2026-09-18: the type badge renders ASSESSMENT_KIND_LABEL, so it reads Quiz/Code/Descriptive beside the friendly filter. Verified on demo.student1.",
           "location": "components/student-assessments-view.tsx:393",
-          "status": "open"
+          "status": "fixed"
         },
         {
           "id": "SN-23",
@@ -3215,9 +3215,9 @@
           "severity": "minor",
           "category": "partial-implementation",
           "title": "No Resume affordance on an in-progress attempt and Open to attempt counts it",
-          "evidence": "components/student-quiz-attempts.tsx:285 offers no way back into an IN_PROGRESS attempt while counting it as open to attempt.",
+          "evidence": "components/student-quiz-attempts.tsx:285 offers no way back into an IN_PROGRESS attempt while counting it as open to attempt. Fixed 2026-09-18: the primary action reads 'Resume attempt' and reopens the in-progress sitting when one exists (resumableAttempt in lib/quiz-attempts/attempt-view.ts); confirmed the server resumes the same row (a second POST returned the existing attempt id).",
           "location": "components/student-quiz-attempts.tsx:285",
-          "status": "open"
+          "status": "fixed"
         },
         {
           "id": "SN-24",
@@ -3228,9 +3228,9 @@
           "severity": "minor",
           "category": "partial-implementation",
           "title": "FAT refusal is only explained after the student tries to submit",
-          "evidence": "The 403 explanation exists only at app/api/student/assessments/[assessmentId]/submission/route.ts:100 with no pre-emptive hint in the UI.",
+          "evidence": "The 403 explanation exists only at app/api/student/assessments/[assessmentId]/submission/route.ts:100 with no pre-emptive hint in the UI. Fixed 2026-09-18: listStudentAssessments now carries submissionBlockedReason from the same evaluateFatGateForStudent the route uses, and the card shows it and disables the controls before Submit. Covered by tests/student-assessments-fat-hint.test.ts.",
           "location": "app/api/student/assessments/[assessmentId]/submission/route.ts:100",
-          "status": "open"
+          "status": "fixed"
         },
         {
           "id": "SN-25",
@@ -3241,9 +3241,9 @@
           "severity": "minor",
           "category": "inconsistency",
           "title": "Overdue filter keys on isPastDue only and Due today fires after today's due time",
-          "evidence": "components/student-assessments-view.tsx:161 lets already-submitted past-due items match Overdue and fires Due today after the due time.",
+          "evidence": "components/student-assessments-view.tsx:161 lets already-submitted past-due items match Overdue and fires Due today after the due time. Fixed 2026-09-18: dueLabel checks isPastDue before daysUntilDue (first day overdue no longer reads 'Due today') and the Overdue filter excludes handed-in states; one definition in lib/student-assessments-view.ts. bda.student01 has a past-due SUBMITTED item the old filter counted as Overdue.",
           "location": "components/student-assessments-view.tsx:161",
-          "status": "open"
+          "status": "fixed"
         },
         {
           "id": "SN-26",
@@ -3254,9 +3254,9 @@
           "severity": "minor",
           "category": "inconsistency",
           "title": "Stale doc comment claims practice is not servable",
-          "evidence": "app/(dashboard)/student/quizzes/page.tsx:20-25 documents practice as not servable while QuizAttempt.kind exists and practice is live.",
+          "evidence": "app/(dashboard)/student/quizzes/page.tsx:20-25 documents practice as not servable while QuizAttempt.kind exists and practice is live. Fixed: already corrected in c270d7b — the doc comment now states practice is live and /student/quizzes/[attemptId] serves it. No code change needed; the row's stated cause was superseded by that fix.",
           "location": "app/(dashboard)/student/quizzes/page.tsx:20-25",
-          "status": "open"
+          "status": "fixed"
         },
         {
           "id": "SN-27",
@@ -3384,9 +3384,9 @@
           "severity": "minor",
           "category": "inconsistency",
           "title": "Self-rating labelled optional but is mandatory",
-          "evidence": "The page says Rating yourself is expected but not required yet POST without self returns 400 \"A self-evaluation is required.\" and the progress denominator counts it, giving three meanings of 3 in one card. Re-verified 2026-09-17 against the re-seeded database: still reproduces.",
+          "evidence": "The page says Rating yourself is expected but not required yet POST without self returns 400 \"A self-evaluation is required.\" and the progress denominator counts it, giving three meanings of 3 in one card. Re-verified 2026-09-17 against the re-seeded database: still reproduces. Fixed 2026-09-18: the hint now says the self-rating is required, matching the server rule that refuses a POST without it. The page renders 'Required — you rate yourself as well as every teammate'.",
           "location": "components/student-peer-evaluation.tsx:316-327",
-          "status": "open"
+          "status": "fixed"
         },
         {
           "id": "SN-39",
@@ -3397,9 +3397,9 @@
           "severity": "minor",
           "category": "broken-flow",
           "title": "Submitted evaluations are silently overwritten",
-          "evidence": "A second POST with submit true replaced an already-SUBMITTED row with no confirmation or editable notice (lib/groups/student-service.ts:214-235); docs call submissions editable but the UI never says so. Caveat (re-verification 2026-09-17): the re-seeded database's 6 PeerEvaluations are the seed's SUBMITTED non-self rows; the original 'second POST replaced a submitted row' observation came from an audit POST and was not repeated, to avoid mutating seeded rows. The mechanism is unchanged: the upsert's update branch overwrites status, dimensions and submittedAt unconditionally (lib/groups/student-service.ts:214-235).",
+          "evidence": "A second POST with submit true replaced an already-SUBMITTED row with no confirmation or editable notice (lib/groups/student-service.ts:214-235); docs call submissions editable but the UI never says so. Caveat (re-verification 2026-09-17): the re-seeded database's 6 PeerEvaluations are the seed's SUBMITTED non-self rows; the original 'second POST replaced a submitted row' observation came from an audit POST and was not repeated, to avoid mutating seeded rows. The mechanism is unchanged: the upsert's update branch overwrites status, dimensions and submittedAt unconditionally (lib/groups/student-service.ts:214-235). Fixed 2026-09-18: the panel warns when a submission already exists, relabels the action 'Resubmit evaluations' behind a confirm, and disables Save draft (which would have downgraded the submitted rows through the same upsert).",
           "location": "lib/groups/student-service.ts:214-235",
-          "status": "open"
+          "status": "fixed"
         },
         {
           "id": "SN-40",
@@ -3410,9 +3410,9 @@
           "severity": "minor",
           "category": "fabricated-number",
           "title": "Seeded run timestamps finish before they start",
-          "evidence": "bda.student01 run cmu5mn713002emdk60wbb5odk shows Task tab Last run 17 Sept 2026 14:30 and Runs tab Finished 4 Sept 2026 11:00, finishing 13 days before creation (prisma/seed-demo.ts:1188,1201). Re-verified 2026-09-17: bda.student01's page still pairs Task-tab \"Last run 17 Sept 2026, 15:51\" (the re-seed's createdAt) with a run whose finishedAt is 4 Sept 2026, 11:00, a run that finishes 13 days before it was created.",
+          "evidence": "bda.student01 run cmu5mn713002emdk60wbb5odk shows Task tab Last run 17 Sept 2026 14:30 and Runs tab Finished 4 Sept 2026 11:00, finishing 13 days before creation (prisma/seed-demo.ts:1188,1201). Re-verified 2026-09-17: bda.student01's page still pairs Task-tab \"Last run 17 Sept 2026, 15:51\" (the re-seed's createdAt) with a run whose finishedAt is 4 Sept 2026, 11:00, a run that finishes 13 days before it was created. Fixed 2026-09-18: the Task tab's 'Last run' now uses the run's finishedAt (falling back to createdAt), and latestRunAt prefers finishedAt/startedAt. bda.student01 now reads '4 Sept 2026, 11:00', matching the Runs tab. The stated location (prisma/seed-demo.ts) was wrong; the reproducing run is seed-courses.ts's and the display was the defect.",
           "location": "prisma/seed-demo.ts:1188",
-          "status": "open"
+          "status": "fixed"
         },
         {
           "id": "SN-41",
@@ -3423,9 +3423,9 @@
           "severity": "minor",
           "category": "inconsistency",
           "title": "Institution-wide holidays bleed across institutions",
-          "evidence": "demo.student1 sees Mid-semester break described as No classes for the postgraduate CSE cohort and bda.student01 sees the demo school's Mid-term break (INSTITUTION_WIDE at lib/calendar.ts:102). Re-verified 2026-09-17 against the re-seeded database: still reproduces.",
+          "evidence": "demo.student1 sees Mid-semester break described as No classes for the postgraduate CSE cohort and bda.student01 sees the demo school's Mid-term break (INSTITUTION_WIDE at lib/calendar.ts:102). Re-verified 2026-09-17 against the re-seeded database: still reproduces. Reviewed 2026-09-18 and left open: the schema has no institution dimension, so the reader cannot scope an unscoped event; the global treatment of institution-wide events is deliberate and pinned by tests/seed-coexistence.test.ts and tests/calendar-read.test.ts. Fixing it needs a schema change (out of scope) or an owner decision on what 'institution-wide' means. The page-copy half is fixed as SN-47. Reported as a wontfix candidate. WONTFIX 2026-09-18 (owner decision; owner noted multi-tenancy is planned future work): there is no Institution, Organization or Tenant model anywhere in the schema, so this is a single-tenant product and an unscoped event is correctly global. The two \"institutions\" in the evidence are two seed datasets — seed-demo.ts's demo school and seed-courses.ts's postgraduate CSE cohort — coexisting in one testbed database, not two tenants, so no cross-institution bleed is reachable in this deployment. This becomes a genuine cross-tenant leak the moment multi-tenancy lands: CalendarEvent will need a tenant dimension and every unscoped read will need scoping, at which point this row should be reopened. Noted here so it is not lost: prisma/seed-courses.ts:1264 puts cohort-specific copy (\"No classes for the postgraduate CSE cohort this week.\") on an event with no classId or offeringId, so the description asserts a scope the row does not have; that string is not asserted by any test.",
           "location": "lib/calendar.ts:102",
-          "status": "open"
+          "status": "wontfix"
         },
         {
           "id": "SN-42",
@@ -3436,9 +3436,9 @@
           "severity": "minor",
           "category": "inconsistency",
           "title": "Same absence, two renderings: No location set versus an em dash",
-          "evidence": "components/student-events-view.tsx:73 shows No location set in the Upcoming timeline while :181-186 shows an em dash in the table.",
+          "evidence": "components/student-events-view.tsx:73 shows No location set in the Upcoming timeline while :181-186 shows an em dash in the table. Fixed 2026-09-18: both the timeline and the table render a null location through eventLocationLabel (em dash); the 'No location set' variant is gone.",
           "location": "components/student-events-view.tsx:73",
-          "status": "open"
+          "status": "fixed"
         },
         {
           "id": "SN-43",
@@ -3449,9 +3449,9 @@
           "severity": "minor",
           "category": "partial-implementation",
           "title": "Retake cap message computed but never rendered",
-          "evidence": "The blockedReason \"Attempt limit reached (N of N attempts used)\" is dropped whenever canPractise is true (student-adaptive-retake.tsx:272-279 versus lib/quiz-attempts/retake-state.ts:93-96).",
+          "evidence": "The blockedReason \"Attempt limit reached (N of N attempts used)\" is dropped whenever canPractise is true (student-adaptive-retake.tsx:272-279 versus lib/quiz-attempts/retake-state.ts:93-96). Fixed 2026-09-18: RetakeActions renders state.blockedReason whenever it is set, so the attempt-limit message is no longer dropped when practice is available.",
           "location": "components/student-adaptive-retake.tsx:272-279",
-          "status": "open"
+          "status": "fixed"
         },
         {
           "id": "SN-44",
@@ -3462,9 +3462,9 @@
           "severity": "minor",
           "category": "inconsistency",
           "title": "Practice serves the full quiz, not the retake subset",
-          "evidence": "demo.student3's retake API returned 3 questions while practice returned 4, though the button says these questions. Caveat (re-verification 2026-09-17): the original observation compared a retake payload (3 questions) with a practice sitting (4); the re-seeded database has no practice attempt. The retake/practice query difference is unchanged in lib/quiz-attempts/service.ts.",
+          "evidence": "demo.student3's retake API returned 3 questions while practice returned 4, though the button says these questions. Caveat (re-verification 2026-09-17): the original observation compared a retake payload (3 questions) with a practice sitting (4); the re-seeded database has no practice attempt. The retake/practice query difference is unchanged in lib/quiz-attempts/service.ts. Fixed 2026-09-18: the practice button and helper text now say the whole quiz is served, matching startPracticeAttempt; the button no longer claims to practise 'these questions'.",
           "location": "components/student-adaptive-retake.tsx",
-          "status": "open"
+          "status": "fixed"
         },
         {
           "id": "SN-45",
@@ -3475,9 +3475,9 @@
           "severity": "minor",
           "category": "inconsistency",
           "title": "Perfect score labelled (0 to retry) while the card below says Nothing to retry",
-          "evidence": "student-adaptive-retake.tsx:110 labels a perfect score as 0 to retry while the card below says Nothing to retry.",
+          "evidence": "student-adaptive-retake.tsx:110 labels a perfect score as 0 to retry while the card below says Nothing to retry. Fixed 2026-09-18: the dropdown uses retakeCountPhrase, so a perfect score reads '(nothing to retry)' and the card heading omits the count at zero. demo.student1's retake page renders 'nothing to retry'.",
           "location": "components/student-adaptive-retake.tsx:110",
-          "status": "open"
+          "status": "fixed"
         },
         {
           "id": "SN-47",
@@ -3488,9 +3488,9 @@
           "severity": "minor",
           "category": "inconsistency",
           "title": "Events copy promises course events but shows global holidays to a 0-enrolment student",
-          "evidence": "app/(dashboard)/student/events/page.tsx:52-54 promises course events while the page renders global holidays for a student with no enrolments. Re-verified 2026-09-17 against the re-seeded database: still reproduces.",
+          "evidence": "app/(dashboard)/student/events/page.tsx:52-54 promises course events while the page renders global holidays for a student with no enrolments. Re-verified 2026-09-17 against the re-seeded database: still reproduces. Fixed 2026-09-18: the page copy now names institution-wide holidays, which the reader deliberately shows to a 0-enrolment student.",
           "location": "app/(dashboard)/student/events/page.tsx:52-54",
-          "status": "open"
+          "status": "fixed"
         },
         {
           "id": "SN-48",
@@ -3501,9 +3501,9 @@
           "severity": "minor",
           "category": "partial-implementation",
           "title": "No reaper for stuck RUNNING runs",
-          "evidence": "A crash between the two transactions leaves Still running forever (lib/code-eval/submissions.ts:282).",
+          "evidence": "A crash between the two transactions leaves Still running forever (lib/code-eval/submissions.ts:282). Fixed 2026-09-18: reapStuckRuns marks a RUNNING run older than a 15-minute grace as ERROR with a finish time, called by the code-task reads. Covered by tests/code-eval-reaper.test.ts.",
           "location": "lib/code-eval/submissions.ts:282",
-          "status": "open"
+          "status": "fixed"
         },
         {
           "id": "SN-49",
@@ -3527,9 +3527,9 @@
           "severity": "minor",
           "category": "unreachable-ui",
           "title": "/api/student/assessments/[assessmentId] does not exist",
-          "evidence": "Only the submission sub-route exists; the path returns the HTML 404 page and no client calls it, so latent. Reviewed 2026-09-18 and deliberately left open: no code changes. Nothing calls the path — the only assessments fetch any client makes is the list route GET /api/student/assessments (components/student-assessments-view.tsx:123), and the page renders server-side from listStudentAssessments. GET /api/student/assessments/demo-assessment-quiz returns the app-shell 404 page (HTTP 404), as it did before. Building an unused detail route would create exactly the dead surface this audit exists to catch, so the finding is reported as a wontfix candidate for the owner rather than declined here.",
+          "evidence": "Only the submission sub-route exists; the path returns the HTML 404 page and no client calls it, so latent. Reviewed 2026-09-18 and deliberately left open: no code changes. Nothing calls the path — the only assessments fetch any client makes is the list route GET /api/student/assessments (components/student-assessments-view.tsx:123), and the page renders server-side from listStudentAssessments. GET /api/student/assessments/demo-assessment-quiz returns the app-shell 404 page (HTTP 404), as it did before. Building an unused detail route would create exactly the dead surface this audit exists to catch, so the finding is reported as a wontfix candidate for the owner rather than declined here. WONTFIX 2026-09-18 (owner decision): not a defect. The path was never created — it was inferred from the REST convention that an `[assessmentId]/submission` child implies an `[assessmentId]` parent; no such directory has ever existed. The assessment id _is_ passed at runtime, at three sites: the list fetch carries none, `fetch(/api/student/assessments/${assessmentId}/submission)` sends it to the submission route, and the code-editor link sends it as a navigation query param. There is also no detail page to match — the only student assessments page is a single non-segmented route, and detail renders from the list payload plus the inline submission box. Building the route would create the dead surface this audit exists to catch. Confirmed 2026-09-18 as a wontfix candidate: left open rather than declined, because declining needs the owner.",
           "location": "app/api/student/assessments/[assessmentId]",
-          "status": "open"
+          "status": "wontfix"
         }
       ],
       "uniqueToLangchain": [
@@ -3542,9 +3542,9 @@
           "severity": "minor",
           "category": "inconsistency",
           "title": "\"Round progress ... Evaluations submitted 3 of 3\" counts the student's own ratings while the results gate counts teammates' ratings, so the round looks complete and still shows no results",
-          "evidence": "GET /student/peer-evaluation as demo.student1@school.edu returned 200 and rendered \"Round progress — Team Alpha\" / \"DEMO-MATH-101 · Algebra Foundations\" with the progress line \"Evaluations submitted 3 of 3\"; the same session's GET /api/student/peer-evaluation returns submittedEvaluations:3, expectedEvaluations:3 and received:{withheld:true, ratingCount:2, minRatersRequired:3}, which the component renders as the withheld card \"Ratings received 2 of 3 needed\", directly under the copy \"Results appear only after at least 3 teammates have submitted\". Why it matters: A student sees the round reported as 3 of 3 submitted yet is told results are not available because only 2 of 3 ratings are in; the two counters share the same denominator but measure different things (my submissions including my self-rating vs ratings received from others), so the page reads as if it contradicts itself. Caveat (re-verification 2026-09-17): the 'Evaluations submitted 3 of 3' line depended on a self-evaluation the audit created. The seed writes no self-evaluation (3 students x 2 non-self peers; GET now reports submittedEvaluations 2 and selfEvaluationSubmitted false), so /student/peer-evaluation renders '2 of 3' and the 'round complete yet no results' contradiction is no longer visible. The withheld card still reproduces: received withheld true, ratingCount 2, minRatersRequired 3 ('2 of 3 needed'), because a 3-member team can never have 3 non-self raters.",
+          "evidence": "GET /student/peer-evaluation as demo.student1@school.edu returned 200 and rendered \"Round progress — Team Alpha\" / \"DEMO-MATH-101 · Algebra Foundations\" with the progress line \"Evaluations submitted 3 of 3\"; the same session's GET /api/student/peer-evaluation returns submittedEvaluations:3, expectedEvaluations:3 and received:{withheld:true, ratingCount:2, minRatersRequired:3}, which the component renders as the withheld card \"Ratings received 2 of 3 needed\", directly under the copy \"Results appear only after at least 3 teammates have submitted\". Why it matters: A student sees the round reported as 3 of 3 submitted yet is told results are not available because only 2 of 3 ratings are in; the two counters share the same denominator but measure different things (my submissions including my self-rating vs ratings received from others), so the page reads as if it contradicts itself. Caveat (re-verification 2026-09-17): the 'Evaluations submitted 3 of 3' line depended on a self-evaluation the audit created. The seed writes no self-evaluation (3 students x 2 non-self peers; GET now reports submittedEvaluations 2 and selfEvaluationSubmitted false), so /student/peer-evaluation renders '2 of 3' and the 'round complete yet no results' contradiction is no longer visible. The withheld card still reproduces: received withheld true, ratingCount 2, minRatersRequired 3 ('2 of 3 needed'), because a 3-member team can never have 3 non-self raters. Fixed 2026-09-18: the progress bar is labelled 'Your evaluations submitted' so it no longer reads as the round total, and the withheld card explains when the team is too small to reach the threshold. Fixed in the same component pass as SN-38.",
           "location": "/student/peer-evaluation (components/student-peer-evaluation.tsx:315-333, 427-436)",
-          "status": "open"
+          "status": "fixed"
         },
         {
           "id": "SL-3",
@@ -3555,9 +3555,9 @@
           "severity": "minor",
           "category": "inconsistency",
           "title": "Attempt panel says 'answer all questions, then submit' but Submit quiz silently accepts and scores unanswered questions",
-          "evidence": "The rendered in-progress attempt SectionCard description reads 'In progress — answer all questions, then submit.' while the only control is a plain 'Submit quiz' button with no remaining-answer count, no disabled state and no confirmation; the submit payload sends selectedIndex: null for any question the student skipped, and lib/quiz-attempts/service.ts:830-839 persists an unanswered question with isCorrect: null rather than rejecting it. Why it matters: The copy implies submission requires a complete set of answers, but the button fires immediately with blanks that score zero, so a student can submit a half-answered quiz believing the instruction has been enforced.",
+          "evidence": "The rendered in-progress attempt SectionCard description reads 'In progress — answer all questions, then submit.' while the only control is a plain 'Submit quiz' button with no remaining-answer count, no disabled state and no confirmation; the submit payload sends selectedIndex: null for any question the student skipped, and lib/quiz-attempts/service.ts:830-839 persists an unanswered question with isCorrect: null rather than rejecting it. Why it matters: The copy implies submission requires a complete set of answers, but the button fires immediately with blanks that score zero, so a student can submit a half-answered quiz believing the instruction has been enforced. Fixed 2026-09-18: the in-progress copy says blanks score zero and the Submit row shows the unanswered count; verified on a live attempt ('unanswered · scores zero').",
           "location": "components/student-quiz-attempts.tsx:330-331, 421-430",
-          "status": "open"
+          "status": "fixed"
         }
       ],
       "shared": [
@@ -3619,12 +3619,12 @@
     "bySeverityOpen": {
       "blocker": 0,
       "major": 7,
-      "minor": 54
+      "minor": 32
     },
     "byStatus": {
-      "open": 61,
-      "fixed": 68,
-      "wontfix": 0
+      "open": 39,
+      "fixed": 88,
+      "wontfix": 2
     },
     "byCategory": {
       "broken-flow": 25,
