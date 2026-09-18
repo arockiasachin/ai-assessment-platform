@@ -5,6 +5,7 @@ import { useMemo, useState } from "react"
 import { DataTable, type Column } from "@/components/ui/data-table"
 import { EmptyState } from "@/components/ui/empty-state"
 import { FilterBar } from "@/components/ui/filter-bar"
+import { InfoHint } from "@/components/ui/info-hint"
 import { SectionCard } from "@/components/ui/section-card"
 import { StatusPill } from "@/components/ui/status-pill"
 import { Timeline, type TimelineItem } from "@/components/ui/timeline"
@@ -104,7 +105,12 @@ export function StudentEventsView({
 
       <SectionCard
         title="Upcoming"
-        description="The next few entries after today. Assessments that have not been released to students are not listed."
+        action={
+          <InfoHint label="Which events the Upcoming list shows">
+            The next few entries after today. Assessments that have not been released to students
+            are not listed.
+          </InfoHint>
+        }
       >
         {timelineItems.length === 0 ? (
           <EmptyState
@@ -118,7 +124,12 @@ export function StudentEventsView({
 
       <SectionCard
         title="All events"
-        description="Your courses' calendar entries and institution-wide holidays, including entries that have already passed."
+        action={
+          <InfoHint label="What the All events table includes">
+            Your courses&apos; calendar entries and institution-wide holidays, including entries
+            that have already passed.
+          </InfoHint>
+        }
       >
         <DataTable
           caption="Course calendar events"

@@ -4,6 +4,7 @@ import { ClipboardList } from "lucide-react"
 import { StudentArrearsNotice } from "@/components/student-arrears-notice"
 import { Badge } from "@/components/ui/badge"
 import { EmptyState } from "@/components/ui/empty-state"
+import { InfoHint } from "@/components/ui/info-hint"
 import { SectionCard } from "@/components/ui/section-card"
 import { formatPercent, formatPoints, formatShortDate } from "@/lib/format"
 import { ASSESSMENT_KIND_LABEL } from "@/lib/labels"
@@ -50,7 +51,12 @@ export function StudentMarksView({ marks, arrears }: StudentMarksViewProps) {
 
       <SectionCard
         title="This term at a glance"
-        description="Every average is the mean of released marks only. An unreleased mark never moves it, and is never counted as zero."
+        action={
+          <InfoHint label="How the term average is calculated">
+            Every average is the mean of released marks only. An unreleased mark never moves it, and
+            is never counted as zero.
+          </InfoHint>
+        }
       >
         <dl className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <div className="rounded-lg border border-border/70 bg-muted/20 px-3 py-2">
@@ -91,7 +97,11 @@ export function StudentMarksView({ marks, arrears }: StudentMarksViewProps) {
 
       <SectionCard
         title="Marks by subject"
-        description="Your current term only. Previous and completed courses are on the grades page."
+        action={
+          <InfoHint label="Which marks this page lists">
+            Your current term only. Previous and completed courses are on the grades page.
+          </InfoHint>
+        }
       >
         {marks.subjects.length === 0 ? (
           <EmptyState

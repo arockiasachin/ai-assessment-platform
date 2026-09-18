@@ -1,5 +1,6 @@
 import {
   Activity,
+  AlertTriangle,
   BarChart3,
   BookOpen,
   CalendarDays,
@@ -14,7 +15,6 @@ import {
   Library,
   LifeBuoy,
   ListChecks,
-  PenLine,
   RefreshCw,
   Settings2,
   Share2,
@@ -331,95 +331,81 @@ export const NAV_SECTIONS: Record<MockupRole, NavSection[]> = {
           description: "What is due, what is graded, and what needs your attention.",
         },
         {
+          // A disclosure group, not a destination (Phase 6): the three
+          // page-level views of the student's own record now live together, so
+          // the first paint is one entry rather than four siblings.
           label: "Courses",
           href: "/mockup/student/courses",
           icon: BookOpen,
-          description: "Enrolled courses, materials, and course ratings.",
-        },
-        {
-          // A disclosure, not a destination: the hub remains reachable through
-          // its "All assessments" child, and each type is a filtered view of the
-          // same page. The standalone Quizzes entry is gone — a quiz is one of
-          // these types, so a second top-level link to the same idea was noise.
-          label: "Assessments",
-          href: "/mockup/student/assessments",
-          icon: ClipboardList,
-          description: "Every assessment with due date, submission state, and marks.",
+          description: "Your courses, marks, grades, and resources.",
           children: [
             {
-              label: "All assessments",
-              href: "/mockup/student/assessments",
-              icon: ClipboardList,
-              description: "Every assessment with due date, submission state, and marks.",
+              label: "My courses",
+              href: "/mockup/student/courses",
+              icon: BookOpen,
+              description: "Enrolled courses, materials, and course ratings.",
             },
             {
-              label: "Quizzes",
-              href: "/mockup/student/assessments",
-              query: { type: "QUIZ" },
-              icon: ClipboardCheck,
-              description: "Attempts, per-question feedback, and explanations.",
-            },
-            {
-              // `WRITTEN` is a filter grouping, not a stored type: it matches the
-              // DESCRIPTIVE and ASSIGNMENT kinds, which a student thinks of as one
-              // thing ("writing") and the enum does not.
-              label: "Written and assignments",
-              href: "/mockup/student/assessments",
-              query: { type: "WRITTEN" },
-              icon: PenLine,
-              description: "Descriptive answers and written assignments.",
-            },
-            {
-              label: "Code tasks",
-              href: "/mockup/student/assessments",
-              query: { type: "CODE" },
-              icon: Terminal,
-              description: "Sandboxed programming tasks and their runs.",
-            },
-            {
-              label: "Group projects",
-              href: "/mockup/student/assessments",
-              query: { type: "GROUP_PROJECT" },
-              icon: Users,
-              description: "Team projects handed in as a group.",
-            },
-            {
-              // Moved out of "Collaboration": code work is per-assessment, not a
-              // collaborative activity, and that grouping was simply wrong.
-              label: "Code submissions",
-              href: "/mockup/student/code-submissions",
-              icon: Terminal,
-              description: "Submit code, see test results, and read the reviewer feedback.",
-            },
-            {
-              // Real page only: the writing workspace has no mockup counterpart,
-              // and it was previously unreachable from the nav altogether.
-              label: "Write",
-              href: "/student/write",
-              icon: PenLine,
-              description: "Compose and submit a written answer for an assessment.",
+              // Real page only: the current-term marks page has no mockup
+              // counterpart. `appOnly` keeps it out of mockup scope and out of
+              // the mockup index's page-existence assertion.
+              label: "Marks",
+              href: "/student/marks",
+              icon: Table2,
+              description: "Released marks for your current term, by subject.",
               appOnly: true,
+            },
+            {
+              // Real page only, and **repurposed**: the page is completed
+              // courses with the outcome verdict, while current-term marks
+              // moved to Marks. The old "released marks by subject and term,
+              // with previous semesters" description described the page this
+              // replaced, not this one.
+              label: "Grades",
+              href: "/student/grades",
+              icon: GraduationCap,
+              description:
+                "Completed courses, with the final verdict and the weighted grand total behind it.",
+              appOnly: true,
+            },
+            {
+              label: "Resources",
+              href: "/mockup/student/resources",
+              icon: Library,
+              description: "Course material, transcripts, and revision collections.",
             },
           ],
         },
         {
-          // Real page only. The rail lists it directly rather than under
-          // Assessments, because it is a view *across* assessments (marks grouped
-          // by subject and term), not one more assessment type. App-only for the
-          // same reason as Write: the mockup tree has no counterpart page, and
-          // `appOnly` is what keeps the mockup index's page-existence assertion
-          // true rather than pointing it at a route that does not exist there.
-          label: "Grades",
-          href: "/student/grades",
-          icon: GraduationCap,
-          description: "Released marks by subject and term, with previous semesters.",
+          // A single link now. Its former children mixed two kinds of thing:
+          // the type filters (`?type=…`) are on-page controls on the hub, which
+          // already reads the query, and the two separate pages that were also
+          // nested here (Code submissions, Write) are reached per-assessment
+          // from the hub's own cards. Both were the repeats the owner called out.
+          label: "Assessments",
+          href: "/mockup/student/assessments",
+          icon: ClipboardList,
+          description: "Every assessment with due date, submission state, and marks.",
+        },
+        {
+          // Top level because it spans courses *and* the overall picture, so
+          // nesting it under Courses would answer a narrower question.
+          label: "Analytics",
+          href: "/student/analytics",
+          icon: BarChart3,
+          description: "Your marks against your cohort, per assessment and per course.",
           appOnly: true,
         },
         {
-          label: "Resources",
-          href: "/mockup/student/resources",
-          icon: Library,
-          description: "Course material, transcripts, and revision collections.",
+          // Top level even though it reads course records: an arrear gates
+          // *new-course enrolment*, so burying it one disclosure level down
+          // under Courses would hide exactly the warning that must stay
+          // findable. It is app-only because there is no mockup page.
+          label: "Arrears",
+          href: "/student/arrears",
+          icon: AlertTriangle,
+          description: "Finished courses you have not passed, and how they affect new enrolment.",
+          appOnly: true,
         },
       ],
     },
@@ -432,6 +418,18 @@ export const NAV_SECTIONS: Record<MockupRole, NavSection[]> = {
           href: "/mockup/student/peer-evaluation",
           icon: Users,
           description: "Rate teammates on the five CATME dimensions.",
+        },
+        {
+          // Moved out of Assessments: the GROUP_PROJECT card itself says the
+          // work "is handed in outside this card", so it is a collaborative
+          // activity rather than one more assessment type a student filters by.
+          // It still narrows the hub with a type query — no second filter
+          // mechanism is introduced.
+          label: "Group projects",
+          href: "/mockup/student/assessments",
+          query: { type: "GROUP_PROJECT" },
+          icon: Users,
+          description: "Team projects your group is currently working on.",
         },
       ],
     },

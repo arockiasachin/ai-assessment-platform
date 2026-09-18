@@ -169,7 +169,12 @@ export function SideNav({
                 if (children.length === 0) {
                   const target = resolveNavLink(item, scope)
                   if (target === null) return null
-                  const active = isActiveHref(pathname, target.href, scope)
+                  // A query-narrowed leaf shares its path with the item that
+                  // owns the page (Group projects narrows the assessments hub),
+                  // so pathname alone cannot say which is active; the page's own
+                  // filter control carries the cue instead, exactly as it does
+                  // for a query-narrowed group child.
+                  const active = item.query ? false : isActiveHref(pathname, target.href, scope)
                   return (
                     <li key={item.href}>
                       <NavLink

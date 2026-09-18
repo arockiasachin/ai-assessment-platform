@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge"
 import { DataTable, type Column } from "@/components/ui/data-table"
 import { EmptyState } from "@/components/ui/empty-state"
 import { FilterBar } from "@/components/ui/filter-bar"
+import { InfoHint } from "@/components/ui/info-hint"
 import { SectionCard } from "@/components/ui/section-card"
 import { StatCard } from "@/components/ui/stat-card"
 import { StatusPill } from "@/components/ui/status-pill"
@@ -207,7 +208,12 @@ export function StudentResourcesView({ materials }: { materials: StudentMaterial
 
       <SectionCard
         title="Materials"
-        description="Everything your teachers have shared for your courses. A material that has not been indexed yet cannot be searched or used by the practice generator."
+        action={
+          <InfoHint label="What happens to material that is not indexed">
+            Everything your teachers have shared for your courses. A material that has not been
+            indexed yet cannot be searched or used by the practice generator.
+          </InfoHint>
+        }
       >
         <DataTable
           caption="Course materials"

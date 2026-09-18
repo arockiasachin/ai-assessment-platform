@@ -3,6 +3,7 @@ import path from "node:path"
 import { fileURLToPath } from "node:url"
 
 import { describe, expect, it } from "vitest"
+import { BookOpen } from "lucide-react"
 
 import {
   MOCKUP_ROLES,
@@ -356,7 +357,7 @@ describe("findNavItemByAppPath", () => {
   })
 })
 
-describe("student nav: the Assessments group", () => {
+describe("student nav: the restructured rail", () => {
   const learning = NAV_SECTIONS.student.find((section) => section.id === "learning")!
   const collaboration = NAV_SECTIONS.student.find((section) => section.id === "collaboration")!
 
@@ -364,96 +365,132 @@ describe("student nav: the Assessments group", () => {
     items.find((item) => item.label === label)!
   const leafLabels = (items: typeof learning.items) => flattenNavItems(items).map((i) => i.label)
 
-  it("nests the assessment types under one collapsible group", () => {
-    const group = section(learning.items, "Assessments")
-    expect(group.children).toBeDefined()
-    const childLabels = group.children!.map((child) => child.label)
-    expect(childLabels).toContain("All assessments")
-    expect(childLabels).toContain("Quizzes")
-    expect(childLabels).toContain("Written and assignments")
-    expect(childLabels).toContain("Code tasks")
-    expect(childLabels).toContain("Group projects")
+  it("makes Assessments a single link, with no submenu of type filters", () => {
+    const assessments = section(learning.items, "Assessments")
+    expect(assessments.children).toBeUndefined()
+    expect(assessments.href).toBe("/mockup/student/assessments")
+    // The hub's own `?type=` control is the only filter mechanism: no
+    // query-narrowed child remains for an assessment type. Group projects is
+    // the one query-narrowed item, and it lives in Collaboration.
+    expect(flattenNavItems(learning.items).some((item) => item.query !== undefined)).toBe(false)
   })
 
-  it("sends each type child to the hub with a type filter", () => {
-    const group = section(learning.items, "Assessments")
-    const byLabel = new Map(group.children!.map((child) => [child.label, child]))
-    expect(byLabel.get("All assessments")?.query).toBeUndefined()
-    expect(byLabel.get("Quizzes")?.query).toEqual({ type: "QUIZ" })
-    expect(byLabel.get("Written and assignments")?.query).toEqual({ type: "WRITTEN" })
-    expect(byLabel.get("Code tasks")?.query).toEqual({ type: "CODE" })
-    expect(byLabel.get("Group projects")?.query).toEqual({ type: "GROUP_PROJECT" })
-    for (const child of group.children!) {
-      // Every filter child points at the one hub page; the query narrows it.
-      if (child.label !== "Write" && child.label !== "Code submissions") {
-        expect(child.href).toBe("/mockup/student/assessments")
-      }
-    }
-  })
-
-  it("removes the standalone Quizzes entry, which the group now covers", () => {
-    // Top level only: "Quizzes" is still a *child* of the Assessments group,
-    // which is the point — it is reachable, just not a second top-level idea.
-    expect(learning.items.map((item) => item.label)).not.toContain("Quizzes")
-    // Quizzes still reaches a real page through the group.
-    expect(
-      flattenNavItems(learning.items).some(
-        (item) => item.query?.type === "QUIZ" && navHref(item.href, "app") !== null,
-      ),
-    ).toBe(true)
-  })
-
-  it("moves Code submissions out of Collaboration and under Assessments", () => {
-    const group = section(learning.items, "Assessments")
-    expect(group.children!.map((child) => child.label)).toContain("Code submissions")
-    // Collaboration is left with peer evaluation only — a per-assessment
-    // workspace is not a collaborative activity.
-    expect(flattenNavItems(collaboration.items).map((item) => item.label)).toEqual([
-      "Peer evaluation",
+  it("nests My courses, Marks, Grades and Resources under one Courses group", () => {
+    const courses = section(learning.items, "Courses")
+    expect(courses.children).toBeDefined()
+    expect(courses.children!.map((child) => child.label)).toEqual([
+      "My courses",
+      "Marks",
+      "Grades",
+      "Resources",
     ])
+    expect(section(courses.children!, "My courses").href).toBe("/mockup/student/courses")
+    expect(section(courses.children!, "Resources").href).toBe("/mockup/student/resources")
   })
 
-  it("adds the previously-unreachable Write page, app-only", () => {
-    const group = section(learning.items, "Assessments")
-    const write = group.children!.find((child) => child.label === "Write")!
-    expect(write.href).toBe("/student/write")
-    expect(write.appOnly).toBe(true)
-    // Filtered out of the mockup tree, which has no page for it.
-    expect(
-      flattenNavItems(navSectionsFor("student", "mockup").flatMap((s) => s.items)),
-    ).not.toContain(write)
-    // Present in the app tree.
-    expect(
-      flattenNavItems(navSectionsFor("student", "app").flatMap((s) => s.items)).map((i) => i.href),
-    ).toContain("/student/write")
-  })
-
-  it("advertises Grades as a top-level item now that the route exists", () => {
-    // Phase 1 deliberately shipped no Grades entry because the page did not exist;
-    // a rail link to a missing route is a dangling affordance. Phase 2 added both.
-    // It stays **top level** rather than becoming an Assessments child: grades is a
-    // view across assessments (marks grouped by subject and term), not one more
-    // assessment type, so nesting it would put it under a menu that answers a
-    // different question.
-    const grades = section(learning.items, "Grades")
-    expect(leafLabels(learning.items)).toContain("Grades")
+  it("marks every new page app-only, with a real path and no mockup counterpart", () => {
+    const courses = section(learning.items, "Courses").children!
+    const marks = section(courses, "Marks")
+    const grades = section(courses, "Grades")
+    const analytics = section(learning.items, "Analytics")
+    const arrears = section(learning.items, "Arrears")
+    for (const item of [marks, grades, analytics, arrears]) {
+      expect(item.appOnly, item.label).toBe(true)
+      expect(item.href.startsWith("/mockup"), `${item.label} must carry its real path`).toBe(false)
+    }
+    expect(marks.href).toBe("/student/marks")
     expect(grades.href).toBe("/student/grades")
-    expect(grades.children).toBeUndefined()
-    // App-only: the mockup tree has no counterpart page, and the label is a real
-    // route rather than a mockup one.
-    expect(grades.appOnly).toBe(true)
-    expect(grades.href.startsWith("/mockup")).toBe(false)
+    expect(analytics.href).toBe("/student/analytics")
+    expect(arrears.href).toBe("/student/arrears")
   })
 
-  it("filters Grades out of the mockup tree and keeps it in the app tree", () => {
+  it("keeps Analytics top-level rather than under Courses", () => {
+    // It spans courses and the overall picture, so nesting it under Courses
+    // would put it under a menu that answers a narrower question.
+    expect(learning.items.map((item) => item.label)).toContain("Analytics")
+    expect(section(learning.items, "Courses").children!.map((child) => child.label)).not.toContain(
+      "Analytics",
+    )
+  })
+
+  it("places Arrears top-level, because it gates new enrolment", () => {
+    const arrears = section(learning.items, "Arrears")
+    expect(arrears.children).toBeUndefined()
+    expect(learning.items.map((item) => item.label)).toContain("Arrears")
+    expect(section(learning.items, "Courses").children!.map((child) => child.label)).not.toContain(
+      "Arrears",
+    )
+  })
+
+  it("moves Group projects to Collaboration as a hub filter", () => {
+    const group = section(collaboration.items, "Group projects")
+    expect(group.href).toBe("/mockup/student/assessments")
+    expect(group.query).toEqual({ type: "GROUP_PROJECT" })
+    expect(group.children).toBeUndefined()
+    expect(collaboration.items.map((item) => item.label)).toEqual([
+      "Peer evaluation",
+      "Group projects",
+    ])
+    expect(leafLabels(learning.items)).not.toContain("Group projects")
+  })
+
+  it("corrects the stale Grades description", () => {
+    const grades = section(section(learning.items, "Courses").children!, "Grades")
+    expect(grades.description).not.toMatch(/previous semester/i)
+    expect(grades.description).toMatch(/completed courses/i)
+    expect(grades.description).toMatch(/verdict/i)
+  })
+
+  it("filters every app-only student page out of mockup scope and keeps it in app scope", () => {
+    const appPaths = ["/student/marks", "/student/grades", "/student/analytics", "/student/arrears"]
     const inMockup = flattenNavItems(
       navSectionsFor("student", "mockup").flatMap((s) => s.items),
     ).map((item) => item.href)
     const inApp = flattenNavItems(navSectionsFor("student", "app").flatMap((s) => s.items)).map(
       (item) => item.href,
     )
+    for (const path of appPaths) {
+      expect(inMockup, path).not.toContain(path)
+      expect(inApp, path).toContain(path)
+    }
+  })
 
-    expect(inMockup).not.toContain("/student/grades")
-    expect(inApp).toContain("/student/grades")
+  it("keeps only the mockup-backed Courses children in mockup scope", () => {
+    // The group survives because two of its four children have mockup pages;
+    // the app-only two are dropped without dropping the group.
+    const courses = section(navSectionsFor("student", "mockup")[0].items, "Courses")
+    expect(courses.children!.map((child) => child.label)).toEqual(["My courses", "Resources"])
+  })
+
+  it("drops a group entirely once all of its children are filtered out", () => {
+    // `filterNavItems` is private, so exercise the public surface: temporarily
+    // give the student tree a group whose only child is app-only, and assert it
+    // does not render as an expandable empty row in mockup scope.
+    const probe = {
+      label: "App-only group probe",
+      href: "/mockup/student/courses",
+      icon: BookOpen,
+      description: "Test-only group with one app-only child.",
+      children: [
+        {
+          label: "Probe child",
+          href: "/student/marks",
+          icon: BookOpen,
+          description: "Test-only child.",
+          appOnly: true,
+        },
+      ],
+    }
+    learning.items.push(probe)
+    try {
+      const inMockup = navSectionsFor("student", "mockup").flatMap((section) => section.items)
+      expect(inMockup.map((item) => item.label)).not.toContain("App-only group probe")
+      // In app scope the group survives with its one resolvable child.
+      const inApp = navSectionsFor("student", "app").flatMap((section) => section.items)
+      const found = inApp.find((item) => item.label === "App-only group probe")
+      expect(found?.children?.map((child) => child.label)).toEqual(["Probe child"])
+    } finally {
+      learning.items.splice(learning.items.indexOf(probe), 1)
+    }
   })
 })

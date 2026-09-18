@@ -24,6 +24,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { CodeBlock } from "@/components/ui/code-block"
 import { EmptyState } from "@/components/ui/empty-state"
+import { InfoHint } from "@/components/ui/info-hint"
 import { KeyValueList, MetricRow } from "@/components/ui/metric-row"
 import { Separator } from "@/components/ui/separator"
 import { StatusPill } from "@/components/ui/status-pill"
@@ -309,18 +310,26 @@ function RunOutput({
         )}
 
         {hidden.length > 0 && (
-          <p className="rounded-md border border-dashed border-border p-2.5 text-sm text-muted-foreground">
-            <span className="font-mono tabular-nums">{hiddenPassed}</span> of{" "}
-            <span className="font-mono tabular-nums">{hidden.length}</span> hidden cases passed.
-            Hidden cases show only pass/fail — their input and expected output are not returned to
-            students.
+          <p className="flex flex-wrap items-center gap-1.5 rounded-md border border-dashed border-border p-2.5 text-sm text-muted-foreground">
+            <span>
+              <span className="font-mono tabular-nums">{hiddenPassed}</span> of{" "}
+              <span className="font-mono tabular-nums">{hidden.length}</span> hidden cases passed.
+            </span>
+            <InfoHint label="Why hidden cases show only pass or fail">
+              Hidden cases show only pass/fail — their input and expected output are not returned to
+              students.
+            </InfoHint>
           </p>
         )}
         {hiddenNotRun > 0 && (
-          <p className="rounded-md border border-dashed border-border p-2.5 text-sm text-muted-foreground">
-            <span className="font-mono tabular-nums">{hiddenNotRun}</span> hidden{" "}
-            {hiddenNotRun === 1 ? "case is" : "cases are"} graded only on Submit and never run by a
-            sample run.
+          <p className="flex flex-wrap items-center gap-1.5 rounded-md border border-dashed border-border p-2.5 text-sm text-muted-foreground">
+            <span>
+              <span className="font-mono tabular-nums">{hiddenNotRun}</span> hidden{" "}
+              {hiddenNotRun === 1 ? "case was" : "cases were"} not run by this sample run.
+            </span>
+            <InfoHint label="Why some hidden cases do not run here">
+              Hidden cases are graded only on Submit and are never run by a sample run.
+            </InfoHint>
           </p>
         )}
       </div>
@@ -729,10 +738,11 @@ export function StudentCodeSubmissionEditor({
 
       <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
         <CircleCheck className="size-4" aria-hidden="true" />
-        <span>
+        <span>Sample runs are free.</span>
+        <InfoHint label="About the starter code and the submission budget">
           The starter code is shown until you type over it. Sample runs are free; each submit uses
           one of your {task.maxSubmissions} submissions.
-        </span>
+        </InfoHint>
       </div>
     </div>
   )

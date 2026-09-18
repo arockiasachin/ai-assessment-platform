@@ -3,6 +3,7 @@ import { GraduationCap } from "lucide-react"
 
 import { StatusPill, type StatusKey } from "@/components/ui/status-pill"
 import { EmptyState } from "@/components/ui/empty-state"
+import { InfoHint } from "@/components/ui/info-hint"
 import { SectionCard } from "@/components/ui/section-card"
 import { formatPercent } from "@/lib/format"
 import type { StudentCourseOutcome } from "@/lib/student-course-outcome"
@@ -74,13 +75,16 @@ export function StudentGradesView({ completed }: StudentGradesViewProps) {
     <div className="space-y-6">
       <SectionCard
         title="Completed courses"
-        description={`${summary.total} completed ${
-          summary.total === 1 ? "course" : "courses"
-        }. A total counts the published marks only, and a course with no published final-assessment mark has no total rather than a zero.${
-          hasNotJudged
-            ? " “Not judged” means the evidence is incomplete — it is not a failure."
-            : ""
-        }`}
+        description={`${summary.total} completed ${summary.total === 1 ? "course" : "courses"}.`}
+        action={
+          <InfoHint label="How the grand total and the verdict are decided">
+            A total counts the published marks only, and a course with no published final-assessment
+            mark has no total rather than a zero.
+            {hasNotJudged
+              ? " “Not judged” means the evidence is incomplete — it is not a failure."
+              : ""}
+          </InfoHint>
+        }
       >
         <div className="relative w-full overflow-x-auto">
           <table className="w-full caption-bottom text-sm">

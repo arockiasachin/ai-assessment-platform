@@ -3,23 +3,12 @@
 import Link from "next/link"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { useMemo, useState } from "react"
-import {
-  BookOpen,
-  BookOpenCheck,
-  CalendarClock,
-  ClipboardList,
-  Filter,
-  PenLine,
-  Search,
-  Sparkles,
-  Target,
-  Terminal,
-} from "lucide-react"
+import { BookOpenCheck, Filter, PenLine, Search, Target, Terminal } from "lucide-react"
 import { GradeBadge } from "@/components/grade-badge"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Callout } from "@/components/ui/callout"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
+import { InfoHint } from "@/components/ui/info-hint"
 import { Input } from "@/components/ui/input"
 import {
   Select,
@@ -207,32 +196,14 @@ export function StudentAssessmentsView({
       <Card className="border-primary/20 bg-gradient-to-br from-primary/10 via-background to-background shadow-sm">
         <CardContent className="flex flex-col gap-3 pt-6 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <Badge
-              variant="outline"
-              className="mb-2 w-fit gap-1.5 border-primary/30 bg-background/70 text-primary"
-            >
-              <Sparkles className="size-3.5" />
-              Assessment hub
-            </Badge>
             {/*
-             * h2, not h3: `PageHeader` above is the page's `<h1>`, and the
-             * previous shell's title was an `<h2>`, so an `<h3>` here skipped a
-             * level once the shell changed.
-             */}
-            <h2 className="text-lg font-semibold tracking-tight">
-              Track every assessment with full detail
-            </h2>
-            <p className="text-sm text-muted-foreground">
-              Inspect scores, due windows, feedback, and course context in one place.
-            </p>
-            {/*
-              The hub's entry point into each per-course hub. It is rendered here,
-              unconditionally, rather than only on a card's expanded panel, so the
-              way through is in the first paint and reachable without opening an
-              assessment.
+              The hero is the course-hub entry point now. The "Assessment hub"
+              badge and the "Track every assessment with full detail" headline
+              that used to sit here were marketing copy for a page that already
+              says what it does, so they were deleted outright (Phase 6).
             */}
             {courseOptions.length > 0 && (
-              <div className="mt-3">
+              <div>
                 <p className="text-xs font-medium text-muted-foreground">Course hubs</p>
                 <ul className="mt-1 flex flex-wrap gap-1.5">
                   {courseOptions.map((course) => (
@@ -275,38 +246,37 @@ export function StudentAssessmentsView({
         </CardContent>
       </Card>
 
-      {/* How each course is graded, above the marks it qualifies. Rendered here, above the
-          filter and the cards, because it changes how every score below should be read: a
-          relative-graded class and an absolute-graded one differ in exactly this and nothing
-          else on the page (SN-16). */}
+      {/* How each course is graded, collapsed behind an info hint. It changes how
+          every score below should be read, so it stays discoverable, but it is
+          static guidance rather than the result of an action — the boxes used to
+          take the space the marks need (Phase 6). */}
       {courseRegimeNotes.length > 0 && (
-        <div className="space-y-3">
-          {courseRegimeNotes.map((regime) => (
-            <Callout
-              key={regime.offeringId}
-              tone={regime.note.tone}
-              title={regime.note.title}
-              icon={Target}
-            >
-              <p>
-                <span className="font-medium">
-                  {regime.courseCode} · {regime.courseName}
-                </span>{" "}
-                — {regime.note.detail}
-              </p>
-            </Callout>
-          ))}
-        </div>
+        <p className="flex items-center gap-1.5 text-sm text-muted-foreground">
+          <Target className="size-4 shrink-0 text-primary" aria-hidden="true" />
+          <span>How each of your courses is graded</span>
+          <InfoHint label="How each of your courses is graded">
+            <ul className="space-y-1.5">
+              {courseRegimeNotes.map((regime) => (
+                <li key={regime.offeringId}>
+                  <span className="font-medium text-foreground">
+                    {regime.courseCode} · {regime.courseName}
+                  </span>{" "}
+                  — {regime.note.title}: {regime.note.detail}
+                </li>
+              ))}
+            </ul>
+          </InfoHint>
+        </p>
       )}
 
       <Card className="border-border/70 shadow-sm">
         <CardHeader>
           {/* A real heading: the filter is a section of the page, so the
-              outline reads h1 → h2 (the hub blurb) → h3 (filter, list). */}
-          <h3 className="inline-flex items-center gap-2 text-base leading-snug font-medium tracking-tight">
+              outline reads h1 → h2 (filter, list). */}
+          <h2 className="inline-flex items-center gap-2 text-base leading-snug font-medium tracking-tight">
             <Filter className="size-4 text-primary" aria-hidden="true" />
             Filter and explore
-          </h3>
+          </h2>
         </CardHeader>
         <CardContent className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
           <div className="relative xl:col-span-2">
@@ -376,9 +346,9 @@ export function StudentAssessmentsView({
       </Card>
 
       <section aria-labelledby="assessments-list-heading" className="space-y-3">
-        <h3 id="assessments-list-heading" className="text-base font-semibold tracking-tight">
+        <h2 id="assessments-list-heading" className="text-base font-semibold tracking-tight">
           Your assessments
-        </h3>
+        </h2>
         {filtered.map((assessment) => {
           const isExpanded = Boolean(expanded[assessment.id])
           const tone = dueTone(assessment)
@@ -493,26 +463,10 @@ export function StudentAssessmentsView({
                     )}
 
                     <div className="mt-3 flex flex-wrap gap-2">
-                      {/*
-                        The hub's link into the per-course hub. It lives in the
-                        expanded panel rather than beside the course name in the
-                        summary row because that whole row is a `<button>` — an
-                        anchor inside a button is invalid and unreachable by
-                        keyboard, so the metadata stays text and the way through
-                        is here.
-                      */}
-                      <Link
-                        href={{
-                          pathname: "/student/course",
-                          query: { courseCode: assessment.courseCode },
-                        }}
-                        className="inline-flex"
-                      >
-                        <Button size="sm" variant="ghost">
-                          <BookOpen className="size-4" />
-                          View course
-                        </Button>
-                      </Link>
+                      {/* The per-card "View course" link is gone: the hero's
+                          course chips already provide that entry, so repeating
+                          it on every card was the duplication the owner called
+                          out (Phase 6). The chips remain. */}
                       {assessment.type === "QUIZ" ? (
                         <Link href="/student/quizzes" className="inline-flex">
                           <Button size="sm" variant="outline">
@@ -595,36 +549,6 @@ export function StudentAssessmentsView({
           </Card>
         )}
       </section>
-
-      <Card className="border-border/70 shadow-sm">
-        <CardContent className="grid gap-3 py-5 sm:grid-cols-3">
-          <div className="rounded-lg border border-border/70 bg-muted/20 px-3 py-2">
-            <p className="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
-              <ClipboardList className="size-3.5" />
-              Grading detail
-            </p>
-            <p className="mt-1 text-sm">
-              Every score is normalized against max marks for accurate percentage comparisons.
-            </p>
-          </div>
-          <div className="rounded-lg border border-border/70 bg-muted/20 px-3 py-2">
-            <p className="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
-              <Target className="size-3.5" />
-              Status tracking
-            </p>
-            <p className="mt-1 text-sm">
-              See whether each item is graded, submitted, overdue, or still pending work.
-            </p>
-          </div>
-          <div className="rounded-lg border border-border/70 bg-muted/20 px-3 py-2">
-            <p className="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
-              <CalendarClock className="size-3.5" />
-              Deadline visibility
-            </p>
-            <p className="mt-1 text-sm">Due-window badges help prioritize what to complete next.</p>
-          </div>
-        </CardContent>
-      </Card>
     </div>
   )
 }

@@ -18,6 +18,7 @@ import { DataTable, type Column } from "@/components/ui/data-table"
 import { EmptyState } from "@/components/ui/empty-state"
 import { FilterBar } from "@/components/ui/filter-bar"
 import { GradeDonut } from "@/components/ui/grade-donut"
+import { InfoHint } from "@/components/ui/info-hint"
 import { Label } from "@/components/ui/label"
 import { KeyValueList, MetricRow } from "@/components/ui/metric-row"
 import { SectionCard } from "@/components/ui/section-card"
@@ -373,7 +374,11 @@ export function StudentCoursesView({ initialPayload }: Props) {
 
       <SectionCard
         title="My courses"
-        description="Every offering you are enrolled in or waitlisted for, current term and past."
+        action={
+          <InfoHint label="Which courses this list covers">
+            Every offering you are enrolled in or waitlisted for, current term and past.
+          </InfoHint>
+        }
       >
         {enrolled.length === 0 ? (
           <EmptyState
@@ -443,14 +448,14 @@ export function StudentCoursesView({ initialPayload }: Props) {
 
       <SectionCard
         title="Course feedback"
-        description="How each finished course was rated, in aggregate."
+        action={
+          <InfoHint label="Why course ratings stay anonymous">
+            How each finished course was rated, in aggregate. You see the average, the distribution,
+            and your own rating. A classmate&apos;s name and comment are never shown to students.
+          </InfoHint>
+        }
       >
         <div className="grid gap-4">
-          <Callout tone="info" title="Ratings stay anonymous">
-            You see the average, the distribution, and your own rating. A classmate&apos;s name and
-            comment are never shown to students.
-          </Callout>
-
           {rateable.length === 0 ? (
             <EmptyState
               icon={Star}
@@ -598,7 +603,12 @@ export function StudentCoursesView({ initialPayload }: Props) {
 
       <SectionCard
         title="Explore offered courses"
-        description="Registration windows are set by the teacher; when a course is full you can join the waitlist."
+        action={
+          <InfoHint label="How registration windows and waitlists work">
+            Registration windows are set by the teacher; when a course is full you can join the
+            waitlist.
+          </InfoHint>
+        }
       >
         <div className="grid gap-4">
           <FilterBar

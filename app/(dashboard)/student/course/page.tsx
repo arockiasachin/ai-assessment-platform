@@ -9,6 +9,7 @@ import { RoleGuard } from "@/components/role-guard"
 import { AppShell, PageHeader } from "@/components/shell"
 import { Badge } from "@/components/ui/badge"
 import { EmptyState } from "@/components/ui/empty-state"
+import { InfoHint } from "@/components/ui/info-hint"
 import { SectionCard } from "@/components/ui/section-card"
 import { getSessionUser } from "@/lib/auth"
 import { formatPercent, formatPoints, formatShortDate } from "@/lib/format"
@@ -151,7 +152,12 @@ export default async function StudentCoursePage({
 
       <SectionCard
         title="Course at a glance"
-        description="An average counts released marks only; an unreleased mark never moves it, and is never counted as zero."
+        action={
+          <InfoHint label="How this course average is calculated">
+            An average counts released marks only; an unreleased mark never moves it, and is never
+            counted as zero.
+          </InfoHint>
+        }
       >
         <dl className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <div className="rounded-lg border border-border/70 bg-muted/20 px-3 py-2">
@@ -315,7 +321,7 @@ export default async function StudentCoursePage({
               Grades
             </span>
             <span className="mt-1 block text-xs text-muted-foreground">
-              This subject&apos;s marks by term, with previous semesters.
+              Completed courses, with the final verdict and weighted total.
             </span>
           </Link>
           <Link

@@ -6,6 +6,7 @@ import { Loader2, Lock, Send } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Callout } from "@/components/ui/callout"
 import { DataTable, type Column } from "@/components/ui/data-table"
+import { InfoHint } from "@/components/ui/info-hint"
 import { Input } from "@/components/ui/input"
 import { MetricRow } from "@/components/ui/metric-row"
 import { ProgressBar } from "@/components/ui/progress-bar"
@@ -363,7 +364,12 @@ function GroupPanel({
 
       <SectionCard
         title="Your ratings"
-        description="Rate each teammate on five behaviourally-anchored dimensions. Comments are visible only to the instructor."
+        action={
+          <InfoHint label="What you are rating and who sees it">
+            Rate each teammate on five behaviourally-anchored dimensions. Comments are visible only
+            to the instructor.
+          </InfoHint>
+        }
       >
         {alreadySubmitted && (
           <div className="mb-4">
@@ -484,7 +490,11 @@ function GroupPanel({
 
       <SectionCard
         title="How your teammates rated you"
-        description="Anonymous by construction: the data this page receives carries no rater identity."
+        action={
+          <InfoHint label="Why these ratings are anonymous">
+            Anonymous by construction: the data this page receives carries no rater identity.
+          </InfoHint>
+        }
       >
         {received.withheld ? (
           <div className="space-y-3">
@@ -520,7 +530,12 @@ function GroupPanel({
         )}
       </SectionCard>
 
-      <SectionCard title="Team" description="Every member of this group, including you.">
+      <SectionCard
+        title="Team"
+        action={
+          <InfoHint label="Who is listed here">Every member of this group, including you.</InfoHint>
+        }
+      >
         <DataTable
           caption={`Members of ${group.groupName}`}
           columns={columns}
