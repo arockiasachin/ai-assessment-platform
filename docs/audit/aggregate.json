@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-09-18T01:53:46.826Z",
+  "generatedAt": "2026-09-18T02:05:32.983Z",
   "source": {
     "convention": "docs/audit/README.md",
     "files": [
@@ -1777,15 +1777,28 @@
           "evidence": "Found on 2026-09-18 during the SN-35 build, not by the audit. `decideRetake` returns `allowed: true` for an APPROVAL assessment with an approved request, but both readers then applied the cap independently of that decision: `retake-state.ts` computed `canRetake = decision.allowed && !reachedCap`, and `startQuizAttempt` ran `evaluateAttemptEligibility({ maxAttempts: resolveSittingCap(...) })`, which refuses at the cap. Since a student only requests a retake once the cap is reached, the approval could never grant anything, and below the cap it was unnecessary. The APPROVAL feature was therefore inert in its only meaningful scenario. Reproduced live as demo.student1 on demo-assessment-quiz with retakePolicy=APPROVAL and retakesAllowed=0 (cap 1) and one graded sitting: `sittingCap: 1, canRetake: false` even with an APPROVED request standing. Fixed 2026-09-18: `resolveRetakeAllowance` in lib/quiz-attempts/retake-policy.ts adds exactly one sitting when an APPROVAL assessment has an approved request, and both `retakeStateFrom` and `startQuizAttempt` call it, so the page and the route cannot disagree. Consumption needs no extra state: taking the granted sitting raises `gradedAttemptsUsed` to meet the raised allowance, so a standing approval cannot compound. After: the same state read `sittingCap: 2, canRetake: true`, and without the approval `sittingCap: 1, canRetake: false`. Tests: tests/retake-policy.test.ts (4 pure cases) and tests/retake-state.test.ts (the grant, its consumption, and the at-cap rows added to the property test); all three new guards were verified to fail when the grant is removed.",
           "location": "lib/quiz-attempts/retake-state.ts:82 and lib/quiz-attempts/service.ts:827",
           "status": "fixed"
+        },
+        {
+          "id": "SN-52",
+          "group": "student-native",
+          "domain": "student",
+          "kind": "native",
+          "agent": "student-collaboration",
+          "severity": "minor",
+          "category": "confidentiality-leak",
+          "title": "Latent: the retired lib/quiz-grading.ts still splits 403 from 404, the one place the refusal invariant does not hold",
+          "evidence": "Not in the original audit; found on 2026-09-18 while extending the TN-69 refusal invariant to every id type. `gradeQuizSubmission` in lib/quiz-grading.ts answers a foreign-but-real assessment with `403 \"Forbidden\"` and a missing one with `404 \"Assessment not found.\"` (line 134), and a foreign student with `404 \"Student not found.\"` against a `403` (line 90) — the same enumeration shape TN-69 closed across the reachable pods. It is left unfixed deliberately, because the module is retired and unreachable: `grep -rln` shows the only importers are tests/quiz-grading.test.ts and tests/legacy-quiz-retirement.test.ts, no route references it, and the retirement suite confirms the legacy Quiz/QuizQuestion tables it was built against no longer exist. The oracles therefore cannot be exercised by any caller, so fixing them would be editing dead code. WONTFIX 2026-09-18 (owner decision): recorded rather than fixed so the invariant's coverage is auditable — this is the single known exception. Act if the module is ever rewired to a route (then fold the branches as TN-69 did), or delete it outright as part of the legacy retirement; either makes this row obsolete.",
+          "location": "lib/quiz-grading.ts:90 and lib/quiz-grading.ts:134",
+          "status": "wontfix"
         }
       ],
-      "total": 51,
+      "total": 52,
       "duplicates": 3,
-      "distinct": 48,
+      "distinct": 49,
       "bySeverity": {
         "blocker": 6,
         "major": 23,
-        "minor": 22
+        "minor": 23
       },
       "bySeverityOpen": {
         "blocker": 0,
@@ -1801,16 +1814,16 @@
         "missing-empty-state": 3,
         "inconsistency": 17,
         "unreachable-ui": 2,
-        "confidentiality-leak": 3
+        "confidentiality-leak": 4
       },
       "byStatus": {
         "open": 0,
         "fixed": 49,
-        "wontfix": 2
+        "wontfix": 3
       },
       "byAgent": {
         "student-core-learning": 26,
-        "student-collaboration": 25
+        "student-collaboration": 26
       }
     },
     {
@@ -2921,13 +2934,13 @@
         "status": "reported",
         "agents": 5,
         "agentsReported": 5,
-        "total": 51,
+        "total": 52,
         "duplicates": 3,
-        "distinct": 48,
+        "distinct": 49,
         "bySeverity": {
           "blocker": 6,
           "major": 23,
-          "minor": 22
+          "minor": 23
         }
       },
       "langchain": {
@@ -2947,7 +2960,7 @@
       "delta": {
         "blocker": 5,
         "major": 23,
-        "minor": 20
+        "minor": 21
       },
       "uniqueToNative": [
         {
@@ -3560,6 +3573,19 @@
           "evidence": "Found on 2026-09-18 during the SN-35 build, not by the audit. `decideRetake` returns `allowed: true` for an APPROVAL assessment with an approved request, but both readers then applied the cap independently of that decision: `retake-state.ts` computed `canRetake = decision.allowed && !reachedCap`, and `startQuizAttempt` ran `evaluateAttemptEligibility({ maxAttempts: resolveSittingCap(...) })`, which refuses at the cap. Since a student only requests a retake once the cap is reached, the approval could never grant anything, and below the cap it was unnecessary. The APPROVAL feature was therefore inert in its only meaningful scenario. Reproduced live as demo.student1 on demo-assessment-quiz with retakePolicy=APPROVAL and retakesAllowed=0 (cap 1) and one graded sitting: `sittingCap: 1, canRetake: false` even with an APPROVED request standing. Fixed 2026-09-18: `resolveRetakeAllowance` in lib/quiz-attempts/retake-policy.ts adds exactly one sitting when an APPROVAL assessment has an approved request, and both `retakeStateFrom` and `startQuizAttempt` call it, so the page and the route cannot disagree. Consumption needs no extra state: taking the granted sitting raises `gradedAttemptsUsed` to meet the raised allowance, so a standing approval cannot compound. After: the same state read `sittingCap: 2, canRetake: true`, and without the approval `sittingCap: 1, canRetake: false`. Tests: tests/retake-policy.test.ts (4 pure cases) and tests/retake-state.test.ts (the grant, its consumption, and the at-cap rows added to the property test); all three new guards were verified to fail when the grant is removed.",
           "location": "lib/quiz-attempts/retake-state.ts:82 and lib/quiz-attempts/service.ts:827",
           "status": "fixed"
+        },
+        {
+          "id": "SN-52",
+          "group": "student-native",
+          "domain": "student",
+          "kind": "native",
+          "agent": "student-collaboration",
+          "severity": "minor",
+          "category": "confidentiality-leak",
+          "title": "Latent: the retired lib/quiz-grading.ts still splits 403 from 404, the one place the refusal invariant does not hold",
+          "evidence": "Not in the original audit; found on 2026-09-18 while extending the TN-69 refusal invariant to every id type. `gradeQuizSubmission` in lib/quiz-grading.ts answers a foreign-but-real assessment with `403 \"Forbidden\"` and a missing one with `404 \"Assessment not found.\"` (line 134), and a foreign student with `404 \"Student not found.\"` against a `403` (line 90) — the same enumeration shape TN-69 closed across the reachable pods. It is left unfixed deliberately, because the module is retired and unreachable: `grep -rln` shows the only importers are tests/quiz-grading.test.ts and tests/legacy-quiz-retirement.test.ts, no route references it, and the retirement suite confirms the legacy Quiz/QuizQuestion tables it was built against no longer exist. The oracles therefore cannot be exercised by any caller, so fixing them would be editing dead code. WONTFIX 2026-09-18 (owner decision): recorded rather than fixed so the invariant's coverage is auditable — this is the single known exception. Act if the module is ever rewired to a route (then fold the branches as TN-69 did), or delete it outright as part of the legacy retirement; either makes this row obsolete.",
+          "location": "lib/quiz-grading.ts:90 and lib/quiz-grading.ts:134",
+          "status": "wontfix"
         }
       ],
       "uniqueToLangchain": [
@@ -3638,13 +3664,13 @@
     "groupsFailed": 0,
     "agents": 20,
     "agentsReported": 20,
-    "findings": 130,
+    "findings": 131,
     "duplicates": 5,
-    "distinct": 125,
+    "distinct": 126,
     "bySeverity": {
       "blocker": 10,
       "major": 59,
-      "minor": 61
+      "minor": 62
     },
     "bySeverityOpen": {
       "blocker": 0,
@@ -3654,7 +3680,7 @@
     "byStatus": {
       "open": 0,
       "fixed": 128,
-      "wontfix": 2
+      "wontfix": 3
     },
     "byCategory": {
       "broken-flow": 26,
@@ -3665,7 +3691,7 @@
       "missing-empty-state": 10,
       "inconsistency": 34,
       "unreachable-ui": 7,
-      "confidentiality-leak": 4
+      "confidentiality-leak": 5
     }
   }
 }
