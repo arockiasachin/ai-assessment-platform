@@ -40,8 +40,11 @@ import { toStoredDimensions } from "@/lib/groups/storage"
  *   `DEMO_IDS`, so the script is re-runnable and the test can address rows
  *   directly. Derived rows (generated questions, attempts, suggestions) get
  *   Prisma-generated ids, but they hang off a fixed parent.
- * - **Idempotent.** `deleteDemoData()` removes the previous demo graph first, so
- *   a second run replaces rather than duplicates it and never crashes.
+ * - **Idempotent, and a repeat run is a no-op.** An intact graph is detected and
+ *   returned as-is (`demoGraphIsIntact`), so a second run writes nothing and every
+ *   derived row's cuid and `createdAt`/`updatedAt` stay put; a partial graph is
+ *   deleted and rebuilt (`deleteDemoData`) rather than left broken. Unowned calendar
+ *   residue is still swept (`sweepUnownedCalendarEvents`) on every run.
  * - **Offline.** The mock provider is passed explicitly to every model call, so
  *   the seed is byte-for-byte reproducible with no network and no API key.
  * - **Human-only publishing.** The AI creates *suggestions* on `GradeReview`
@@ -348,6 +351,112 @@ function studentUser(index: number): AuthUser {
 }
 
 /**
+ * The calendar rows this seed does not own and must always sweep: an orphaned
+ * pre-stable-id `Due: …` deadline, and the audit harness's `AUDIT-…` probes. In
+ * both cases all three links are null, which the calendar reader reads as an
+ * institution-wide event, so the sweep is **title-scoped** rather than "every
+ * unscoped event" — a deliberate holiday has the same all-null shape.
+ */
+function unownedCalendarEventWhere() {
+  return {
+    offeringId: null,
+    classId: null,
+    assessmentId: null,
+    OR: [
+      { title: { startsWith: "Due: " } },
+      ...AUDIT_PROBE_TITLE_PREFIXES.map((prefix) => ({ title: { startsWith: prefix } })),
+    ],
+  }
+}
+
+/**
+ * Sweep unowned calendar residue. Deliberately separate from `deleteDemoData` and
+ * run on **every** invocation, including the intact-graph no-op path below: it is
+ * this seed's cleanup duty even when it recreates nothing, and skipping it would
+ * regress `tests/seed-probe-teardown.test.ts` / `tests/seed-coexistence.test.ts`.
+ */
+async function sweepUnownedCalendarEvents(): Promise<void> {
+  await prisma.calendarEvent.deleteMany({ where: unownedCalendarEventWhere() })
+}
+
+/**
+ * Whether a complete demo graph is already present.
+ *
+ * The seed cannot upsert its derived rows: the attempt pipeline, the grading
+ * services and the code-eval spine create them with Prisma cuid ids and no natural
+ * key (`QuizAttempt`, `QuizResponse`, `Grade`, `GradeReview`, `AIGradeSuggestion`,
+ * `Submission`, `TestRun`, …), and this file's own rule is that publish-like facts
+ * go through those real services (with their audit rows) rather than being written
+ * directly. An intactness check is therefore the only way a repeat run can be a
+ * true no-op — **no write at all**, so every `createdAt`/`updatedAt` and every
+ * cuid stays put — while a partial or absent graph still rebuilds. Each stage is
+ * named so a run interrupted part-way is not mistaken for a finished one.
+ */
+async function demoGraphIsIntact(): Promise<boolean> {
+  const [
+    course,
+    activeOffering,
+    pastOffering,
+    quiz,
+    essay,
+    group,
+    lti,
+    questions,
+    attempts,
+    responses,
+    reviews,
+    rubricCriteria,
+    submissions,
+    testRuns,
+    peerEvaluations,
+    ratings,
+    chunks,
+  ] = await Promise.all([
+    prisma.course.findUnique({ where: { id: COURSE_ID }, select: { id: true } }),
+    prisma.courseOffering.findUnique({ where: { id: ACTIVE_OFFERING_ID }, select: { id: true } }),
+    prisma.courseOffering.findUnique({ where: { id: PAST_OFFERING_ID }, select: { id: true } }),
+    prisma.assessment.findUnique({ where: { id: QUIZ_ASSESSMENT_ID }, select: { id: true } }),
+    prisma.assessment.findUnique({ where: { id: ESSAY_ASSESSMENT_ID }, select: { id: true } }),
+    prisma.group.findUnique({ where: { id: GROUP_ID }, select: { id: true } }),
+    prisma.ltiRegistration.findUnique({ where: { id: LTI_REGISTRATION_ID }, select: { id: true } }),
+    prisma.question.count({ where: { assessmentId: QUIZ_ASSESSMENT_ID } }),
+    prisma.quizAttempt.count({ where: { assessmentId: QUIZ_ASSESSMENT_ID } }),
+    prisma.quizResponse.count({ where: { attempt: { assessmentId: QUIZ_ASSESSMENT_ID } } }),
+    prisma.gradeReview.count({
+      where: { assessmentId: { in: [QUIZ_ASSESSMENT_ID, ESSAY_ASSESSMENT_ID] } },
+    }),
+    prisma.rubricCriterion.count({ where: { rubric: { assessmentId: ESSAY_ASSESSMENT_ID } } }),
+    prisma.submission.count({
+      where: { assessmentId: { in: [ESSAY_ASSESSMENT_ID, CODE_ASSESSMENT_ID] } },
+    }),
+    prisma.testRun.count({ where: { codeTaskId: CODE_TASK_ID } }),
+    prisma.peerEvaluation.count({ where: { groupId: GROUP_ID } }),
+    prisma.courseRating.count({ where: { offeringId: PAST_OFFERING_ID } }),
+    prisma.materialChunk.count({ where: { materialId: { in: MATERIAL_IDS } } }),
+  ])
+
+  return (
+    course !== null &&
+    activeOffering !== null &&
+    pastOffering !== null &&
+    quiz !== null &&
+    essay !== null &&
+    group !== null &&
+    lti !== null &&
+    questions > 0 &&
+    attempts > 0 &&
+    responses > 0 &&
+    reviews > 0 &&
+    rubricCriteria > 0 &&
+    submissions > 0 &&
+    testRuns > 0 &&
+    peerEvaluations > 0 &&
+    ratings > 0 &&
+    chunks > 0
+  )
+}
+
+/**
  * Remove the previous demo graph. Deleting the fixed-id users cascades their
  * profiles and everything hanging off them (enrollments, attempts, grades,
  * reviews, suggestions, memberships, evaluations, ratings); the remaining
@@ -405,23 +514,7 @@ async function deleteDemoData(): Promise<void> {
   //
   // This seed recreates its own unscoped event (the mid-term break) below.
   await prisma.calendarEvent.deleteMany({
-    where: {
-      OR: [
-        { id: { in: CALENDAR_EVENT_IDS } },
-        {
-          offeringId: null,
-          classId: null,
-          assessmentId: null,
-          title: { startsWith: "Due: " },
-        },
-        {
-          offeringId: null,
-          classId: null,
-          assessmentId: null,
-          OR: AUDIT_PROBE_TITLE_PREFIXES.map((prefix) => ({ title: { startsWith: prefix } })),
-        },
-      ],
-    },
+    where: { OR: [{ id: { in: CALENDAR_EVENT_IDS } }, unownedCalendarEventWhere()] },
   })
   await prisma.group.deleteMany({ where: { id: GROUP_ID } })
   await prisma.assessment.deleteMany({
@@ -1762,6 +1855,18 @@ export async function seedDemo(): Promise<DemoSeedSummary> {
   }
   // Force the offline, deterministic provider regardless of the ambient env.
   process.env.LLM_PROVIDER = "mock"
+
+  // Sweep unowned calendar residue on every run, even the intact-graph no-op.
+  await sweepUnownedCalendarEvents()
+
+  // A repeat run must be a true no-op, so an intact graph is returned as-is rather
+  // than deleted and rebuilt — that is what keeps every derived row's cuid and every
+  // `createdAt`/`updatedAt` stable. A partial or absent graph falls through and is
+  // rebuilt from scratch.
+  if (await demoGraphIsIntact()) {
+    return countSummary()
+  }
+
   const provider = createMockProvider()
 
   await deleteDemoData()

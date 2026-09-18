@@ -1,22 +1,22 @@
 # Tests
 
 Vitest for unit and data-layer tests, plus DB-backed route/service tests. The
-suite is **208 test files** (`ls tests/*.test.ts`). Tests never call a live LLM;
+suite is **217 test files** (`ls tests/*.test.ts`). Tests never call a live LLM;
 `tests/setup.ts` forces `LLM_PROVIDER=mock`.
 
 ## What you actually get without a database
 
 Worth knowing, because it is easy to misread a local run:
 
-|                      | files                                     | tests                             |
-| -------------------- | ----------------------------------------- | --------------------------------- |
-| With a test database | 206 passed, 2 skipped (208)               | **1919 passed, 5 skipped (1932)** |
-| Without one          | 124 passed, 82 **error**, 2 skipped (208) | 1332 passed, 5 skipped (1345)     |
+|                      | files                          | tests                  |
+| -------------------- | ------------------------------ | ---------------------- |
+| With a test database | 217 passed (217)               | **2030 passed (2030)** |
+| Without one          | 130 passed, 87 **error** (217) | 1407 passed (1407)     |
 
-The 82 files do not fail an assertion — they refuse to run
+The 87 files do not fail an assertion — they refuse to run
 (`Refusing to run database tests against …`), so a run without a database reports
 them as failed files with zero failed tests. **A green-looking "0 failures" is
-therefore not the suite**; it is the 124 files that need no database. CI always
+therefore not the suite**; it is the 130 files that need no database. CI always
 provisions a database, so CI has always run the full suite.
 
 ## Running tests
@@ -26,7 +26,7 @@ npm test           # run once
 npm run test:watch # watch mode
 ```
 
-Database-backed tests (about 35 files, identified by importing
+Database-backed tests (87 files, identified by importing
 `tests/helpers/db.ts`, e.g. `tests/spine.test.ts`,
 `tests/quiz-attempts-pipeline.test.ts`, `tests/demo-spine.test.ts`,
 `tests/retention-purge.test.ts`) need a Postgres with the
@@ -90,7 +90,7 @@ migration history with `prisma migrate deploy`:
 2. `prisma migrate deploy` — runs every directory under `prisma/migrations/`
    against the test database, exactly as a deployment would.
 
-There are sixteen committed migration directories:
+There are seventeen committed migration directories:
 
 ```
 20260911180000_baseline
@@ -109,6 +109,7 @@ There are sixteen committed migration directories:
 20260917120000_course_subtopic_vocabulary
 20260918050000_group_assessment_link
 20260918090000_submission_attachment
+20260918100000_arrear_acknowledgement
 ```
 
 The baseline migration takes the empty database straight to the Phase 1
@@ -117,10 +118,11 @@ creates the `MaterialChunk_embedding_hnsw_idx` HNSW index, neither of which
 Prisma emits for an `Unsupported("vector(1536)")` column. The five migrations
 after the baseline unfreeze the schema, restore course ratings, retire the
 legacy `AssessmentGrade` and `Quiz`/`QuizQuestion` stores, and add the retention
-policy's anchor, respectively. The ten later migrations add the course category,
+policy's anchor, respectively. The eleven later migrations add the course category,
 assessment release, quiz-attempt kind, retake policy, offering grading config,
 similarity-check uniqueness, the assessment-creator index, the course subtopic
-vocabulary, the group-to-assessment link, and submission attachments.
+vocabulary, the group-to-assessment link, submission attachments, and the arrear
+acknowledgement.
 
 Because the suite builds the schema through the migrations, CI fails if the
 migration history stops reproducing `prisma/schema.prisma` from empty. The

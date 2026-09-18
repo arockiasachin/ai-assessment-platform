@@ -82,6 +82,11 @@ import {
  * | `MCSE501L` / DSA section B | 15 | 13 | `relative` |
  * | `MCSE502L` / DAA section A | 12 | 6 | `awaiting-base-metrics` (absolute, warning) |
  * | the three lab offerings | 9 / 15 / 12 | some | `non-theory-course` (absolute, info) |
+ * | `MCSE501L` / DSA section A (2025, completed) | 13 | 13 | `relative` — **the rendered example**: its FAT is published, so a real student has a grand total and therefore a relative letter |
+ *
+ * The completed 2025 offering is what makes the relative branch observable rather than only
+ * unit-tested: the current-term relative offering (`DSA section B`) keeps its FAT unreleased, so
+ * its students see the relative *regime* but no letter.
  *
  * A "published total" is `gatherRegimeInputs`' definition, not a count of grades: the mean of a
  * student's **published** percentages across the offering's assessments, one value per student
@@ -90,8 +95,9 @@ import {
  *
  * ## Determinism, idempotency and the environment
  *
- * - Every top-level row has a fixed id (see `COURSES_IDS`), and `deleteCoursesData()` removes the
- *   previous graph in dependency order, so a second run replaces rather than duplicates.
+ * - Every top-level row has a fixed id (see `COURSES_IDS`). A repeat run over an intact graph is a
+ *   **no-op** (`coursesGraphIsIntact`), so every derived row's cuid and timestamp survive; a partial
+ *   graph is removed by `deleteCoursesData()` in dependency order and rebuilt rather than left broken.
  * - `LLM_PROVIDER=mock` is forced and `createMockProvider()` is passed explicitly to every model
  *   call, so the seed is offline and reproducible.
  * - Published marks go through `recordManualMark` and `submitReviewDecision`, never a direct
@@ -527,8 +533,18 @@ const PAST_TERM_START = new Date("2025-01-06T08:00:00.000Z")
 const PAST_TERM_END = new Date("2025-06-06T08:00:00.000Z")
 const PAST_MAX_MARKS = { cat1: 20, cat2: 30, fat: 100 } as const
 
-/** The students who took the completed offering; indices 0-4 are in DSA section A today too. */
-const PAST_OUTCOME_STUDENT_INDEXES = [0, 1, 2, 3, 4] as const
+/**
+ * The students who took the completed offering.
+ *
+ * Deliberately **thirteen**, not five: with 13 active enrolments and 13 published totals
+ * (everyone has at least a CAT) the offering clears `RELATIVE_MIN_MARKED_STUDENTS` and its
+ * `THEORY` category resolves to **relative** grading — the only seeded offering where a real
+ * student can see a relative band/letter, because the current-term relative offering
+ * (`OFFERING_DSA_L_B`) keeps its FAT unpublished. Indices 0-8 are in DSA section A today and
+ * 9-12 in section B, so the cohort is borrowed from students the seed already creates; the
+ * student count is unchanged.
+ */
+const PAST_OUTCOME_STUDENT_INDEXES = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12] as const
 
 /**
  * The completed offering's published marks, chosen by outcome.
@@ -544,10 +560,16 @@ const PAST_OUTCOME_STUDENT_INDEXES = [0, 1, 2, 3, 4] as const
  * | 2       | 70%  | —    | null        | `did-not-appear` arrear           |
  * | 3       | 74%  | 65%  | ~68.6       | pass                             |
  * | 4       | 87.5%| 80%  | ~83         | pass                             |
+ * | 5-12    | 55-90% | 52-84% | ~54-85   | pass — the relative band cohort   |
  *
  * Every CAT percentage clears the 30% gate, so the failing case fails on the pass mark rather
  * than on eligibility — the arrear the page is meant to show. Student 2 is deliberately
  * **unmarked on the FAT**, not zeroed on it: the distinction the reader exists to preserve.
+ *
+ * Rows 5-12 exist to clear the relative floor with a non-zero spread while leaving the three
+ * outcome fixtures (pass / fail / absent) untouched; their marks are chosen so the top band
+ * boundary (`mean + 1.5σ`) stays below 100, since a boundary above 100 would switch the
+ * regulation to its rank rule and `gradeBandRanges` would withhold the bands.
  */
 const PAST_TERM_OUTCOME_MARKS = [
   { studentIndex: 0, cat: [80, 80], fat: 70 },
@@ -555,7 +577,21 @@ const PAST_TERM_OUTCOME_MARKS = [
   { studentIndex: 2, cat: [70, 70], fat: null },
   { studentIndex: 3, cat: [75, 73], fat: 65 },
   { studentIndex: 4, cat: [85, 90], fat: 80 },
+  { studentIndex: 5, cat: [70, 68], fat: 66 },
+  { studentIndex: 6, cat: [55, 60], fat: 52 },
+  { studentIndex: 7, cat: [88, 85], fat: 84 },
+  { studentIndex: 8, cat: [62, 58], fat: 60 },
+  { studentIndex: 9, cat: [77, 74], fat: 72 },
+  { studentIndex: 10, cat: [66, 70], fat: 68 },
+  { studentIndex: 11, cat: [83, 79], fat: 78 },
+  { studentIndex: 12, cat: [59, 63], fat: 61 },
 ] as const
+
+/** The number of `Grade` rows `publishPastOutcomeMarks` writes: two CATs each, plus the FAT. */
+const PAST_PUBLISHED_GRADE_COUNT = PAST_TERM_OUTCOME_MARKS.reduce(
+  (count, row) => count + 2 + (row.fat === null ? 0 : 1),
+  0,
+)
 
 const PAST_TERM_ASSESSMENT_DEFS = [
   {
@@ -771,6 +807,78 @@ function daaLabDescription(): string {
  * rows the grading pipeline writes are cleared by **our** entity ids rather than by entity type,
  * so this seed never touches another seed's audit trail when both live in one database.
  */
+/**
+ * Whether a complete course graph is already present.
+ *
+ * Mirrors `prisma/seed-demo.ts`'s `demoGraphIsIntact`, and for the same reason: the
+ * rows the grading/rubric/code-eval services create carry Prisma cuid ids with no
+ * natural key, so they cannot be upserted, and the seed's own rule is that
+ * publish-like facts go through those services rather than being written directly.
+ * An intactness check is therefore what makes a repeat run a **no-op** — no write,
+ * so every id and timestamp stays put — while a partial graph still rebuilds.
+ *
+ * The counts are compared against the seed's own id lists, so a run interrupted part
+ * way is not mistaken for a finished one.
+ */
+async function coursesGraphIsIntact(): Promise<boolean> {
+  const [
+    course,
+    currentOffering,
+    pastOffering,
+    assessments,
+    pastAssessments,
+    activeEnrollments,
+    publishedGrades,
+    materials,
+    chunks,
+    codeTasks,
+    testCases,
+    testRuns,
+    rubricCriteria,
+    calendarEvents,
+    suggestions,
+  ] = await Promise.all([
+    prisma.course.findUnique({ where: { id: DSA_THEORY_COURSE_ID }, select: { id: true } }),
+    prisma.courseOffering.findUnique({ where: { id: OFFERING_DSA_L_B }, select: { id: true } }),
+    prisma.courseOffering.findUnique({
+      where: { id: OFFERING_PAST_DSA_L_A },
+      select: { id: true },
+    }),
+    prisma.assessment.count({ where: { id: { in: ASSESSMENT_IDS } } }),
+    prisma.assessment.count({ where: { id: { in: PAST_ASSESSMENT_IDS } } }),
+    prisma.enrollment.count({ where: { status: "active" } }),
+    prisma.grade.count({
+      where: { assessmentId: { in: PAST_ASSESSMENT_IDS }, publishedAt: { not: null } },
+    }),
+    prisma.material.count({ where: { id: { in: MATERIAL_IDS } } }),
+    prisma.materialChunk.count({ where: { materialId: { in: MATERIAL_IDS } } }),
+    prisma.codeTask.count({ where: { id: { in: CODE_TASK_IDS } } }),
+    prisma.testCase.count({ where: { codeTaskId: { in: CODE_TASK_IDS } } }),
+    prisma.testRun.count({ where: { codeTaskId: { in: CODE_TASK_IDS } } }),
+    prisma.rubricCriterion.count(),
+    prisma.calendarEvent.count({ where: { id: { in: COURSES_CALENDAR_EVENT_IDS } } }),
+    prisma.aIGradeSuggestion.count({ where: { assessmentId: { in: ALL_ASSESSMENT_IDS } } }),
+  ])
+
+  return (
+    course !== null &&
+    currentOffering !== null &&
+    pastOffering !== null &&
+    assessments === ASSESSMENT_IDS.length &&
+    pastAssessments === PAST_ASSESSMENT_IDS.length &&
+    activeEnrollments > 0 &&
+    publishedGrades === PAST_PUBLISHED_GRADE_COUNT &&
+    materials === MATERIAL_IDS.length &&
+    chunks > 0 &&
+    codeTasks === CODE_TASK_IDS.length &&
+    testCases > 0 &&
+    testRuns > 0 &&
+    rubricCriteria > 0 &&
+    calendarEvents === COURSES_CALENDAR_EVENT_IDS.length &&
+    suggestions > 0
+  )
+}
+
 async function deleteCoursesData(): Promise<void> {
   const userIds = [TEACHER_DSA_USER_ID, TEACHER_DAA_USER_ID, ...STUDENT_USER_IDS]
 
@@ -1082,8 +1190,9 @@ async function createCoursesAndOfferings(): Promise<void> {
     addActive(index, OFFERING_DAA_P_A)
   }
 
-  // The completed offering's cohort. These students are also in the current-term DSA section A,
-  // which is the realistic retake shape and what gives them both a current and a prior term.
+  // The completed offering's cohort. Most are also in a current-term DSA section, which is the
+  // realistic retake shape; the cohort is widened to 13 so the completed offering resolves to
+  // relative grading and a student can see a relative band/letter (see the constant).
   for (const index of PAST_OUTCOME_STUDENT_INDEXES) {
     addActive(index, OFFERING_PAST_DSA_L_A)
   }
@@ -2233,6 +2342,14 @@ export async function seedCourses(): Promise<CoursesSeedSummary> {
   }
   // Force the offline, deterministic provider regardless of the ambient env.
   process.env.LLM_PROVIDER = "mock"
+
+  // A repeat run must be a true no-op rather than delete-and-rebuild: an intact graph
+  // is returned as-is, so no derived row's cuid or timestamp moves. A partial or absent
+  // graph falls through and is rebuilt.
+  if (await coursesGraphIsIntact()) {
+    return countSummary()
+  }
+
   const provider = createMockProvider()
 
   await deleteCoursesData()

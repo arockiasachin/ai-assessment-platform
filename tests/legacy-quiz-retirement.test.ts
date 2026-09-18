@@ -35,7 +35,7 @@ import {
   getGradebookPayloadForSessionUser,
 } from "@/lib/gradebook-db"
 import { startQuizAttempt, submitQuizAttempt } from "@/lib/quiz-attempts"
-import { gradeQuizSubmission } from "@/lib/quiz-grading"
+import { gradeGeneratedQuiz } from "@/lib/quiz-generation/grading"
 import { signSessionValue, type AuthUser } from "@/lib/session"
 
 import { disconnectTestDatabase, prisma, truncateAll } from "./helpers/db"
@@ -129,7 +129,7 @@ describe("legacy quiz retirement — import path", () => {
   })
 
   it("lands the import as published, attributed modern questions that score end to end", async () => {
-    const { fixture, studentId, created } = await importAndEnroll({ enroll: true })
+    const { fixture, created } = await importAndEnroll({ enroll: true })
 
     expect(created.offeringId).toBe(fixture.offering.id)
     expect(created.questionCount).toBe(2)
@@ -177,10 +177,24 @@ describe("legacy quiz retirement — import path", () => {
     expect(responses).toHaveLength(2)
     expect(responses.every((response) => response.isCorrect === true)).toBe(true)
 
-    // The server-side quiz runner grades from the same modern rows.
-    const graded = await gradeQuizSubmission(
-      { assessmentId: created.id, studentId, answers },
-      student,
+    // The modern scorer — `gradeGeneratedQuiz`, the reuse point the attempt pipeline
+    // itself calls — grades the imported rows directly from the stored answer key.
+    // This is the retirement test's guard that an imported question remains
+    // gradeable now that `lib/quiz-grading.ts` is gone; the assertion is unchanged.
+    const graded = gradeGeneratedQuiz(
+      questions.map((question) => ({
+        id: question.id,
+        prompt: question.prompt,
+        explanation: question.explanation,
+        options: question.options.map((option) => ({
+          text: option.text,
+          isCorrect: option.isCorrect,
+        })),
+        points: Number(question.points),
+        type: question.type,
+      })),
+      answers,
+      created.maxMarks,
     )
     expect(graded.score).toBe(3)
     expect(graded.correctCount).toBe(2)

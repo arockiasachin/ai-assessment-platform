@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-09-18T02:05:32.983Z",
+  "generatedAt": "2026-09-18T06:29:40.550Z",
   "source": {
     "convention": "docs/audit/README.md",
     "files": [
@@ -1787,9 +1787,9 @@
           "severity": "minor",
           "category": "confidentiality-leak",
           "title": "Latent: the retired lib/quiz-grading.ts still splits 403 from 404, the one place the refusal invariant does not hold",
-          "evidence": "Not in the original audit; found on 2026-09-18 while extending the TN-69 refusal invariant to every id type. `gradeQuizSubmission` in lib/quiz-grading.ts answers a foreign-but-real assessment with `403 \"Forbidden\"` and a missing one with `404 \"Assessment not found.\"` (line 134), and a foreign student with `404 \"Student not found.\"` against a `403` (line 90) — the same enumeration shape TN-69 closed across the reachable pods. It is left unfixed deliberately, because the module is retired and unreachable: `grep -rln` shows the only importers are tests/quiz-grading.test.ts and tests/legacy-quiz-retirement.test.ts, no route references it, and the retirement suite confirms the legacy Quiz/QuizQuestion tables it was built against no longer exist. The oracles therefore cannot be exercised by any caller, so fixing them would be editing dead code. WONTFIX 2026-09-18 (owner decision): recorded rather than fixed so the invariant's coverage is auditable — this is the single known exception. Act if the module is ever rewired to a route (then fold the branches as TN-69 did), or delete it outright as part of the legacy retirement; either makes this row obsolete.",
+          "evidence": "Not in the original audit; found on 2026-09-18 while extending the TN-69 refusal invariant to every id type. `gradeQuizSubmission` in lib/quiz-grading.ts answered a foreign-but-real assessment with `403 \"Forbidden\"` and a missing one with `404 \"Assessment not found.\"` (line 134), and a foreign student with `404 \"Student not found.\"` against a `403` (line 90) — the same enumeration shape TN-69 closed across the reachable pods. It was left unfixed deliberately while the module was retired and unreachable. FIXED 2026-09-18 (owner approved): the retired module was deleted outright — `lib/quiz-grading.ts` and its unit test `tests/quiz-grading.test.ts` are removed — so the divergence no longer exists anywhere. Its one remaining importer of value, `tests/legacy-quiz-retirement.test.ts`, was re-pointed at the modern scorer (`gradeGeneratedQuiz` in lib/quiz-generation/grading.ts), so the end-to-end guard that imported questions remain gradeable is preserved without the retired code path (the same 3/3 score and 2-correct assertions are unchanged). This row is therefore obsolete: there is no live 403/404 split left to fix.",
           "location": "lib/quiz-grading.ts:90 and lib/quiz-grading.ts:134",
-          "status": "wontfix"
+          "status": "fixed"
         }
       ],
       "total": 52,
@@ -1818,8 +1818,8 @@
       },
       "byStatus": {
         "open": 0,
-        "fixed": 49,
-        "wontfix": 3
+        "fixed": 50,
+        "wontfix": 2
       },
       "byAgent": {
         "student-core-learning": 26,
@@ -3583,9 +3583,9 @@
           "severity": "minor",
           "category": "confidentiality-leak",
           "title": "Latent: the retired lib/quiz-grading.ts still splits 403 from 404, the one place the refusal invariant does not hold",
-          "evidence": "Not in the original audit; found on 2026-09-18 while extending the TN-69 refusal invariant to every id type. `gradeQuizSubmission` in lib/quiz-grading.ts answers a foreign-but-real assessment with `403 \"Forbidden\"` and a missing one with `404 \"Assessment not found.\"` (line 134), and a foreign student with `404 \"Student not found.\"` against a `403` (line 90) — the same enumeration shape TN-69 closed across the reachable pods. It is left unfixed deliberately, because the module is retired and unreachable: `grep -rln` shows the only importers are tests/quiz-grading.test.ts and tests/legacy-quiz-retirement.test.ts, no route references it, and the retirement suite confirms the legacy Quiz/QuizQuestion tables it was built against no longer exist. The oracles therefore cannot be exercised by any caller, so fixing them would be editing dead code. WONTFIX 2026-09-18 (owner decision): recorded rather than fixed so the invariant's coverage is auditable — this is the single known exception. Act if the module is ever rewired to a route (then fold the branches as TN-69 did), or delete it outright as part of the legacy retirement; either makes this row obsolete.",
+          "evidence": "Not in the original audit; found on 2026-09-18 while extending the TN-69 refusal invariant to every id type. `gradeQuizSubmission` in lib/quiz-grading.ts answered a foreign-but-real assessment with `403 \"Forbidden\"` and a missing one with `404 \"Assessment not found.\"` (line 134), and a foreign student with `404 \"Student not found.\"` against a `403` (line 90) — the same enumeration shape TN-69 closed across the reachable pods. It was left unfixed deliberately while the module was retired and unreachable. FIXED 2026-09-18 (owner approved): the retired module was deleted outright — `lib/quiz-grading.ts` and its unit test `tests/quiz-grading.test.ts` are removed — so the divergence no longer exists anywhere. Its one remaining importer of value, `tests/legacy-quiz-retirement.test.ts`, was re-pointed at the modern scorer (`gradeGeneratedQuiz` in lib/quiz-generation/grading.ts), so the end-to-end guard that imported questions remain gradeable is preserved without the retired code path (the same 3/3 score and 2-correct assertions are unchanged). This row is therefore obsolete: there is no live 403/404 split left to fix.",
           "location": "lib/quiz-grading.ts:90 and lib/quiz-grading.ts:134",
-          "status": "wontfix"
+          "status": "fixed"
         }
       ],
       "uniqueToLangchain": [
@@ -3679,8 +3679,8 @@
     },
     "byStatus": {
       "open": 0,
-      "fixed": 128,
-      "wontfix": 3
+      "fixed": 129,
+      "wontfix": 2
     },
     "byCategory": {
       "broken-flow": 26,

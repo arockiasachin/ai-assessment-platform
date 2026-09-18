@@ -5,7 +5,7 @@
  *
  * `lib/quiz-generation/generation.ts` persisted **every** generated question with `points: 1`,
  * with no relationship to the assessment's `maxMarks`. Scoring, meanwhile, divides the earned
- * total by a `maxScore` taken from `Assessment.maxMarks` (`lib/quiz-grading.ts` passes it
+ * total by a `maxScore` taken from `Assessment.maxMarks` (`lib/quiz-generation/grading.ts` passes it
  * explicitly, and `QuizAttempt.maxScore` stores it).
  *
  * The two were therefore only consistent by coincidence — when a quiz happened to have exactly as
