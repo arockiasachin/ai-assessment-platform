@@ -21,7 +21,7 @@ import {
   measuredRuntimeMs,
 } from "@/lib/code-eval"
 import type { TestResult, TestRunResponse } from "@/lib/contracts/code-eval"
-import { TEST_RUN_STATE_TO_STATUS } from "@/lib/labels"
+import { TEST_CATEGORY_LABEL, TEST_RUN_STATE_TO_STATUS } from "@/lib/labels"
 import { formatDateTime, formatDuration, formatPercent, trimNumber } from "@/lib/format"
 import { initialsFromEmail, roleLabelFromRole } from "@/lib/user-identity"
 
@@ -61,7 +61,11 @@ const resultColumns: Column<TestResult>[] = [
     id: "category",
     header: "Category",
     hideBelow: "sm",
-    cell: (result) => <span className="text-xs text-muted-foreground">{result.category}</span>,
+    cell: (result) => (
+      <span className="text-xs text-muted-foreground">
+        {TEST_CATEGORY_LABEL[result.category] ?? result.category}
+      </span>
+    ),
   },
   {
     id: "result",

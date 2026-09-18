@@ -35,13 +35,14 @@ import { EditorWorkspace } from "@/components/editor-workspace"
 import { Button } from "@/components/ui/button"
 import { KeyValueList } from "@/components/ui/metric-row"
 import { Separator } from "@/components/ui/separator"
-import { StatusPill, type StatusKey } from "@/components/ui/status-pill"
+import { StatusPill } from "@/components/ui/status-pill"
 import {
   saveDraftAllowed,
   submissionLockReason,
   submissionSubmitAction,
 } from "@/lib/assessment-submission-rules"
 import { useUnsavedWorkGuard } from "@/components/use-unsaved-guard"
+import { SUBMISSION_STATE_LABEL, SUBMISSION_STATE_TO_STATUS } from "@/lib/student-dashboard-view"
 import { formatDateTime } from "@/lib/format"
 import type { SubmissionState } from "@/lib/student-assessments"
 
@@ -82,24 +83,8 @@ export type WriteAssessment = {
  */
 const TEXT_LIMIT = 4000
 
-/** Student-facing label and tone for each submission state. */
-const SUBMISSION_STATE_TO_STATUS: Record<SubmissionState, StatusKey> = {
-  not_submitted: "pending",
-  draft: "draft",
-  submitted: "submitted",
-  resubmitted: "resubmitted",
-  graded: "graded",
-  late: "late",
-}
-
-const SUBMISSION_STATE_LABEL: Record<SubmissionState, string> = {
-  not_submitted: "Not submitted",
-  draft: "Draft",
-  submitted: "Submitted",
-  resubmitted: "Resubmitted",
-  graded: "Graded",
-  late: "Late",
-}
+// The state vocabulary comes from the shared maps, so the editor, the assessments hub, the
+// dashboard and the course hub cannot label one submission four ways.
 
 type EditorStats = {
   bold: boolean

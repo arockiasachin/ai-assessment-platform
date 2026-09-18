@@ -8,6 +8,7 @@ import {
 } from "@/lib/contracts/code-eval"
 
 import { HARNESS_RESULT_SENTINEL } from "./harness"
+import { TEST_CATEGORY_LABEL } from "@/lib/labels"
 
 /**
  * Pure result parsing and aggregation.
@@ -82,18 +83,15 @@ export function normalizeCategory(value: unknown): TestCategory {
   return direct.success ? direct.data : "unit"
 }
 
-/** A human-readable label for the contract response. */
+/**
+ * A human-readable label for the contract response.
+ *
+ * Delegates to `TEST_CATEGORY_LABEL` in `lib/labels.ts` so the server serializer and the
+ * student-facing Client Component share one definition — the harness this module imports
+ * is not client-safe.
+ */
 export function categoryLabel(category: TestCategory): string {
-  switch (category) {
-    case "unit":
-      return "Unit test"
-    case "input-output":
-      return "Input / output"
-    case "structure":
-      return "Structure"
-    case "code-quality":
-      return "Code quality signal"
-  }
+  return TEST_CATEGORY_LABEL[category] ?? category
 }
 
 export function isSupportedCategory(value: string): value is TestCategory {

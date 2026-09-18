@@ -37,7 +37,7 @@ import type {
   TestRunResponse,
 } from "@/lib/contracts/code-eval"
 import { formatDate, formatDateTime, formatDuration, trimNumber } from "@/lib/format"
-import { TEST_RUN_STATE_TO_STATUS } from "@/lib/labels"
+import { TEST_CATEGORY_LABEL, TEST_RUN_STATE_TO_STATUS } from "@/lib/labels"
 import { cn } from "@/lib/utils"
 
 /**
@@ -142,7 +142,8 @@ function CaseDetail({ result }: { result: TestResult }) {
         <StatusPill status={result.passed ? "passed" : "failed"} dot />
         <span className="text-sm font-medium">{result.name}</span>
         <span className="text-xs text-muted-foreground">
-          {result.category} · {trimNumber(result.earnedPoints)}/{trimNumber(result.points)} pts
+          {TEST_CATEGORY_LABEL[result.category] ?? result.category} ·{" "}
+          {trimNumber(result.earnedPoints)}/{trimNumber(result.points)} pts
         </span>
         {result.durationMs > 0 && (
           <span className="font-mono text-xs text-muted-foreground">

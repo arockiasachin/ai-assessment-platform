@@ -15,6 +15,7 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { formatPercent } from "@/lib/format"
+import { catStatusLabel } from "@/lib/grading/policy-view"
 import type { StudentAnalytics, StudentAnalyticsCourse } from "@/lib/student-analytics"
 import {
   classAverageChartData,
@@ -22,6 +23,7 @@ import {
   type AssessmentComparison,
 } from "@/lib/student-analytics-view"
 import type { StudentCourseOutcome } from "@/lib/student-course-outcome"
+import { ARREAR_REASON_LABEL, OUTCOME_LABEL } from "@/lib/student-outcome-view"
 import { cohortTrendPoints, hasTrendData } from "@/lib/teacher-dashboard-view"
 
 /**
@@ -70,11 +72,11 @@ export function StudentAnalyticsView({ analytics }: { analytics: StudentAnalytic
   )
 }
 
-const VERDICT_LABEL: Record<StudentCourseOutcome["outcome"]["status"], string> = {
-  pass: "Pass",
-  fail: "Fail",
-  "not-judged": "Not judged yet",
-}
+/*
+ * The verdict copy comes from `lib/student-outcome-view.ts`, the same map the Grades page
+ * renders. A local copy here had drifted to "Pass"/"Fail"/"Not judged yet" against the
+ * shared "Passed"/"Failed"/"Not judged", so one course could read two ways on two pages.
+ */
 
 function CourseAnalytics({
   course,
@@ -227,11 +229,12 @@ function OutcomeCard({ course }: { course: StudentAnalyticsCourse }) {
                     : "outline"
               }
             >
-              {VERDICT_LABEL[outcome.outcome.status]}
+              {OUTCOME_LABEL[outcome.outcome.status]}
             </Badge>
             {outcome.arrear !== null && (
               <Badge variant="destructive">
-                {outcome.arrear === "failed" ? "Failed final assessment" : "No final assessment"}
+                {/* The shared map, so this matches the Arrears and Grades pages exactly. */}
+                {ARREAR_REASON_LABEL[outcome.arrear]}
               </Badge>
             )}
           </div>
@@ -309,16 +312,17 @@ function finalAssessmentValue(outcome: StudentCourseOutcome): string {
   return formatPercent(outcome.finalAssessment.percentage, 1)
 }
 
-const CAT_STATUS_LABEL: Record<StudentCourseOutcome["cat"]["status"], string> = {
-  eligible: "Requirement met",
-  "below-cat-minimum": "Below the CAT minimum",
-  "insufficient-cat-work": "Still being marked",
-  "no-cat-gate": "No CAT/FAT split",
-}
-
+/**
+ * The CAT gate in words.
+ *
+ * `catStatusLabel` comes from `lib/grading/policy-view.ts` — the same map the teacher
+ * surfaces use. A local copy here declared the *same constant name* with different
+ * strings ("Requirement met" vs "Eligible for FAT") and lacked the library's fallback, so
+ * an unrecognised status rendered blank instead of showing itself.
+ */
 function catProgressValue(outcome: StudentCourseOutcome): string {
-  if (outcome.cat.status === "no-cat-gate") return CAT_STATUS_LABEL["no-cat-gate"]
-  return `${outcome.cat.markedCount} of ${outcome.cat.totalCount} marked · ${CAT_STATUS_LABEL[outcome.cat.status]}`
+  if (outcome.cat.status === "no-cat-gate") return catStatusLabel("no-cat-gate")
+  return `${outcome.cat.markedCount} of ${outcome.cat.totalCount} marked · ${catStatusLabel(outcome.cat.status)}`
 }
 
 /** The per-assessment table: your released mark, the disclosed average, and the gap. */

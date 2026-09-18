@@ -234,3 +234,18 @@ export const CATME_SHORT_LABEL: Record<
   expectingQuality: "Expecting quality",
   knowledgeSkillsAbilities: "Knowledge & skills",
 }
+
+/**
+ * The label for a code test case's category.
+ *
+ * Lives here rather than beside the scorer because the student results table is a Client
+ * Component, and `lib/code-eval/results.ts` imports the container harness — so importing
+ * the label from there would drag the harness into the browser bundle. `results.ts`'s
+ * `categoryLabel` delegates here so the two cannot drift.
+ */
+export const TEST_CATEGORY_LABEL: Record<string, string> = {
+  unit: "Unit test",
+  "input-output": "Input / output",
+  structure: "Structure",
+  "code-quality": "Code quality signal",
+}

@@ -19,6 +19,7 @@ import { ASSESSMENT_KIND_LABEL, MATERIAL_KIND_LABEL } from "@/lib/labels"
 import { listMaterialsForStudent } from "@/lib/materials"
 import type { AuthUser } from "@/lib/session"
 import { listStudentAssessments, type StudentAssessmentItem } from "@/lib/student-assessments"
+import { SUBMISSION_STATE_LABEL } from "@/lib/student-dashboard-view"
 import {
   buildStudentGrades,
   periodKey,
@@ -383,12 +384,16 @@ function assessmentStateLabel(assessment: StudentAssessmentItem): string {
   // release" beside the released percentage the same row renders, which is the
   // contradiction this order removes.
   if (assessment.submissionState === "graded" || assessment.published) return "Graded"
-  if (assessment.submissionState === "submitted") return "Submitted"
-  if (assessment.submissionState === "resubmitted") return "Resubmitted"
-  if (assessment.submissionState === "late") return "Handed in late"
-  if (assessment.submissionState === "draft") return "Draft"
+  // A state other than `not_submitted` is a real fact about the work, so it outranks a
+  // mark that merely exists; this is the original precedence, kept. The wording comes
+  // from the shared map, so `late` reads "Late" here as it does on the assessments hub,
+  // the dashboard and the write editor, rather than the "Handed in late" this file had.
+  if (assessment.submissionState !== "not_submitted") {
+    return SUBMISSION_STATE_LABEL[assessment.submissionState]
+  }
+  // Only now is a mark the strongest signal: it exists, but the work was never handed in.
   if (assessment.hasMark) return "Marked — awaiting release"
-  return "Not submitted"
+  return SUBMISSION_STATE_LABEL.not_submitted
 }
 
 /** The per-kind way into an assessment, matching the assessments hub's affordances. */

@@ -6,6 +6,7 @@ import { useMemo, useState } from "react"
 import { BookOpenCheck, Filter, PenLine, Search, Target, Terminal } from "lucide-react"
 import { GradeBadge } from "@/components/grade-badge"
 import { Badge } from "@/components/ui/badge"
+import { StatusPill } from "@/components/ui/status-pill"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { InfoHint } from "@/components/ui/info-hint"
@@ -30,6 +31,7 @@ import {
   parseAssessmentTypeFilter,
   type AssessmentTypeFilter,
 } from "@/lib/student-assessments-view"
+import { SUBMISSION_STATE_LABEL, SUBMISSION_STATE_TO_STATUS } from "@/lib/student-dashboard-view"
 
 function round(value: number, places = 1) {
   const factor = 10 ** places
@@ -42,29 +44,11 @@ function dueTone(assessment: StudentAssessmentItem): "destructive" | "secondary"
   return "outline"
 }
 
-function submissionLabel(state: StudentAssessmentItem["submissionState"]) {
-  if (state === "graded") return "Graded"
-  if (state === "submitted") return "Submitted"
-  if (state === "resubmitted") return "Resubmitted"
-  if (state === "late") return "Late submission"
-  if (state === "draft") return "Draft"
-  return "Not submitted"
-}
-
-// The app themes via `prefers-color-scheme`, so the `.dark`-scoped Tailwind
-// `dark:` variant never activates; the explicit media variant keeps the chip
-// text readable on a dark page.
-function submissionTone(state: StudentAssessmentItem["submissionState"]) {
-  if (state === "graded")
-    return "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"
-  if (state === "submitted" || state === "resubmitted")
-    return "border-blue-500/30 bg-blue-500/10 text-blue-700 dark:text-blue-400"
-  if (state === "late")
-    return "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-400"
-  if (state === "draft")
-    return "border-slate-400/30 bg-slate-500/10 text-slate-700 dark:text-slate-300"
-  return "border-border bg-muted/20 text-foreground"
-}
+// `submissionLabel` and `submissionTone` were local copies of shared rules and had both
+// drifted: `late` read "Late submission" here against "Late" in `lib/labels.ts` (the
+// vocabulary of record) and on the dashboard, and the tone was a third colour system for
+// the same state. Both now come from the shared maps, so the hub, the dashboard, the
+// course hub and the write editor cannot disagree.
 
 export function StudentAssessmentsView({
   initialPayload,
@@ -399,9 +383,11 @@ export function StudentAssessmentsView({
                   <div className="flex flex-wrap items-center gap-2 sm:justify-end">
                     <Badge variant={tone}>{dueLabel(assessment)}</Badge>
                     <Badge variant="outline">{ASSESSMENT_KIND_LABEL[assessment.type]}</Badge>
-                    <Badge variant="outline" className={submissionTone(assessment.submissionState)}>
-                      {submissionLabel(assessment.submissionState)}
-                    </Badge>
+                    <StatusPill
+                      status={SUBMISSION_STATE_TO_STATUS[assessment.submissionState]}
+                      label={SUBMISSION_STATE_LABEL[assessment.submissionState]}
+                      dot
+                    />
                     <GradeBadge pct={assessment.percentage} />
                   </div>
                 </button>
