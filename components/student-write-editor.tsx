@@ -36,7 +36,12 @@ import { Button } from "@/components/ui/button"
 import { KeyValueList } from "@/components/ui/metric-row"
 import { Separator } from "@/components/ui/separator"
 import { StatusPill, type StatusKey } from "@/components/ui/status-pill"
-import { saveDraftAllowed, submissionSubmitAction } from "@/lib/assessment-submission-rules"
+import {
+  saveDraftAllowed,
+  submissionLockReason,
+  submissionSubmitAction,
+} from "@/lib/assessment-submission-rules"
+import { useUnsavedWorkGuard } from "@/components/use-unsaved-guard"
 import { formatDateTime } from "@/lib/format"
 import type { SubmissionState } from "@/lib/student-assessments"
 
@@ -183,7 +188,19 @@ export function StudentWriteEditor({
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [uploading, setUploading] = useState(false)
+  /**
+   * Whether there is typed work the server has not seen.
+   *
+   * Drives the unsaved-work guard: a refresh, a closed tab, or picking a different
+   * assessment from the header picker all discard the document otherwise, silently.
+   */
+  const [dirty, setDirty] = useState(false)
   const fileInput = useRef<HTMLInputElement>(null)
+
+  const confirmLeave = useUnsavedWorkGuard(
+    dirty,
+    "You have unsaved writing. Leaving this page will discard it.",
+  )
 
   const editor = useEditor(
     {
@@ -191,6 +208,7 @@ export function StudentWriteEditor({
       // immediately would produce a hydration mismatch.
       immediatelyRender: false,
       editable: !readOnly,
+      onUpdate: () => setDirty(true),
       extensions: [
         StarterKit.configure({
           heading: { levels: [1, 2, 3] },
@@ -247,6 +265,21 @@ export function StudentWriteEditor({
   const draftAllowed = saveDraftAllowed(assessment.submissionState)
   const blocked = assessment.submissionBlockedReason !== null
   const overLimit = stats.characters > TEXT_LIMIT
+  /*
+   * Warn before the wall, not at it.
+   *
+   * The route refuses an over-limit body *before* it branches on the action
+   * (`app/api/student/assessments/[assessmentId]/submission/route.ts`), so past
+   * the cap **neither** action can succeed — Save draft included. That button
+   * used to stay enabled, so the one control that would preserve the student's
+   * work was guaranteed to fail. It is gated now, and this flag drives a visible
+   * warning as the limit approaches so the cap is never a surprise (the SN-24
+   * precedent: say why before the student acts, not in a refusal afterwards).
+   */
+  const nearLimit = !overLimit && stats.characters >= TEXT_LIMIT * 0.9
+
+  /** Why an action is unavailable for this state, or `null`. Shared with the hub. */
+  const lockReason = submissionLockReason(assessment.submissionState)
 
   async function save(action: "saveDraft" | "submit" | "resubmit") {
     if (!editor) return
@@ -265,6 +298,8 @@ export function StudentWriteEditor({
         return
       }
       setMessage(data.message ?? "Saved.")
+      // The server now holds this text, so there is nothing to warn about.
+      setDirty(false)
       router.refresh()
     } catch {
       setError("Unable to save your work.")
@@ -438,6 +473,7 @@ export function StudentWriteEditor({
             options={options}
             basePath="/student/write"
             label="Select an assessment"
+            confirmLeave={confirmLeave}
           />
           <StatusPill
             status={SUBMISSION_STATE_TO_STATUS[assessment.submissionState]}
@@ -543,58 +579,85 @@ export function StudentWriteEditor({
               </span>
             </div>
 
+            {/*
+              Both actions are refused past the cap, so the student must be told
+              what to do rather than left with two dead buttons and a red count.
+            */}
+            {!readOnly && (overLimit || nearLimit) && (
+              <p
+                role={overLimit ? "alert" : "status"}
+                className={overLimit ? "text-sm text-destructive" : "text-sm text-muted-foreground"}
+              >
+                {overLimit
+                  ? `You are ${stats.characters - TEXT_LIMIT} character${
+                      stats.characters - TEXT_LIMIT === 1 ? "" : "s"
+                    } over the ${TEXT_LIMIT}-character limit, so your work cannot be saved yet. Shorten it and Save draft will work again. Nothing is lost while you stay on this page.`
+                  : `Approaching the ${TEXT_LIMIT}-character limit — ${TEXT_LIMIT - stats.characters} left.`}
+              </p>
+            )}
+
             {readOnly ? (
               <p className="rounded-md border border-border/70 bg-muted/20 px-3 py-2 text-sm text-muted-foreground">
-                This submission has been graded and can no longer be changed.
+                {lockReason ?? "This submission has been graded and can no longer be changed."}
               </p>
             ) : (
-              <div className="flex flex-wrap items-center gap-2">
-                <input
-                  ref={fileInput}
-                  type="file"
-                  accept=".pdf,.docx,.txt,.md"
-                  className="hidden"
-                  onChange={(event) => {
-                    const file = event.target.files?.[0]
-                    if (file) void upload(file)
-                  }}
-                />
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  disabled={uploading || busy}
-                  onClick={() => fileInput.current?.click()}
-                >
-                  {uploading ? (
-                    <Loader2 className="size-4 animate-spin" />
-                  ) : (
-                    <Upload className="size-4" />
-                  )}
-                  {uploading ? "Extracting…" : "Upload PDF, DOCX, TXT, or MD"}
-                </Button>
+              <div className="flex flex-col gap-3">
+                {/*
+                  Why an action is unavailable, stated before the student tries it.
+                  Save draft is disabled for a handed-in (or graded) submission, so
+                  without this the page offered a dead "Save draft" beside a live
+                  "Resubmit" and never said which applied. The same shared helper
+                  the assessments hub uses, so the two cannot disagree.
+                */}
+                {lockReason && <p className="text-sm text-muted-foreground">{lockReason}</p>}
+                <div className="flex flex-wrap items-center gap-2">
+                  <input
+                    ref={fileInput}
+                    type="file"
+                    accept=".pdf,.docx,.txt,.md"
+                    className="hidden"
+                    onChange={(event) => {
+                      const file = event.target.files?.[0]
+                      if (file) void upload(file)
+                    }}
+                  />
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    disabled={uploading || busy}
+                    onClick={() => fileInput.current?.click()}
+                  >
+                    {uploading ? (
+                      <Loader2 className="size-4 animate-spin" />
+                    ) : (
+                      <Upload className="size-4" />
+                    )}
+                    {uploading ? "Extracting…" : "Upload PDF, DOCX, TXT, or MD"}
+                  </Button>
 
-                <span className="mx-1 h-5 w-px bg-border" aria-hidden />
+                  <span className="mx-1 h-5 w-px bg-border" aria-hidden />
 
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  disabled={busy || !draftAllowed || blocked}
-                  onClick={() => void save("saveDraft")}
-                >
-                  <Save className="size-4" />
-                  Save draft
-                </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  disabled={busy || submitAction === null || blocked || overLimit}
-                  onClick={() => void save(submitAction === "resubmit" ? "resubmit" : "submit")}
-                >
-                  <Send className="size-4" />
-                  {submitAction === "resubmit" ? "Resubmit" : "Submit"}
-                </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    disabled={busy || !draftAllowed || blocked || overLimit}
+                    onClick={() => void save("saveDraft")}
+                  >
+                    <Save className="size-4" />
+                    Save draft
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    disabled={busy || submitAction === null || blocked || overLimit}
+                    onClick={() => void save(submitAction === "resubmit" ? "resubmit" : "submit")}
+                  >
+                    <Send className="size-4" />
+                    {submitAction === "resubmit" ? "Resubmit" : "Submit"}
+                  </Button>
+                </div>
               </div>
             )}
           </div>

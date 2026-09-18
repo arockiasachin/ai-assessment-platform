@@ -16,6 +16,7 @@ import {
 } from "lucide-react"
 
 import { AssessmentPicker, type AssessmentPickerOption } from "@/components/assessment-picker"
+import { useUnsavedWorkGuard } from "@/components/use-unsaved-guard"
 import { BackLink } from "@/components/back-link"
 import { CollapsibleSection } from "@/components/collapsible-section"
 import { EditorWorkspace } from "@/components/editor-workspace"
@@ -456,6 +457,19 @@ export function StudentCodeSubmissionEditor({
   const [view, setView] = useState<RunView | null>(null)
   const [outputTab, setOutputTab] = useState<OutputTab>("testcase")
 
+  /*
+   * Monaco is uncontrolled (`defaultValue`), so a refresh or a task switch discards
+   * whatever was typed with no warning. The baseline is what the server actually holds —
+   * the untouched starter code, or the source of the last successful submit — so a
+   * submitted solution does not keep warning about itself.
+   */
+  const [savedSource, setSavedSource] = useState<string | null>(null)
+  const unsavedCode = source.trim().length > 0 && source !== (savedSource ?? task.starterCode ?? "")
+  const confirmLeave = useUnsavedWorkGuard(
+    unsavedCode,
+    "You have unsaved code. Leaving this page will discard it.",
+  )
+
   const hasSource = source.trim().length > 0
 
   async function runSamples() {
@@ -507,6 +521,8 @@ export function StudentCodeSubmissionEditor({
         throw new Error(body.message ?? "Request failed.")
       }
       setView({ kind: "submit", run: body.run })
+      // The submission now holds this source, so it is no longer unsaved work.
+      setSavedSource(source)
       setMessage(
         `Run complete: ${body.run.passedCount}/${body.run.totalCount} tests passed. ` +
           "Results are evidence for your teacher, not a published grade.",
@@ -551,6 +567,7 @@ export function StudentCodeSubmissionEditor({
             options={taskOptions}
             basePath="/student/code-submissions"
             label="Select a code task"
+            confirmLeave={confirmLeave}
           />
           <Button
             variant="outline"

@@ -8,9 +8,11 @@ import { GradeBadge } from "@/components/grade-badge"
 import { RoleGuard } from "@/components/role-guard"
 import { AppShell, PageHeader } from "@/components/shell"
 import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
 import { EmptyState } from "@/components/ui/empty-state"
 import { InfoHint } from "@/components/ui/info-hint"
 import { SectionCard } from "@/components/ui/section-card"
+import { submissionLockReason } from "@/lib/assessment-submission-rules"
 import { getSessionUser } from "@/lib/auth"
 import { formatPercent, formatPoints, formatShortDate } from "@/lib/format"
 import { ASSESSMENT_KIND_LABEL, MATERIAL_KIND_LABEL } from "@/lib/labels"
@@ -412,13 +414,38 @@ function assessmentLinks(assessment: StudentAssessmentItem) {
     )
   }
   if (assessment.type === "ASSIGNMENT" || assessment.type === "DESCRIPTIVE") {
+    /*
+     * The FAT gate, said here rather than only in the route's 403 (SN-24).
+     *
+     * The assessments hub withholds the editor while an assessment is blocked; this
+     * hub offered an enabled link for the same record, so a student was invited to
+     * write work the submission route then refused. Same rule, same surface shape.
+     */
+    if (assessment.submissionBlockedReason) {
+      return (
+        <span className="flex max-w-64 flex-col gap-1">
+          <Button size="sm" variant="outline" disabled>
+            Open writing editor
+          </Button>
+          <span className="text-xs text-destructive">{assessment.submissionBlockedReason}</span>
+        </span>
+      )
+    }
     return (
-      <Link
-        href={{ pathname: "/student/write", query: { assessmentId: assessment.id } }}
-        className="rounded-sm text-xs text-primary underline-offset-4 hover:underline focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-1 focus-visible:outline-ring"
-      >
-        Open writing editor
-      </Link>
+      <span className="flex max-w-64 flex-col gap-1">
+        <Link
+          href={{ pathname: "/student/write", query: { assessmentId: assessment.id } }}
+          className="rounded-sm text-xs text-primary underline-offset-4 hover:underline focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-1 focus-visible:outline-ring"
+        >
+          Open writing editor
+        </Link>
+        {/* Why draft-save is unavailable, in the same words the hub and the editor use. */}
+        {submissionLockReason(assessment.submissionState) && (
+          <span className="text-xs text-muted-foreground">
+            {submissionLockReason(assessment.submissionState)}
+          </span>
+        )}
+      </span>
     )
   }
   return null

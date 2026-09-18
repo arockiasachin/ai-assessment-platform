@@ -25,6 +25,14 @@ export type AssessmentPickerProps = {
   paramName?: string
   /** Accessible name for the control. */
   label?: string
+  /**
+   * Asked before navigating away. Return `false` to abort the switch.
+   *
+   * Selecting a different assessment is a client-side route change, so the browser's
+   * `beforeunload` prompt does not fire for it — an editor with unsaved work would lose
+   * it silently. The editor passes its unsaved-work guard here.
+   */
+  confirmLeave?: () => boolean
 }
 
 /**
@@ -45,6 +53,7 @@ export function AssessmentPicker({
   basePath,
   paramName = "assessmentId",
   label = "Assessment",
+  confirmLeave,
 }: AssessmentPickerProps) {
   const router = useRouter()
 
@@ -53,8 +62,15 @@ export function AssessmentPicker({
   return (
     <Select
       value={value}
+      // Base UI's `Select.Value` renders the raw `value` unless the root knows
+      // the value→label map, so without this the trigger showed the assessment
+      // id. `items` takes the same array the popup maps.
+      items={options}
       onValueChange={(next) => {
         if (typeof next !== "string" || next === value) return
+        // An editor with unsaved work asks before it is discarded; `beforeunload`
+        // does not fire for a client-side route change.
+        if (confirmLeave && !confirmLeave()) return
         // Next 16 removed the query-object form of `router.push`, so the URL is
         // built explicitly. `URLSearchParams` escapes the id.
         const query = new URLSearchParams({ [paramName]: next })
