@@ -16,7 +16,11 @@ export const dynamic = "force-dynamic"
 
 export const metadata: Metadata = { title: "Analytics" }
 
-/** The route this page owns. It has no nav entry yet — a later wave adds the rail link. */
+/**
+ * The route this page owns. Phase 6 gave it a top-level rail entry
+ * (`components/shell/nav-config.ts`), which is why the header description is read from
+ * `findNavItemByAppPath` rather than hardcoded.
+ */
 const HREF = "/student/analytics"
 
 /**
