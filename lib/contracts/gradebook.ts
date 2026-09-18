@@ -160,7 +160,12 @@ export type CourseEnrollRequest = z.infer<typeof courseEnrollRequestSchema>
 export const submissionRequestSchema = z.object({
   contentText: z
     .string()
-    .max(4000, "Submission content must be 4000 characters or fewer.")
+    // A *raw payload* ceiling, not the student-facing limit. `contentText` is
+    // sanitized HTML, so the meaningful budget — 4000 characters of plain text —
+    // is enforced by the route against the sanitized content
+    // (`SUBMISSION_TEXT_MAX_LENGTH` in `lib/rich-text.ts`). This bound only stops
+    // an oversized body from reaching the sanitizer.
+    .max(40_000, "Submission content is too large.")
     .optional(),
   action: z.enum(["saveDraft", "submit", "resubmit"]).default("submit"),
 })

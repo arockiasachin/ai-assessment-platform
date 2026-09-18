@@ -25,6 +25,13 @@ const nextConfig = {
   images: {
     unoptimized: true,
   },
+  // `pdf-parse` (used by the submission upload route, `lib/attachment-upload.ts`)
+  // loads `pdfjs-dist`'s worker by module *path* at runtime. A bundled server
+  // build rewrites that path into `.next/…/chunks`, where the worker file does
+  // not exist, so extraction fails with "Setting up fake worker failed".
+  // Keeping the package external makes Node require it from `node_modules`,
+  // where the worker sits beside the library.
+  serverExternalPackages: ["pdf-parse"],
   turbopack: {
     root: turbopackRoot(),
   },

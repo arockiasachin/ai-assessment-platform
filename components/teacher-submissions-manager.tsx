@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
 import { CheckCircle2, FileText, Search, Sparkles } from "lucide-react"
+import { RichTextContent } from "@/components/rich-text-content"
 import { Badge } from "@/components/ui/badge"
 import { formatDateTime } from "@/lib/format"
 import { ASSESSMENT_KIND_LABEL } from "@/lib/labels"
@@ -305,7 +306,7 @@ export function TeacherSubmissionsManager({ rows }: { rows: TeacherSubmissionRow
                   <FileText className="size-3.5" />
                   Submission content
                 </p>
-                <p className="whitespace-pre-wrap">{submissionBodyText(item)}</p>
+                <RichTextContent html={submissionBodyText(item)} />
               </div>
 
               <div className="grid gap-3 lg:grid-cols-[140px_1fr_auto]">

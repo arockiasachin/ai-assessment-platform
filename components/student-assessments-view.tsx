@@ -1,13 +1,13 @@
 "use client"
 
 import Link from "next/link"
-import { useMemo, useRef, useState } from "react"
+import { useMemo, useState } from "react"
 import {
   BookOpenCheck,
   CalendarClock,
   ClipboardList,
-  FileCheck2,
   Filter,
+  PenLine,
   Search,
   Sparkles,
   Target,
@@ -28,13 +28,7 @@ import {
 } from "@/components/ui/select"
 import { formatDateTime } from "@/lib/format"
 import { regimeForCourse, type StudentCourseRegime } from "@/lib/grading/regime-view"
-import {
-  saveDraftAllowed,
-  submissionLockReason,
-  submissionSubmitAction,
-  supportsTextSubmission,
-} from "@/lib/assessment-submission-rules"
-import { reconcileDrafts } from "@/lib/student-drafts"
+import { submissionLockReason, supportsTextSubmission } from "@/lib/assessment-submission-rules"
 import type { AssessmentType } from "@/lib/generated/prisma/enums"
 import { ASSESSMENT_KIND_LABEL } from "@/lib/labels"
 import type { StudentAssessmentItem, StudentAssessmentsPayload } from "@/lib/student-assessments"
@@ -92,81 +86,20 @@ export function StudentAssessmentsView({
    */
   courseRegimes?: StudentCourseRegime[]
 }) {
-  const [payload, setPayload] = useState<StudentAssessmentsPayload | null>(initialPayload)
-  // No initial fetch: the page is a server component that passes the payload in.
-  // `refresh` below stays for the explicit refresh path a submission triggers.
-  const [isLoading, setIsLoading] = useState(false)
   const [search, setSearch] = useState("")
   const [typeFilter, setTypeFilter] = useState<"all" | AssessmentType>("all")
   const [courseFilter, setCourseFilter] = useState<string>("all")
   const [statusFilter, setStatusFilter] = useState<"all" | "graded" | "pending" | "overdue">("all")
   const [expanded, setExpanded] = useState<Record<string, boolean>>({})
-  /*
-   * Seeded from the server payload. This is the bug I shipped and then fixed:
-   * the draft text used to be populated by `load()` on mount, so when the initial
-   * fetch was removed the map stayed empty — a student's saved draft rendered
-   * blank in the textarea, and "Save draft" would post an empty string and erase
-   * it (the server stores null and reports "Draft saved.").
-   *
-   * The initialiser must come from `initialPayload`, not from a later call.
-   */
-  const [submissionDrafts, setSubmissionDrafts] = useState<Record<string, string>>(() =>
-    Object.fromEntries(
-      initialPayload.assessments.map((item) => [item.id, item.submissionContent ?? ""]),
-    ),
-  )
-  /*
-   * Ids whose textarea the student has edited since the last successful save. A refetch adopts
-   * server values for every *other* card and keeps these, so saving card B cannot wipe unsaved
-   * text in card A (SN-3). See `lib/student-drafts.ts` for the rule.
-   */
-  const dirtyDrafts = useRef<Set<string>>(new Set())
-  const [savingSubmissionId, setSavingSubmissionId] = useState<string | null>(null)
-  const [message, setMessage] = useState<string | null>(null)
-  const [error, setError] = useState<string | null>(null)
-
-  const load = async () => {
-    try {
-      const response = await fetch("/api/student/assessments", { cache: "no-store" })
-      if (!response.ok) {
-        setError("Unable to load assessments right now.")
-        return
-      }
-      const data = (await response.json()) as StudentAssessmentsPayload
-      setPayload(data)
-      // Adopt the server's snapshot for every card the student has not edited, and keep the
-      // local text for the ones they have. Replacing the map wholesale here is what lost
-      // unsaved work in another card (SN-3).
-      setSubmissionDrafts((previous) =>
-        reconcileDrafts(
-          Object.fromEntries(
-            data.assessments.map((item) => [item.id, item.submissionContent ?? ""]),
-          ),
-          previous,
-          dirtyDrafts.current,
-        ),
-      )
-    } catch {
-      setError("Unable to load assessments right now.")
-    } finally {
-      setIsLoading(false)
-    }
-  }
 
   /*
-   * The initial load used to run here in a `useEffect`, which is the deferred P1
-   * fetch-on-mount finding: the page rendered nothing until the browser had the
-   * data. The payload now arrives as a prop from the server component, so the
-   * first paint already has it. `refresh` keeps its own loading state for the
-   * refresh a submission triggers.
+   * Writing happens on the dedicated `/student/write` page now, so this view no
+   * longer holds draft text or a save/submit state machine per card. The card
+   * links to the editor with the assessment id, exactly as the code-task card
+   * links to `/student/code-submissions`. The payload still carries
+   * `submissionContent`; the editor page is what reads it.
    */
-  const refresh = async () => {
-    setError(null)
-    setIsLoading(true)
-    await load()
-  }
-
-  const allAssessments = useMemo(() => payload?.assessments ?? [], [payload])
+  const allAssessments = useMemo(() => initialPayload.assessments, [initialPayload])
 
   /**
    * The regime notes to render, one per course that appears in the list.
@@ -238,72 +171,8 @@ export function StudentAssessmentsView({
     }
   }, [allAssessments])
 
-  // Only the first load may replace the page with a loading state. A background refresh after a
-  // save must not unmount the cards: doing so dropped focus and, with the draft map replacement,
-  // was half of the SN-3 data loss.
-  if (isLoading && !payload) {
-    return <p className="py-10 text-center text-sm text-muted-foreground">Loading assessments…</p>
-  }
-
-  if (error || !payload) {
-    return (
-      <p className="py-10 text-center text-sm text-destructive">
-        {error ?? "Unable to load assessments."}
-      </p>
-    )
-  }
-
-  const submitAssignment = async (
-    assessmentId: string,
-    action: "saveDraft" | "submit" | "resubmit",
-  ) => {
-    const content = submissionDrafts[assessmentId] ?? ""
-    setMessage(null)
-    setError(null)
-    setSavingSubmissionId(assessmentId)
-
-    try {
-      const response = await fetch(`/api/student/assessments/${assessmentId}/submission`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ contentText: content, action }),
-      })
-
-      const data = (await response.json()) as { success?: boolean; message?: string }
-
-      if (!response.ok) {
-        setError(data.message ?? "Unable to submit assignment.")
-        return
-      }
-
-      setMessage(data.message ?? "Submission updated.")
-      // This card is saved now, so the refetch adopts the server's value for it; every other
-      // card's unsaved edits stay protected by the dirty set.
-      dirtyDrafts.current.delete(assessmentId)
-      await refresh()
-    } catch {
-      setError("Unable to submit assignment.")
-    } finally {
-      setSavingSubmissionId(null)
-    }
-  }
-
   return (
     <div className="space-y-6">
-      {message && (
-        <div
-          role="status"
-          className="rounded-md border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-700 dark:text-emerald-400"
-        >
-          {message}
-        </div>
-      )}
-      {error && (
-        <div className="rounded-md border border-destructive/60 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-          {error}
-        </div>
-      )}
-
       <Card className="border-primary/20 bg-gradient-to-br from-primary/10 via-background to-background shadow-sm">
         <CardContent className="flex flex-col gap-3 pt-6 sm:flex-row sm:items-end sm:justify-between">
           <div>
@@ -447,8 +316,6 @@ export function StudentAssessmentsView({
           const isExpanded = Boolean(expanded[assessment.id])
           const tone = dueTone(assessment)
           const lockReason = submissionLockReason(assessment.submissionState)
-          const submitAction = submissionSubmitAction(assessment.submissionState)
-          const draftAllowed = saveDraftAllowed(assessment.submissionState)
 
           return (
             <Card key={assessment.id} className="overflow-hidden border-border/70 shadow-sm">
@@ -566,71 +433,43 @@ export function StudentAssessmentsView({
                         </p>
                       ) : supportsTextSubmission(assessment.type) ? (
                         <div className="w-full space-y-2">
-                          <textarea
-                            value={submissionDrafts[assessment.id] ?? ""}
-                            onChange={(event) => {
-                              dirtyDrafts.current.add(assessment.id)
-                              setSubmissionDrafts((prev) => ({
-                                ...prev,
-                                [assessment.id]: event.target.value,
-                              }))
-                            }}
-                            aria-label={`Submission for ${assessment.title}`}
-                            placeholder="Write your assignment submission details..."
-                            className="min-h-24 w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
-                            maxLength={4000}
-                            readOnly={assessment.submissionState === "graded"}
-                          />
-                          <div className="flex items-center justify-between text-xs text-muted-foreground">
-                            <span>{submissionLabel(assessment.submissionState)}</span>
-                            <span>{(submissionDrafts[assessment.id] ?? "").length}/4000</span>
-                          </div>
+                          {assessment.submissionBlockedReason ? (
+                            /*
+                             * The FAT gate, said before the student writes and presses
+                             * Submit rather than only in the route's 403 (SN-24). The
+                             * editor is not offered while blocked, matching the route.
+                             */
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              disabled
+                              className="w-full sm:w-auto"
+                            >
+                              <PenLine className="size-4" />
+                              Open writing editor
+                            </Button>
+                          ) : (
+                            <Link
+                              href={{
+                                pathname: "/student/write",
+                                query: { assessmentId: assessment.id },
+                              }}
+                              className="inline-flex"
+                            >
+                              <Button size="sm" variant="outline">
+                                <PenLine className="size-4" />
+                                Open writing editor
+                              </Button>
+                            </Link>
+                          )}
                           {lockReason && (
                             <p className="text-xs text-muted-foreground">{lockReason}</p>
                           )}
-                          {/* The FAT gate, said before the student writes and presses
-                              Submit rather than only in the route's 403 (SN-24). */}
                           {assessment.submissionBlockedReason && (
                             <p className="text-xs text-destructive">
                               {assessment.submissionBlockedReason}
                             </p>
                           )}
-                          <div className="grid gap-2 sm:flex sm:flex-wrap">
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => void submitAssignment(assessment.id, "saveDraft")}
-                              disabled={
-                                savingSubmissionId === assessment.id ||
-                                !draftAllowed ||
-                                assessment.submissionBlockedReason !== null
-                              }
-                              className="w-full sm:w-auto"
-                            >
-                              Save draft
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() =>
-                                void submitAssignment(
-                                  assessment.id,
-                                  submitAction === "resubmit" ? "resubmit" : "submit",
-                                )
-                              }
-                              disabled={
-                                savingSubmissionId === assessment.id ||
-                                submitAction === null ||
-                                assessment.submissionBlockedReason !== null
-                              }
-                              className="w-full sm:w-auto"
-                            >
-                              <FileCheck2 className="size-4" />
-                              {submitAction === "resubmit"
-                                ? "Resubmit assignment"
-                                : "Submit assignment"}
-                            </Button>
-                          </div>
                         </div>
                       ) : null}
                     </div>

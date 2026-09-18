@@ -2,6 +2,7 @@ import { classroomLabel } from "@/lib/classroom-label"
 import type { AIGradeSuggestion } from "@/lib/generated/prisma/client"
 import type { GradeReviewStatusValue, AiGradeSuggestionResponse } from "@/lib/contracts/grading"
 import { prisma } from "@/lib/prisma"
+import { preformattedContentHtml, sanitizeSubmissionContent } from "@/lib/rich-text"
 import type { AuthUser } from "@/lib/session"
 
 import type { EvaluationCandidate, ReviewQueueItem } from "./contracts"
@@ -32,6 +33,10 @@ const reviewInclude = {
       title: true,
       maxMarks: true,
       createdById: true,
+      // Read for display only: a CODE submission keeps its source in
+      // `contentText`, which must be escaped rather than sanitized as HTML. The
+      // field is internal to this reader and is not part of `ReviewQueueItem`.
+      type: true,
       offering: {
         select: {
           teacherId: true,
@@ -101,6 +106,18 @@ function buildFlags(
 
 function pairKey(assessmentId: string, studentId: string): string {
   return `${assessmentId}::${studentId}`
+}
+
+/**
+ * `contentText` for display, sanitized on read as well as on write.
+ *
+ * A CODE submission stores source code in this column, so it is escaped and
+ * preformatted rather than sanitized as HTML (which would delete `<stdio.h>`).
+ */
+function displayContentText(contentText: string | null, assessmentType: string): string | null {
+  return assessmentType === "CODE"
+    ? preformattedContentHtml(contentText)
+    : sanitizeSubmissionContent(contentText)
 }
 
 export type ReviewQueueFilter = {
@@ -186,7 +203,7 @@ export async function listReviewQueueForTeacher(
       submission: {
         id: submission?.id ?? "",
         status: submission?.status ?? "SUBMITTED",
-        contentText: submission?.contentText ?? null,
+        contentText: displayContentText(submission?.contentText ?? null, review.assessment.type),
         submittedAt: submission?.submittedAt?.toISOString() ?? null,
       },
       student: {
@@ -263,7 +280,7 @@ export async function getReviewDetailForTeacher(
       submission: {
         id: submission?.id ?? "",
         status: submission?.status ?? "SUBMITTED",
-        contentText: submission?.contentText ?? null,
+        contentText: displayContentText(submission?.contentText ?? null, review.assessment.type),
         submittedAt: submission?.submittedAt?.toISOString() ?? null,
       },
       student: {

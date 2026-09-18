@@ -7,6 +7,12 @@ import { requireRole } from "@/lib/authz"
 import { submissionRequestSchema } from "@/lib/contracts"
 import { prisma } from "@/lib/prisma"
 import { evaluateFatGateForStudent } from "@/lib/grading/offering-config-service"
+import {
+  SUBMISSION_HTML_MAX_LENGTH,
+  SUBMISSION_TEXT_MAX_LENGTH,
+  sanitizeSubmissionContent,
+  submissionTextLength,
+} from "@/lib/rich-text"
 
 export async function POST(
   request: Request,
@@ -27,7 +33,27 @@ export async function POST(
   const parsed = await parseJsonBody(request, submissionRequestSchema)
   if (!parsed.ok) return parsed.response
 
-  const contentText = String(parsed.data.contentText ?? "").trim()
+  /*
+   * `contentText` is sanitized HTML now, so the cap cannot stay a raw string
+   * length: `<p></p>` is seven characters of markup and no prose. The checks
+   * below measure the **plain-text** length (see `lib/rich-text.ts`), with a
+   * separate hard ceiling on the stored markup itself. The sanitizer is applied
+   * before both so a document cannot smuggle markup past the counter.
+   */
+  const sanitized = sanitizeSubmissionContent(String(parsed.data.contentText ?? ""))
+  const textLength = sanitized === null ? 0 : submissionTextLength(sanitized)
+
+  if (sanitized !== null && sanitized.length > SUBMISSION_HTML_MAX_LENGTH) {
+    return jsonError("Your submission is too long. Shorten it and try again.", 400)
+  }
+  if (textLength > SUBMISSION_TEXT_MAX_LENGTH) {
+    return jsonError(
+      `Your submission is ${textLength} characters; the limit is ${SUBMISSION_TEXT_MAX_LENGTH}.`,
+      400,
+    )
+  }
+
+  const contentText = sanitized
   const action = parsed.data.action
 
   const { assessmentId } = await params
@@ -36,7 +62,7 @@ export async function POST(
     return jsonError("Assessment is required.", 400)
   }
 
-  if (action !== "saveDraft" && !contentText.length) {
+  if (action !== "saveDraft" && contentText === null) {
     return jsonError("Add submission content before submitting.", 400)
   }
 
@@ -171,12 +197,12 @@ export async function POST(
       assessmentId,
       studentId: student.id,
       status,
-      contentText: contentText.length ? contentText : null,
+      contentText,
       submittedAt: action === "saveDraft" ? null : now,
     },
     update: {
       status,
-      contentText: contentText.length ? contentText : null,
+      contentText,
       submittedAt: action === "saveDraft" ? null : now,
     },
   })

@@ -7,6 +7,7 @@ import { Check, Flag, RefreshCw, RotateCcw, SlidersHorizontal, Sparkles, X } fro
 
 import { TeacherQuizAttemptEvidence } from "@/components/teacher-quiz-attempt-evidence"
 import { TeacherRubricDetail } from "@/components/teacher-rubric-detail"
+import { RichTextContent } from "@/components/rich-text-content"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -386,10 +387,12 @@ export function TeacherReviewQueue({
 
               <CardContent className="space-y-3 pt-4">
                 {/*
-                  The submission being judged. The review payload has always carried
-                  `submission.contentText`; without it the teacher saw only the model's
-                  short self-quote and could not judge the evidence against the work (TN-36).
-                */}
+                    The submission being judged. The review payload has always carried
+                    `submission.contentText`; without it the teacher saw only the model's
+                    short self-quote and could not judge the evidence against the work (TN-36).
+                    The reader sanitizes it, and `RichTextContent` renders the result as HTML
+                    rather than printing tags.
+                  */}
                 <div className="rounded-md border border-border/70 bg-muted/20 p-3">
                   <p className="mb-1 text-xs font-medium text-muted-foreground">
                     Submission
@@ -397,9 +400,7 @@ export function TeacherReviewQueue({
                       ? ` · submitted ${formatDateTime(item.submission.submittedAt)}`
                       : ""}
                   </p>
-                  <p className="whitespace-pre-wrap text-sm">
-                    {item.submission.contentText?.trim() || "No text submitted."}
-                  </p>
+                  <RichTextContent html={item.submission.contentText} />
                 </div>
 
                 {/*

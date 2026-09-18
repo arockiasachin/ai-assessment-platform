@@ -4,6 +4,7 @@ import { classroomLabel } from "@/lib/classroom-label"
 import { toAssessmentScale } from "@/lib/gradebook"
 import type { AssessmentType, SubmissionStatus } from "@/lib/generated/prisma/enums"
 import { prisma } from "@/lib/prisma"
+import { preformattedContentHtml, sanitizeSubmissionContent } from "@/lib/rich-text"
 import type { AuthUser } from "@/lib/session"
 import { resolveTeacherStaffId } from "@/lib/teacher-staff"
 
@@ -221,5 +222,21 @@ export async function listSubmissionsForTeacher(user: AuthUser): Promise<Teacher
     take: 300,
   })
 
-  return rows.map((row) => toTeacherSubmissionRow({ ...row, versionCount: row._count.versions }))
+  return rows.map((row) => {
+    const mapped = toTeacherSubmissionRow({ ...row, versionCount: row._count.versions })
+    /*
+     * `contentText` is stored as sanitized HTML for written work, but as the
+     * student's **source code** for a CODE submission. Render-time sanitizing
+     * (defense in depth for rows written before the writing page existed) is
+     * therefore applied only to the written kinds; source is escaped and
+     * preformatted instead, so `#include <stdio.h>` survives.
+     */
+    return {
+      ...mapped,
+      contentText:
+        row.assessment.type === "CODE"
+          ? preformattedContentHtml(mapped.contentText)
+          : sanitizeSubmissionContent(mapped.contentText),
+    }
+  })
 }
