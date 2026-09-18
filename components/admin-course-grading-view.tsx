@@ -227,6 +227,11 @@ function CourseCategoryRow({
           <Label htmlFor={`category-${row.courseId}`}>Set category</Label>
           <Select
             value={value}
+            // Without `items` the trigger renders the raw category value.
+            items={COURSE_CATEGORY_VALUES.map((category) => ({
+              value: category,
+              label: COURSE_CATEGORY_LABEL[category],
+            }))}
             onValueChange={(next) => setValue((next ?? "") as CourseCategory | "")}
           >
             <SelectTrigger id={`category-${row.courseId}`}>

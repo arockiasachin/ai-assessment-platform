@@ -3,7 +3,7 @@
 import Link from "next/link"
 import { BarChart3, CalendarClock, ClipboardList, Users, type LucideIcon } from "lucide-react"
 
-import { StatCard } from "@/components/stat-card"
+import { StatCard } from "@/components/ui/stat-card"
 import { buttonVariants } from "@/components/ui/button"
 import { DataTable, type Column } from "@/components/ui/data-table"
 import { EmptyState } from "@/components/ui/empty-state"
@@ -98,6 +98,14 @@ export function StudentDashboard({
       ),
     },
     {
+      id: "course",
+      header: "Course",
+      hideBelow: "md",
+      // Without this a student in several courses cannot tell which course an
+      // outstanding item belongs to; the row carries the code but never showed it.
+      cell: (row) => <span className="font-mono text-xs">{row.courseCode}</span>,
+    },
+    {
       id: "due",
       header: "Due",
       cell: (row) => (
@@ -152,9 +160,10 @@ export function StudentDashboard({
             key={kpi.id}
             label={kpi.label}
             value={kpi.value}
-            sub={kpi.hint}
+            // The shared tile names this `hint`; the legacy one called it `sub`, and its
+            // `accent` has no counterpart because tone comes from the icon automatically.
+            hint={kpi.hint}
             icon={KPI_ICONS[kpi.id]}
-            accent={kpi.accent}
           />
         ))}
       </div>

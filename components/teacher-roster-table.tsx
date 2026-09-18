@@ -434,7 +434,12 @@ export function TeacherRosterTable({
             return (
               <div className="flex flex-wrap items-center justify-end gap-2">
                 {targets.length > 0 && (
-                  <Select value="" onValueChange={(value) => moveStudent(row, value ?? "")}>
+                  <Select
+                    value=""
+                    // The trigger would otherwise show the raw offering id.
+                    items={targets.map((option) => ({ value: option.id, label: option.label }))}
+                    onValueChange={(value) => moveStudent(row, value ?? "")}
+                  >
                     <SelectTrigger
                       className="h-8 w-[11rem] text-xs"
                       aria-label={`Move ${row.studentName} to another offering`}

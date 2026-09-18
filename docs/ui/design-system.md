@@ -195,8 +195,10 @@ project's chart wrappers in `components/charts.tsx` (`ClassAverageChart`,
 `GradeDistributionChart`, `TrendChart`) already carry screen-reader descriptions —
 prefer them for the bigger charts.
 
-> `components/stat-card.tsx` is the **legacy** tile used by the real pages. The
-> mockups use `@/components/ui/stat-card`. Import path matters.
+> `components/stat-card.tsx` is the **legacy** tile (props `sub`/`accent`). It is
+> superseded by `@/components/ui/stat-card` (props `hint`/`delta`/`sparkline`), which is
+> what every page now uses — real and mockup alike. The legacy file has no callers left,
+> so use the `ui/` import and treat the legacy path as removed.
 
 ### `Select` needs its `items` prop to show a label
 
