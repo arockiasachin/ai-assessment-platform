@@ -38,9 +38,9 @@ function languageLabel(language: "python" | "javascript"): string {
 
 /**
  * Per-test rows come from one of the student's **own** runs, never from a shared
- * test-case fixture. The contract has no student-facing `TestCase` shape: a
- * result reports the case's name, category, points and pass/fail, and never its
- * expected output or whether it is hidden — so there is nothing here to hide.
+ * test-case fixture. A visible case carries its input/expected/actual detail
+ * (the Run panel renders it); a hidden case reaches the client with those
+ * fields already nulled by the server and only pass/fail remains.
  */
 const resultColumns: Column<TestResult>[] = [
   {
@@ -100,17 +100,26 @@ const resultColumns: Column<TestResult>[] = [
     header: "Captured output",
     hideBelow: "lg",
     cell: (result) =>
-      result.stderr ? (
+      result.stdout || result.stderr ? (
         <details className="text-xs">
           <summary className="cursor-pointer rounded-sm text-primary focus-visible:ring-3 focus-visible:ring-ring/50">
-            Show stderr
+            Show output
             <span className="sr-only"> for {result.name}</span>
           </summary>
-          <CodeBlock wrap maxHeight="sm" dense className="mt-2">
-            {result.stderr}
-          </CodeBlock>
+          {result.stdout && (
+            <CodeBlock wrap maxHeight="sm" dense className="mt-2">
+              {result.stdout}
+            </CodeBlock>
+          )}
+          {result.stderr && (
+            <CodeBlock wrap maxHeight="sm" dense className="mt-2">
+              {result.stderr}
+            </CodeBlock>
+          )}
         </details>
       ) : (
+        // A hidden case's captured streams are nulled server-side, so it renders
+        // an em dash rather than a disclosure that would reveal nothing.
         <span className="text-muted-foreground">—</span>
       ),
   },
@@ -453,7 +462,7 @@ export default async function StudentCodeSubmissionsPage({
                         value={
                           <span className="font-mono tabular-nums">{selected.testCaseCount}</span>
                         }
-                        hint="The suite is not listed case by case; a run reports your own results."
+                        hint="Active cases only. Run samples to see the visible cases' input and expected output."
                       />
                       <MetricRow
                         label="Last run"
@@ -490,7 +499,7 @@ export default async function StudentCodeSubmissionsPage({
               <PageTabPanel value="results" className="space-y-6">
                 <SectionCard
                   title="Your results"
-                  description="Per-test outcomes from your own latest run that recorded evidence. A case that has not run is not a failure, and a case's expected output is never shown."
+                  description="Per-test outcomes from your own latest run that recorded evidence. A case that has not run is not a failure. Visible cases carry their input and expected output; a hidden case shows pass/fail only."
                 >
                   {evidenceRun === null || evidenceRun.results.length === 0 ? (
                     <EmptyState

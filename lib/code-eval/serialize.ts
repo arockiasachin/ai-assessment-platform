@@ -10,7 +10,8 @@ import {
   type CodeTaskResponse,
 } from "@/lib/contracts/code-eval"
 
-import { categoryLabel, normalizeCategory } from "./results"
+import { categoryLabel, normalizeCategory, stripHarnessFraming } from "./results"
+import { applyStudentVisibility, type VisibilityTestCase } from "./visibility"
 
 /**
  * Response serializers.
@@ -167,5 +168,35 @@ export function serializeTestRun(
     memoryExceeded: evidence.memoryExceeded,
     createdAt: run.createdAt.toISOString(),
     finishedAt: run.finishedAt?.toISOString() ?? null,
+  }
+}
+
+/**
+ * The student-facing projection of a run.
+ *
+ * Identical to the teacher's `serializeTestRun` except for the two things a
+ * student must never receive:
+ *
+ *  - **hidden-case detail** — `input`, `expectedOutput` and `actualOutput` (and
+ *    the captured streams) are nulled for a case whose current `TestCase.isHidden`
+ *    is true, or whose row no longer exists. See `applyStudentVisibility`.
+ *  - **the harness's own framing** — `TestRun.stdout` is the container's raw
+ *    stdout, whose sentinel line embeds every case's captured output including
+ *    hidden ones. Stripping the framing leaves the student's own console output.
+ *
+ * Both are enforced here, in one function every student read goes through, so a
+ * route or component cannot opt out of them.
+ */
+export function serializeStudentTestRun(
+  run: TestRun,
+  assessmentId: string,
+  testCases: readonly VisibilityTestCase[],
+  extras: { studentName?: string | null; studentRegisterNumber?: string | null } = {},
+): TestRunResponse {
+  const serialized = serializeTestRun(run, assessmentId, extras)
+  return {
+    ...serialized,
+    results: applyStudentVisibility(serialized.results, testCases),
+    stdout: stripHarnessFraming(serialized.stdout),
   }
 }

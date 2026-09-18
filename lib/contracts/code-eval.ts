@@ -202,6 +202,30 @@ export const testResultSchema = z.object({
   stderr: z.string(),
   message: z.string(),
   durationMs: z.number().int(),
+  /**
+   * Student-visibility fields.
+   *
+   * `isHidden` marks a case whose detail must never reach a student. The student
+   * serializer nulls `input`/`expectedOutput`/`actualOutput` — and the captured
+   * `stdout`/`stderr`/`message` — for those cases, leaving only the pass/fail and
+   * the case's name. A **visible** case carries its input and expected output so
+   * the workspace can render a LeetCode-style test-case panel; `actualOutput` is
+   * the case's captured stdout, which is what an `input-output` comparison read
+   * (a `unit` case reports its comparison inside the harness and may have no
+   * captured output).
+   *
+   * The fields are optional so the shape is backward-compatible: evidence
+   * persisted before they existed still parses (and seeded/legacy evidence that
+   * builds a `TestResult` by hand still type-checks). The student serializer
+   * always sets them explicitly, and it overrides them from the current
+   * `TestCase` row (the authoritative source), never from the stored evidence —
+   * so un-hiding a case takes effect without rewriting history, and hiding one
+   * can never be defeated by stale evidence.
+   */
+  isHidden: z.boolean().optional(),
+  input: z.string().nullable().optional(),
+  expectedOutput: z.string().nullable().optional(),
+  actualOutput: z.string().nullable().optional(),
 })
 export type TestResult = z.infer<typeof testResultSchema>
 
@@ -252,6 +276,48 @@ export const codeSubmissionRequestSchema = z.object({
   sourceCode: nonEmptyString.max(200_000),
 })
 export type CodeSubmissionRequest = z.infer<typeof codeSubmissionRequestSchema>
+
+/**
+ * `POST /api/student/code-submissions/run` request body — the same shape as a
+ * submission, because the free Run executes the same source against the task's
+ * **visible sample cases only**. It creates no `TestRun` and touches no
+ * `Submission`, so it cannot consume the graded cap; it is throttled instead.
+ */
+export const codeRunRequestSchema = codeSubmissionRequestSchema
+export type CodeRunRequest = CodeSubmissionRequest
+
+/**
+ * The free Run's result. Deliberately not a `TestRunResponse`: there is no
+ * persisted row, so there is no id/createdAt/finishedAt to report — inventing
+ * them would make a preview look like evidence.
+ */
+export const codeRunResultSchema = z.object({
+  status: testRunStatusSchema,
+  passedCount: z.number().int(),
+  failedCount: z.number().int(),
+  totalCount: z.number().int(),
+  earnedPoints: z.number(),
+  maxPoints: z.number(),
+  runtimeMs: z.number().int().nullable(),
+  coverage: z.number().nullable(),
+  results: z.array(testResultSchema),
+  stdout: z.string(),
+  stderr: z.string(),
+  timedOut: z.boolean(),
+  memoryExceeded: z.boolean(),
+  /** Sample cases this run executed (`isHidden: false`, active). */
+  sampleCount: z.number().int(),
+  /** Cases the task keeps hidden; a free Run never executes or discloses them. */
+  hiddenCount: z.number().int(),
+})
+export type CodeRunResult = z.infer<typeof codeRunResultSchema>
+
+export const codeRunEnvelopeSchema = z.object({
+  success: z.literal(true),
+  message: z.string().optional(),
+  result: codeRunResultSchema,
+})
+export type CodeRunEnvelope = z.infer<typeof codeRunEnvelopeSchema>
 
 /**
  * The student's own code task with their submission budget. `reason` explains a

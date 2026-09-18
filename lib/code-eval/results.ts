@@ -36,6 +36,13 @@ export type ResultTestCase = {
   description: string | null
   category: string
   points: number
+  /**
+   * Whether the case is hidden from students. Recorded on the evidence for the
+   * teacher-facing view; the student serializer re-reads the `TestCase` row at
+   * serialization time, so un-hiding a case takes effect without rewriting
+   * historical evidence. Optional so existing callers/tests need not pass it.
+   */
+  isHidden?: boolean
 }
 
 function asString(value: unknown): string {
@@ -146,6 +153,23 @@ export function parseHarnessOutput(stdout: string): HarnessTestResult[] {
 }
 
 /**
+ * Remove the harness's own result framing from captured stdout.
+ *
+ * The container's stdout carries exactly one sentinel line with the per-test
+ * JSON; a student must never be shown that framing, which names case ids and
+ * embeds every case's captured output — hidden cases included. The student
+ * serializer strips it; the teacher's stored evidence keeps the raw stream.
+ */
+export function stripHarnessFraming(stdout: string | null): string {
+  if (!stdout) return ""
+  return stdout
+    .split(/\r?\n/)
+    .filter((line) => !line.includes(HARNESS_RESULT_SENTINEL))
+    .join("\n")
+    .trim()
+}
+
+/**
  * Merge harness output with the persisted test cases into per-test results.
  * Test cases the harness never reported (because the container was killed) are
  * emitted as failures so the report is always complete.
@@ -173,6 +197,7 @@ export function buildTestResults(
         stderr: "",
         message: options.killedMessage ?? "Not executed: the run ended before this test.",
         durationMs: 0,
+        isHidden: testCase.isHidden === true,
       })
     }
     return testResultSchema.parse({
@@ -187,6 +212,7 @@ export function buildTestResults(
       stderr: observed.stderr,
       message: observed.message || (observed.passed ? "Passed." : "Failed."),
       durationMs: observed.durationMs,
+      isHidden: testCase.isHidden === true,
     })
   })
 }

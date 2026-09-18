@@ -14,20 +14,13 @@ import { loadEnrolledCodeTask, resolveStudentProfileId, type EnrolledCodeTask } 
 import { evaluateFatGateForStudent } from "@/lib/grading/offering-config-service"
 
 import { CodeEvalError, SandboxUnavailableError } from "./errors"
-import { executeSandbox, type SandboxExecutor } from "./executor"
-import type { HarnessTestSpec } from "./harness"
+import type { SandboxExecutor } from "./executor"
+import { executeTestCases, type ExecutionResult } from "./execute"
 import { evaluateSubmissionEligibility } from "./limits"
-import { resolveMaxSubmissions } from "./metadata"
+import { resolveDraftTestCaseIds, resolveMaxSubmissions } from "./metadata"
 import { reapStuckRuns } from "./reaper"
-import {
-  buildTestResults,
-  computeCoverage,
-  normalizeCategory,
-  parseHarnessOutput,
-  resolveRunStatus,
-  summarizeResults,
-} from "./results"
-import { runTimestamp, serializeTestRun, toRunEvidenceJson } from "./serialize"
+import { runTimestamp, serializeStudentTestRun, toRunEvidenceJson } from "./serialize"
+import { loadActiveTestCases } from "./test-cases"
 
 /**
  * Student-side submission pipeline.
@@ -42,26 +35,6 @@ import { runTimestamp, serializeTestRun, toRunEvidenceJson } from "./serialize"
  */
 
 export type SubmissionDeps = { executor?: SandboxExecutor }
-
-function toHarnessTests(
-  testCases: readonly {
-    id: string
-    name: string
-    category: string
-    input: string | null
-    expectedOutput: string | null
-    points: unknown
-  }[],
-): HarnessTestSpec[] {
-  return testCases.map((testCase) => ({
-    id: testCase.id,
-    name: testCase.name,
-    category: normalizeCategory(testCase.category),
-    input: testCase.input,
-    expectedOutput: testCase.expectedOutput,
-    points: Number(testCase.points),
-  }))
-}
 
 /** The student's enrolled CODE tasks with their submission budget. */
 export async function listStudentCodeTasks(user: AuthUser): Promise<StudentCodeTask[]> {
@@ -119,6 +92,10 @@ export async function listStudentCodeTasks(user: AuthUser): Promise<StudentCodeT
       dueDate: assessment.dueDate,
     })
 
+    // Drafts are never run and never shown to students, so the count a student
+    // reads must be the active cases only — otherwise the page promises cases
+    // that no run will ever execute.
+    const draftIds = resolveDraftTestCaseIds(codeTask.metadata)
     tasks.push({
       assessmentId: assessment.id,
       assessmentTitle: assessment.title,
@@ -126,7 +103,7 @@ export async function listStudentCodeTasks(user: AuthUser): Promise<StudentCodeT
       language: codeTask.language === "javascript" ? "javascript" : "python",
       instructions: codeTask.instructions,
       starterCode: codeTask.starterCode,
-      testCaseCount: codeTask.testCases.length,
+      testCaseCount: codeTask.testCases.filter((testCase) => !draftIds.has(testCase.id)).length,
       maxMarks: assessment.maxMarks,
       timeLimitMs: codeTask.timeLimitMs,
       memoryLimitMb: codeTask.memoryLimitMb,
@@ -157,7 +134,7 @@ async function loadOwnedRun(user: AuthUser, runId: string) {
   const run = await prisma.testRun.findUnique({
     where: { id: runId },
     include: {
-      codeTask: { select: { assessmentId: true } },
+      codeTask: { select: { id: true, assessmentId: true } },
       student: { select: { fullName: true, registerNumber: true } },
     },
   })
@@ -169,9 +146,25 @@ async function loadOwnedRun(user: AuthUser, runId: string) {
   return { run, assessmentId: run.codeTask.assessmentId }
 }
 
+/**
+ * The current `TestCase` rows a run's student projection needs.
+ *
+ * Read at serialization time, not from the run's stored evidence: a teacher
+ * un-hiding a case must reveal its detail on the next read, and a teacher hiding
+ * one must suppress it even for a run whose evidence predates the change.
+ */
+async function loadVisibilityCases(codeTaskId: string) {
+  return prisma.testCase.findMany({
+    where: { codeTaskId },
+    select: { id: true, input: true, expectedOutput: true, isHidden: true },
+    orderBy: { order: "asc" },
+  })
+}
+
 export async function getStudentRun(user: AuthUser, runId: string): Promise<TestRunResponse> {
   const { run, assessmentId } = await loadOwnedRun(user, runId)
-  return serializeTestRun(run, assessmentId)
+  const testCases = await loadVisibilityCases(run.codeTaskId)
+  return serializeStudentTestRun(run, assessmentId, testCases)
 }
 
 export async function listStudentRuns(
@@ -187,7 +180,8 @@ export async function listStudentRuns(
     orderBy: { createdAt: "desc" },
     take: 100,
   })
-  return runs.map((run) => serializeTestRun(run, enrolled.assessmentId))
+  const testCases = await loadVisibilityCases(enrolled.codeTaskId)
+  return runs.map((run) => serializeStudentTestRun(run, enrolled.assessmentId, testCases))
 }
 
 /**
@@ -261,14 +255,13 @@ export async function submitCodeForStudent(
   })
   if (!fatGate.allowed) throw new CodeEvalError(403, fatGate.message)
 
-  const executor = deps.executor ?? executeSandbox
-
-  const testCaseRows = await prisma.testCase.findMany({
-    where: { codeTaskId: enrolled.codeTaskId },
-    orderBy: { order: "asc" },
-  })
+  // Only active (non-draft) cases execute. Generated cases are model-authored and
+  // unreviewed until a teacher publishes them, so running them would let an
+  // unpublished draft decide a student's pass/fail — contradicting the teacher's
+  // "Drafts are never run and never shown to students" promise.
+  const testCaseRows = await loadActiveTestCases(enrolled.codeTaskId, enrolled.metadata)
   if (testCaseRows.length === 0) {
-    throw new CodeEvalError(409, "This code task has no test cases yet.")
+    throw new CodeEvalError(409, "This code task has no active test cases yet.")
   }
 
   // Reserve the submission slot atomically. The cap is check-then-act, so a
@@ -349,46 +342,39 @@ export async function submitCodeForStudent(
     return { runId: run.id, submissionId: submission.id, previousSubmission: existingSubmission }
   })
 
-  const outcome = await executor({
-    language: enrolled.language === "javascript" ? "javascript" : "python",
-    source: request.sourceCode,
-    tests: toHarnessTests(testCaseRows),
-    timeLimitMs: enrolled.timeLimitMs,
-    memoryLimitMb: enrolled.memoryLimitMb,
-  })
-
-  /*
-   * The sandbox could not run. Report it as unavailable (503) and give the student their slot
-   * back, rather than persisting a `FAILED` run and returning `success: true` for code that
-   * never executed. The classification is `outcome.kind`, set by the executor where the
-   * condition is actually known — no string matching on the message.
-   */
-  if (outcome.kind === "unavailable") {
-    await releaseReservation(reservation)
-    throw new SandboxUnavailableError(
-      outcome.message ??
-        "The code sandbox is unavailable right now, so your submission was not recorded. Try again shortly.",
+  let execution: ExecutionResult
+  try {
+    execution = await executeTestCases(
+      {
+        language: enrolled.language === "javascript" ? "javascript" : "python",
+        source: request.sourceCode,
+        testCases: testCaseRows.map((testCase) => ({
+          id: testCase.id,
+          name: testCase.name,
+          description: testCase.description,
+          category: testCase.category,
+          input: testCase.input,
+          expectedOutput: testCase.expectedOutput,
+          points: Number(testCase.points),
+          isHidden: testCase.isHidden,
+        })),
+        timeLimitMs: enrolled.timeLimitMs,
+        memoryLimitMb: enrolled.memoryLimitMb,
+      },
+      { executor: deps.executor },
     )
+  } catch (error) {
+    /*
+     * The sandbox could not run. Report it as unavailable (503) and give the student their slot
+     * back, rather than persisting a `FAILED` run and returning `success: true` for code that
+     * never executed. The shared executor classifies this as `SandboxUnavailableError` where the
+     * condition is actually known — no string matching on the message.
+     */
+    if (error instanceof SandboxUnavailableError) await releaseReservation(reservation)
+    throw error
   }
 
-  const harnessResults = parseHarnessOutput(outcome.stdout)
-  const resultTestCases = testCaseRows.map((testCase) => ({
-    id: testCase.id,
-    name: testCase.name,
-    description: testCase.description,
-    category: testCase.category,
-    points: Number(testCase.points),
-  }))
-  const results = buildTestResults(harnessResults, resultTestCases, {
-    killedMessage: outcome.message ?? undefined,
-  })
-  const summary = summarizeResults(results)
-  const status = resolveRunStatus({
-    timedOut: outcome.timedOut,
-    memoryExceeded: outcome.memoryExceeded,
-    allPassed: summary.allPassed,
-  })
-  const coverage = computeCoverage(harnessResults.length, testCaseRows.length)
+  const { results, summary, status, coverage } = execution
 
   const updated = await prisma.$transaction(async (tx) => {
     const saved = await tx.testRun.update({
@@ -401,13 +387,13 @@ export async function submitCodeForStudent(
         coverage,
         resultsJson: toRunEvidenceJson({
           results,
-          timedOut: outcome.timedOut,
-          memoryExceeded: outcome.memoryExceeded,
-          killMessage: outcome.message,
+          timedOut: execution.timedOut,
+          memoryExceeded: execution.memoryExceeded,
+          killMessage: execution.killMessage,
         }) as unknown as Prisma.InputJsonValue,
-        stdout: outcome.stdout.slice(0, 100_000),
-        stderr: outcome.stderr.slice(0, 100_000),
-        runtimeMs: outcome.wallClockMs,
+        stdout: execution.stdout.slice(0, 100_000),
+        stderr: execution.stderr.slice(0, 100_000),
+        runtimeMs: execution.runtimeMs,
         finishedAt: new Date(),
       },
     })
@@ -423,12 +409,14 @@ export async function submitCodeForStudent(
         failedCount: summary.failedCount,
         totalCount: summary.totalCount,
         coverage,
-        timedOut: outcome.timedOut,
-        memoryExceeded: outcome.memoryExceeded,
+        timedOut: execution.timedOut,
+        memoryExceeded: execution.memoryExceeded,
       },
     })
     return saved
   })
 
-  return serializeTestRun(updated, enrolled.assessmentId)
+  // The student-facing projection strips hidden-case detail and the harness's
+  // framing from stdout; the stored evidence keeps both for the teacher.
+  return serializeStudentTestRun(updated, enrolled.assessmentId, testCaseRows)
 }

@@ -209,6 +209,33 @@ describe("code evaluation pipeline", () => {
     expect(run.results.map((result) => result.category)).toEqual(["input-output", "structure"])
     expect(run.results.every((result) => result.passed)).toBe(true)
 
+    /*
+     * `isHidden` is now enforced on the student payload. The fixture's second case
+     * is hidden, and the stronger invariant is that its *detail* is absent while
+     * its pass/fail is still reported — the first case (visible) carries its
+     * input/expected/actual. Previously the field was never read, so a hidden
+     * expected output would have been one serializer change away from leaking.
+     */
+    const visibleResult = run.results.find((result) => result.name === "Echoes the input")
+    expect(visibleResult).toMatchObject({
+      isHidden: false,
+      input: "7\n",
+      expectedOutput: "7\n",
+      actualOutput: "ok",
+    })
+    const hiddenResult = run.results.find((result) => result.name === "Uses print")
+    expect(hiddenResult).toMatchObject({
+      isHidden: true,
+      input: null,
+      expectedOutput: null,
+      actualOutput: null,
+      stdout: "",
+      stderr: "",
+    })
+    // The harness's own result line is stripped from the student's stdout; the
+    // stored evidence (below) keeps it for the teacher.
+    expect(run.stdout ?? "").not.toContain(HARNESS_RESULT_SENTINEL)
+
     const stored = await prisma.testRun.findUniqueOrThrow({ where: { id: run.id } })
     expect(stored.resultsJson).toBeTruthy()
     expect(stored.passedCount).toBe(2)
