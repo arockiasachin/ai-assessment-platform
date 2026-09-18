@@ -248,7 +248,10 @@ state is verifiable before any group has run. Nothing in `docs/audit/` is produc
 
 ## Known gaps and open decisions
 
-These are reported, not hidden. Each item links to the source that documents it.
+These are reported, not hidden. Each item links to the source that documents it. For the
+forward-looking counterpart — features deliberately not built and what each would require — see
+[`plans/future-work.md`](./plans/future-work.md); this section stays the index of gaps in what
+exists.
 
 ### The schema was unfrozen; the workarounds were replaced
 
