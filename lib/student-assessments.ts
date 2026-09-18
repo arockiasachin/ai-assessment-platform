@@ -324,10 +324,19 @@ export async function listStudentAssessments(
       // row for the assignment types, a graded `QuizAttempt` for quizzes. The
       // `Submission` row wins if both somehow exist, because it is the explicit
       // record rather than an inference from a sitting.
+      //
+      // When neither exists but a mark has been released, grading is still done.
+      // A manual mark can be entered with no `Submission` row at all — the
+      // courses seed does exactly that, and a manually marked group project is
+      // the same shape — and the released mark is the same signal
+      // `submissionStateFromAttempts` already uses for quizzes (SN-32). Without
+      // this fallback the hub badged such an assessment "Not submitted" while a
+      // released percentage sat beside it, and `/student/course` read the same
+      // mark as "Graded": two view-models of one fact disagreeing.
       const submissionState =
         submission !== null
           ? submissionStateFromDbStatus(submission.status)
-          : (attemptSubmission?.state ?? "not_submitted")
+          : (attemptSubmission?.state ?? (publishedGrade !== null ? "graded" : "not_submitted"))
       const submittedAt =
         submission !== null ? submission.submittedAt : (attemptSubmission?.submittedAt ?? null)
 

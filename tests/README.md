@@ -8,10 +8,10 @@ suite is **208 test files** (`ls tests/*.test.ts`). Tests never call a live LLM;
 
 Worth knowing, because it is easy to misread a local run:
 
-|                      | files                    | tests           |
-| -------------------- | ------------------------ | --------------- |
-| With a test database | 208 passed (208 total)   | **1931 passed** |
-| Without one          | 126 passed, 82 **error** | 1345 passed     |
+|                      | files                                     | tests                             |
+| -------------------- | ----------------------------------------- | --------------------------------- |
+| With a test database | 206 passed, 2 skipped (208)               | **1919 passed, 5 skipped (1932)** |
+| Without one          | 124 passed, 82 **error**, 2 skipped (208) | 1332 passed, 5 skipped (1345)     |
 
 The 82 files do not fail an assertion — they refuse to run
 (`Refusing to run database tests against …`), so a run without a database reports
@@ -90,7 +90,7 @@ migration history with `prisma migrate deploy`:
 2. `prisma migrate deploy` — runs every directory under `prisma/migrations/`
    against the test database, exactly as a deployment would.
 
-There are six committed migration directories:
+There are sixteen committed migration directories:
 
 ```
 20260911180000_baseline
@@ -99,15 +99,28 @@ There are six committed migration directories:
 20260912020000_retire_assessment_grade
 20260912030000_retire_quiz
 20260912040000_add_retention_policy
+20260916170000_course_category
+20260916190000_assessment_release
+20260916220000_quiz_attempt_kind
+20260916230000_retake_policy
+20260917010000_offering_grading_config
+20260917020000_similarity_check_unique_key
+20260917030000_assessment_creator_index
+20260917120000_course_subtopic_vocabulary
+20260918050000_group_assessment_link
+20260918090000_submission_attachment
 ```
 
 The baseline migration takes the empty database straight to the Phase 1
 `prisma/schema.prisma`. It runs `CREATE EXTENSION IF NOT EXISTS vector;` and
 creates the `MaterialChunk_embedding_hnsw_idx` HNSW index, neither of which
-Prisma emits for an `Unsupported("vector(1536)")` column. The five later
-migrations unfreeze the schema, restore course ratings, retire the legacy
-`AssessmentGrade` and `Quiz`/`QuizQuestion` stores, and add the retention
-policy's anchor, respectively.
+Prisma emits for an `Unsupported("vector(1536)")` column. The five migrations
+after the baseline unfreeze the schema, restore course ratings, retire the
+legacy `AssessmentGrade` and `Quiz`/`QuizQuestion` stores, and add the retention
+policy's anchor, respectively. The ten later migrations add the course category,
+assessment release, quiz-attempt kind, retake policy, offering grading config,
+similarity-check uniqueness, the assessment-creator index, the course subtopic
+vocabulary, the group-to-assessment link, and submission attachments.
 
 Because the suite builds the schema through the migrations, CI fails if the
 migration history stops reproducing `prisma/schema.prisma` from empty. The

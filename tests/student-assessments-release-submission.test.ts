@@ -218,6 +218,31 @@ describe("listStudentAssessments — submission state includes quiz attempts", (
     expect(item.submittedAt).toBeNull()
   })
 
+  it("reads a released mark with no submission record as graded, not not_submitted", async () => {
+    // A manual mark can be released with no `Submission` row and no sitting at
+    // all (an in-class CAT, or a manually graded group project). The released
+    // mark is the same grading-done signal the quiz branch uses, so calling it
+    // "Not submitted" beside the released percentage was the disagreement this
+    // pins: `/student/course` already labelled the same row "Graded".
+    const student = await addStudent(7, "REG-RELEASE-7")
+    await prisma.grade.create({
+      data: {
+        assessmentId: releasedAssessmentId,
+        studentId: student.studentProfile!.id,
+        points: 15,
+        maxPoints: 20,
+        publishedAt: new Date(),
+      },
+    })
+
+    const item = await itemFor(student.id, releasedAssessmentId)
+
+    expect(item.published).toBe(true)
+    expect(item.submissionState).toBe("graded")
+    // Nothing was ever handed in, so there is still no submission timestamp.
+    expect(item.submittedAt).toBeNull()
+  })
+
   it("reports graded once the sitting's mark has been released", async () => {
     const student = await addStudent(5, "REG-RELEASE-5")
     await prisma.quizAttempt.create({
