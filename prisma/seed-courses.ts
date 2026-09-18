@@ -127,6 +127,8 @@ const STUDENT_PROFILE_IDS = Array.from(
 const DSA_CLASS_A_ID = "courses-class-dsa-a"
 const DSA_CLASS_B_ID = "courses-class-dsa-b"
 const DAA_CLASS_A_ID = "courses-class-daa-a"
+/** The classroom of the completed 2025 offering; see `PAST_ACADEMIC_YEAR`. */
+const PAST_DSA_CLASS_A_ID = "courses-class-past-dsa-a"
 
 const DSA_THEORY_COURSE_ID = "courses-course-mcse501l"
 const DSA_LAB_COURSE_ID = "courses-course-mcse501p"
@@ -139,14 +141,40 @@ const OFFERING_DSA_P_A = "courses-offering-mcse501p-a"
 const OFFERING_DSA_P_B = "courses-offering-mcse501p-b"
 const OFFERING_DAA_L_A = "courses-offering-mcse502l-a"
 const OFFERING_DAA_P_A = "courses-offering-mcse502p-a"
+/**
+ * The one **completed** offering, added so Grades and Arrears have real data.
+ *
+ * Every other offering is in the current term, so a student's prior-term page had nothing to
+ * render and an arrear could not exist anywhere in the dataset. This is a past-term re-offering
+ * of MCSE501L carrying a published FAT mark for most of its cohort, one mark below the pass
+ * mark, and one cohort member with no FAT mark at all — the three states the two pages need
+ * (see `PAST_TERM_OUTCOME_MARKS`).
+ *
+ * Deliberately **no calendar events** and **no materials**: a completed offering's deadlines are
+ * not upcoming, and the calendar assertions scope every event to the current term's window.
+ */
+const OFFERING_PAST_DSA_L_A = "courses-offering-past-mcse501l-a"
 
 const THEORY_OFFERING_IDS = [OFFERING_DSA_L_A, OFFERING_DSA_L_B, OFFERING_DAA_L_A] as const
 const LAB_OFFERING_IDS = [OFFERING_DSA_P_A, OFFERING_DSA_P_B, OFFERING_DAA_P_A] as const
-const ALL_OFFERING_IDS: string[] = [...THEORY_OFFERING_IDS, ...LAB_OFFERING_IDS]
+const PAST_OFFERING_IDS = [OFFERING_PAST_DSA_L_A] as const
+const ALL_OFFERING_IDS: string[] = [
+  ...THEORY_OFFERING_IDS,
+  ...LAB_OFFERING_IDS,
+  ...PAST_OFFERING_IDS,
+]
 
 /** Assessment suffixes per offering shape. See the scheme below. */
 const THEORY_ASSESSMENT_SUFFIXES = ["cat-quiz", "cat-assignment", "cat-descriptive", "fat"] as const
 const LAB_ASSESSMENT_SUFFIXES = ["cat-lab", "cat-midterm-code", "fat"] as const
+/**
+ * The completed offering has a smaller, two-CAT-plus-FAT shape.
+ *
+ * Its `cat-assignment` and `fat` ids share a suffix with the current-term theory rows, but not
+ * the same offering id, so `assessmentId` keeps them distinct. The CAT pair is what lets the
+ * gate be judged; the FAT is the assessment the Grades page waits for.
+ */
+const PAST_ASSESSMENT_SUFFIXES = ["cat-quiz", "cat-assignment", "fat"] as const
 
 function assessmentId(offeringId: string, suffix: string): string {
   return `${offeringId}-${suffix}`
@@ -160,6 +188,18 @@ const ASSESSMENT_IDS = [
     LAB_ASSESSMENT_SUFFIXES.map((suffix) => assessmentId(offeringId, suffix)),
   ),
 ]
+/**
+ * The completed offering's assessments, kept **out of `ASSESSMENT_IDS`**.
+ *
+ * `ASSESSMENT_IDS` feeds `COURSES_CALENDAR_EVENT_IDS`, and every one of those ids is expected to
+ * have a deadline event (the calendar test asserts the count matches). A completed offering has
+ * no calendar events, so folding these in would make that assertion fail and would date events
+ * outside the current term window. They are enumerated separately for teardown and counting.
+ */
+const PAST_ASSESSMENT_IDS = PAST_ASSESSMENT_SUFFIXES.map((suffix) =>
+  assessmentId(OFFERING_PAST_DSA_L_A, suffix),
+)
+const ALL_ASSESSMENT_IDS = [...ASSESSMENT_IDS, ...PAST_ASSESSMENT_IDS]
 
 const MATERIAL_IDS = [
   ...DSA_THEORY_MODULES.map((module) => `courses-material-mcse501l-m${module.module}`),
@@ -473,6 +513,84 @@ const RELEASED_CAT3 = fromNow(-28)
 const THEORY_MAX_MARKS = { cat1: 20, cat2: 30, cat3: 50, fat: 100 } as const
 const LAB_MAX_MARKS = { cat: 20, midterm: 30, fat: 50 } as const
 
+/*
+ * The completed offering, and the three outcome states it exists to produce.
+ *
+ * Fixed 2025 dates, not offsets from `NOW`: a past term is a historical fact, and dating it
+ * relative to the day the seed runs would place its work inside the current term and make
+ * "ended" depend on when someone seeded. The dates sit before `2025-06-06`, which is the end
+ * that makes absence an arrear.
+ */
+const PAST_ACADEMIC_YEAR = 2025
+const PAST_TERM = "Semester-2"
+const PAST_TERM_START = new Date("2025-01-06T08:00:00.000Z")
+const PAST_TERM_END = new Date("2025-06-06T08:00:00.000Z")
+const PAST_MAX_MARKS = { cat1: 20, cat2: 30, fat: 100 } as const
+
+/** The students who took the completed offering; indices 0-4 are in DSA section A today too. */
+const PAST_OUTCOME_STUDENT_INDEXES = [0, 1, 2, 3, 4] as const
+
+/**
+ * The completed offering's published marks, chosen by outcome.
+ *
+ * `cat` are percentages for CAT 1 and CAT 2 (the published pool the gate reads); `fat` is the
+ * FAT percentage, or `null` for the one student who never sat it. The arithmetic the outcome
+ * reader will perform, at the seeded `CAT 40 / FAT 60` split:
+ *
+ * | Student | CAT  | FAT  | Grand total | Reading                          |
+ * |---------|------|------|-------------|----------------------------------|
+ * | 0       | 80%  | 70%  | 74          | pass                             |
+ * | 1       | 60%  | 20%  | 36          | fail — `failed` arrear            |
+ * | 2       | 70%  | —    | null        | `did-not-appear` arrear           |
+ * | 3       | 74%  | 65%  | ~68.6       | pass                             |
+ * | 4       | 87.5%| 80%  | ~83         | pass                             |
+ *
+ * Every CAT percentage clears the 30% gate, so the failing case fails on the pass mark rather
+ * than on eligibility — the arrear the page is meant to show. Student 2 is deliberately
+ * **unmarked on the FAT**, not zeroed on it: the distinction the reader exists to preserve.
+ */
+const PAST_TERM_OUTCOME_MARKS = [
+  { studentIndex: 0, cat: [80, 80], fat: 70 },
+  { studentIndex: 1, cat: [60, 60], fat: 20 },
+  { studentIndex: 2, cat: [70, 70], fat: null },
+  { studentIndex: 3, cat: [75, 73], fat: 65 },
+  { studentIndex: 4, cat: [85, 90], fat: 80 },
+] as const
+
+const PAST_TERM_ASSESSMENT_DEFS = [
+  {
+    suffix: "cat-quiz",
+    title: "DSA Section A (2025) — CAT 1 (quiz)",
+    type: "QUIZ",
+    maxMarks: PAST_MAX_MARKS.cat1,
+    dueDate: new Date("2025-02-14T08:00:00.000Z"),
+    releasedAt: new Date("2025-02-01T08:00:00.000Z"),
+  },
+  {
+    suffix: "cat-assignment",
+    title: "DSA Section A (2025) — CAT 2 (written assignment)",
+    type: "ASSIGNMENT",
+    maxMarks: PAST_MAX_MARKS.cat2,
+    dueDate: new Date("2025-03-14T08:00:00.000Z"),
+    releasedAt: new Date("2025-03-01T08:00:00.000Z"),
+  },
+  {
+    suffix: "fat",
+    title: "DSA Section A (2025) — FAT (final assessment)",
+    type: "DESCRIPTIVE",
+    maxMarks: PAST_MAX_MARKS.fat,
+    dueDate: new Date("2025-04-25T08:00:00.000Z"),
+    releasedAt: new Date("2025-04-01T08:00:00.000Z"),
+  },
+] as const satisfies readonly {
+  suffix: string
+  title: string
+  type: "QUIZ" | "ASSIGNMENT" | "DESCRIPTIVE" | "CODE"
+  maxMarks: number
+  dueDate: Date
+  releasedAt: Date
+}[]
+
 /**
  * The cohort, and why it is shaped this way.
  *
@@ -536,7 +654,12 @@ export const COURSES_IDS = {
     daaTheory: DAA_THEORY_COURSE_ID,
     daaLab: DAA_LAB_COURSE_ID,
   },
-  classIds: { dsaA: DSA_CLASS_A_ID, dsaB: DSA_CLASS_B_ID, daaA: DAA_CLASS_A_ID },
+  classIds: {
+    dsaA: DSA_CLASS_A_ID,
+    dsaB: DSA_CLASS_B_ID,
+    daaA: DAA_CLASS_A_ID,
+    pastDsaA: PAST_DSA_CLASS_A_ID,
+  },
   offeringIds: {
     dsaTheoryA: OFFERING_DSA_L_A,
     dsaTheoryB: OFFERING_DSA_L_B,
@@ -544,8 +667,13 @@ export const COURSES_IDS = {
     dsaLabB: OFFERING_DSA_P_B,
     daaTheoryA: OFFERING_DAA_L_A,
     daaLabA: OFFERING_DAA_P_A,
+    /** The completed 2025 re-offering that carries the pass/fail/absent fixtures. */
+    pastDsaTheoryA: OFFERING_PAST_DSA_L_A,
   },
+  /** Current-term assessments. These are the ones with calendar deadline events. */
   assessmentIds: ASSESSMENT_IDS,
+  /** The completed offering's assessments, which have no calendar events. */
+  pastAssessmentIds: PAST_ASSESSMENT_IDS,
   materialIds: MATERIAL_IDS,
   codeTaskIds: CODE_TASK_IDS,
   calendarEventIds: COURSES_CALENDAR_EVENT_IDS,
@@ -659,15 +787,15 @@ async function deleteCoursesData(): Promise<void> {
 
   const [grades, suggestions, reviews] = await Promise.all([
     prisma.grade.findMany({
-      where: { assessmentId: { in: ASSESSMENT_IDS } },
+      where: { assessmentId: { in: ALL_ASSESSMENT_IDS } },
       select: { id: true },
     }),
     prisma.aIGradeSuggestion.findMany({
-      where: { assessmentId: { in: ASSESSMENT_IDS } },
+      where: { assessmentId: { in: ALL_ASSESSMENT_IDS } },
       select: { id: true },
     }),
     prisma.gradeReview.findMany({
-      where: { assessmentId: { in: ASSESSMENT_IDS } },
+      where: { assessmentId: { in: ALL_ASSESSMENT_IDS } },
       select: { id: true },
     }),
   ])
@@ -688,14 +816,14 @@ async function deleteCoursesData(): Promise<void> {
 
   // Assessments cascade their questions, submissions, grades, reviews, suggestions, code tasks,
   // test cases, test runs and similarity checks.
-  await prisma.assessment.deleteMany({ where: { id: { in: ASSESSMENT_IDS } } })
+  await prisma.assessment.deleteMany({ where: { id: { in: ALL_ASSESSMENT_IDS } } })
   // Materials cascade their chunks. Deleted by id because `Material.offeringId` is SetNull.
   await prisma.material.deleteMany({ where: { id: { in: MATERIAL_IDS } } })
   // Offerings cascade enrollments; every Restrict reference to a teacher or a course goes with it.
   await prisma.courseOffering.deleteMany({ where: { id: { in: ALL_OFFERING_IDS } } })
   await prisma.user.deleteMany({ where: { id: { in: userIds } } })
   await prisma.classRoom.deleteMany({
-    where: { id: { in: [DSA_CLASS_A_ID, DSA_CLASS_B_ID, DAA_CLASS_A_ID] } },
+    where: { id: { in: [DSA_CLASS_A_ID, DSA_CLASS_B_ID, DAA_CLASS_A_ID, PAST_DSA_CLASS_A_ID] } },
   })
   await prisma.course.deleteMany({ where: { id: { in: COURSE_IDS } } })
 }
@@ -837,6 +965,16 @@ async function createCoursesAndOfferings(): Promise<void> {
         section: "A",
         academicYear: ACADEMIC_YEAR,
       },
+      {
+        // The completed offering's own classroom, dated to its year rather than today's. Reusing
+        // the 2026 DSA classroom would put a 2025 offering in a room created for the current
+        // cohort, which reads as a seeding mistake rather than a past term.
+        id: PAST_DSA_CLASS_A_ID,
+        code: "MCSE-BDA-2025-DSA-A",
+        name: "M.Tech (CSE) BDA — DSA — Section A (2025)",
+        section: "A",
+        academicYear: PAST_ACADEMIC_YEAR,
+      },
     ],
   })
 
@@ -895,6 +1033,26 @@ async function createCoursesAndOfferings(): Promise<void> {
     })
   }
 
+  /*
+   * The completed offering, created outside the loop above because its term, year and window are
+   * fixed historical facts rather than the current term's offsets. `gradingConfig` is set later by
+   * `configureGrading`, which names its FAT explicitly so the outcome reader stores the final
+   * assessment instead of guessing it from due dates.
+   */
+  await prisma.courseOffering.create({
+    data: {
+      id: OFFERING_PAST_DSA_L_A,
+      courseId: DSA_THEORY_COURSE_ID,
+      classId: PAST_DSA_CLASS_A_ID,
+      teacherId: TEACHER_DSA_STAFF_ID,
+      term: PAST_TERM,
+      academicYear: PAST_ACADEMIC_YEAR,
+      studentLimit: 40,
+      startsOn: PAST_TERM_START,
+      endsOn: PAST_TERM_END,
+    },
+  })
+
   /**
    * The enrolments, and the two inactive rows that must not be counted.
    *
@@ -922,6 +1080,12 @@ async function createCoursesAndOfferings(): Promise<void> {
   for (const index of DAA_SECTION_A_INDEXES) {
     addActive(index, OFFERING_DAA_L_A)
     addActive(index, OFFERING_DAA_P_A)
+  }
+
+  // The completed offering's cohort. These students are also in the current-term DSA section A,
+  // which is the realistic retake shape and what gives them both a current and a prior term.
+  for (const index of PAST_OUTCOME_STUDENT_INDEXES) {
+    addActive(index, OFFERING_PAST_DSA_L_A)
   }
 
   enrollments.push(
@@ -1204,6 +1368,36 @@ async function createAssessments(): Promise<AssessmentSeed[]> {
 }
 
 /**
+ * The completed offering's assessments.
+ *
+ * Kept out of `createAssessments` because that function's rows become the current term's calendar
+ * deadline events, and a finished term has no upcoming deadlines. These are created by their own
+ * fixed definitions so the due dates are historical facts rather than offsets from today.
+ *
+ * All three are released (students saw them during the term), and the FAT carries `releasedAt`
+ * too — unlike the current term's FAT, which is deliberately unreleased. There is nothing left to
+ * withhold once a course has ended and its marks are published.
+ */
+async function createPastOfferingAssessments(): Promise<void> {
+  for (const definition of PAST_TERM_ASSESSMENT_DEFS) {
+    await prisma.assessment.create({
+      data: {
+        id: assessmentId(OFFERING_PAST_DSA_L_A, definition.suffix),
+        offeringId: OFFERING_PAST_DSA_L_A,
+        courseId: DSA_THEORY_COURSE_ID,
+        classId: PAST_DSA_CLASS_A_ID,
+        createdById: TEACHER_DSA_STAFF_ID,
+        title: definition.title,
+        type: definition.type,
+        dueDate: definition.dueDate,
+        maxMarks: definition.maxMarks,
+        releasedAt: definition.releasedAt,
+      },
+    })
+  }
+}
+
+/**
  * The sentence each deadline event carries.
  *
  * A calendar row with an empty description renders an em dash; a real sentence is what the demo
@@ -1327,6 +1521,10 @@ async function configureGrading(): Promise<void> {
     { teacher: teacherDsa, offeringId: OFFERING_DSA_P_B },
     { teacher: teacherDaa, offeringId: OFFERING_DAA_L_A },
     { teacher: teacherDaa, offeringId: OFFERING_DAA_P_A },
+    // The completed offering too, so its FAT is *stored* rather than guessed from due dates.
+    // This is the offering the Grades and Arrears pages read, and the outcome reader must not
+    // have to fall back to the heuristic there.
+    { teacher: teacherDsa, offeringId: OFFERING_PAST_DSA_L_A },
   ] as const
 
   for (const { teacher, offeringId } of configs) {
@@ -1865,6 +2063,46 @@ async function acceptCat3Drafts(): Promise<void> {
   }
 }
 
+/**
+ * Publish the completed offering's CAT and FAT marks.
+ *
+ * The CAT pair is published for every enrolled student, which is what lets the gate be judged and
+ * therefore what makes the failing case fail on the pass mark rather than on eligibility. The FAT
+ * is published for all but the absent student — see `PAST_TERM_OUTCOME_MARKS` for the arithmetic.
+ *
+ * Written through `recordManualMark`, following this seed's rule that publish-like facts go
+ * through the real service: it is what sets `publishedAt` and writes the audit row.
+ */
+async function publishPastOutcomeMarks(): Promise<void> {
+  const teacherDsa = teacherUser(TEACHER_DSA_USER_ID, COURSES_ACCOUNTS.teacherDsa.email)
+  const catDefs = [
+    { suffix: "cat-quiz", maxMarks: PAST_MAX_MARKS.cat1 },
+    { suffix: "cat-assignment", maxMarks: PAST_MAX_MARKS.cat2 },
+  ] as const
+
+  for (const row of PAST_TERM_OUTCOME_MARKS) {
+    for (const [position, definition] of catDefs.entries()) {
+      await recordManualMark({
+        assessmentId: assessmentId(OFFERING_PAST_DSA_L_A, definition.suffix),
+        studentId: STUDENT_PROFILE_IDS[row.studentIndex],
+        points: toPoints(row.cat[position], definition.maxMarks),
+        maxPoints: definition.maxMarks,
+        actor: teacherDsa,
+      })
+    }
+
+    // The absent student is left unmarked on the FAT, not marked zero. See the constant's note.
+    if (row.fat === null) continue
+    await recordManualMark({
+      assessmentId: assessmentId(OFFERING_PAST_DSA_L_A, "fat"),
+      studentId: STUDENT_PROFILE_IDS[row.studentIndex],
+      points: toPoints(row.fat, PAST_MAX_MARKS.fat),
+      maxPoints: PAST_MAX_MARKS.fat,
+      actor: teacherDsa,
+    })
+  }
+}
+
 async function publishMarks(): Promise<void> {
   const teacherDsa = teacherUser(TEACHER_DSA_USER_ID, COURSES_ACCOUNTS.teacherDsa.email)
   const teacherDaa = teacherUser(TEACHER_DAA_USER_ID, COURSES_ACCOUNTS.teacherDaa.email)
@@ -1909,6 +2147,9 @@ async function publishMarks(): Promise<void> {
       rows: LAB_CAT_MARKS[offeringId],
     })
   }
+
+  // The completed offering last, so its published marks cannot be mistaken for current term work.
+  await publishPastOutcomeMarks()
 }
 
 // ---------------------------------------------------------------------------
@@ -1943,13 +2184,13 @@ async function countSummary(): Promise<CoursesSeedSummary> {
     prisma.enrollment.count({
       where: { offeringId: { in: ALL_OFFERING_IDS }, status: { not: "active" } },
     }),
-    prisma.assessment.count({ where: { id: { in: ASSESSMENT_IDS } } }),
+    prisma.assessment.count({ where: { id: { in: ALL_ASSESSMENT_IDS } } }),
     prisma.assessment.count({
-      where: { id: { in: ASSESSMENT_IDS }, ...releasedAssessmentWhere() },
+      where: { id: { in: ALL_ASSESSMENT_IDS }, ...releasedAssessmentWhere() },
     }),
     prisma.calendarEvent.count({ where: { id: { in: COURSES_CALENDAR_EVENT_IDS } } }),
     prisma.grade.count({
-      where: { assessmentId: { in: ASSESSMENT_IDS }, publishedAt: { not: null } },
+      where: { assessmentId: { in: ALL_ASSESSMENT_IDS }, publishedAt: { not: null } },
     }),
     prisma.material.count({ where: { id: { in: MATERIAL_IDS } } }),
     prisma.materialChunk.count({ where: { materialId: { in: MATERIAL_IDS } } }),
@@ -2002,6 +2243,9 @@ export async function seedCourses(): Promise<CoursesSeedSummary> {
   await createMaterials()
   const assessmentRows = await createAssessments()
   await createCalendarEvents(assessmentRows)
+  // Before the grading policy: `setOfferingGradingForTeacher` validates that a named FAT belongs
+  // to the offering, so the completed offering's assessments must exist first.
+  await createPastOfferingAssessments()
   await configureGrading()
   await createCodeTasks()
   await publishMarks()
